@@ -119,6 +119,7 @@ def initialise_vcf_cache(workingDirectory):
     
     # Initialise VCF cache dictionary
     vcfDict = {
+        "vcfFile" : vcfFile,
         "variants" : numVariants,
         "samples" : samples,
         "contigs" : list(contigs.keys())

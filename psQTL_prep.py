@@ -1,12 +1,17 @@
 #! python3
 # psQTL_prep.py
+# Represents step 1 in the psQTL pipeline, where the user can initialise a working directory,
+# view the metadata of an analysis directory, call variants, and calculate depth files for samples.
+# Called variants and depth files can be used as input to the psQTL_proc.py script.
 
 import os, argparse, sys
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-from modules.parsing import initialise_param_cache, update_param_cache, load_param_cache, load_vcf_cache
+from modules.parsing import initialise_param_cache, update_param_cache, load_param_cache, \
+                            load_vcf_cache, initialise_vcf_cache
 from modules.samtools_handling import validate_samtools_exists, run_samtools_depth, run_samtools_index
-from modules.bcftools_handling import validate_bcftools_exists, run_bcftools_call
+from modules.bcftools_handling import validate_bcftools_exists, validate_bgzip_exists, validate_vt_exists, \
+                                      run_bcftools_call, run_bcftools_index, run_normalisation, run_bcftools_concat
 
 def validate_args(args):
     # Validate working directory
@@ -310,24 +315,9 @@ def dmain(args):
     validate_d(args, paramsDict)
     update_param_cache(args.workingDirectory, {"bamFiles" : args.bamFiles})
     
-    # Figure out depth file names
-    depthIO = []
-    for bamFile in args.bamFiles:
-        # Derive the depth file name from the BAM file
-        bamPrefix = os.path.basename(bamFile).rsplit(args.bamSuffix, maxsplit=1)[0]
-        depthFile = os.path.join(DEPTH_DIR, f"{bamPrefix}{args.depthSuffix}")
-        
-        # Skip if the file already exists
-        if os.path.isfile(depthFile) and os.path.isfile(depthFile + ".ok"):
-            continue
-        depthIO.append([bamFile, depthFile])
-    
-    # Raise an error if all depth files already exist
-    if depthIO == []:
-        raise ValueError("All depth files already exist; no need to run samtools depth!")
-    
     # Generate depth files
-    run_samtools_depth(depthIO, args.threads)
+    run_samtools_depth(args.bamFiles, args.bamSuffix, args.depthSuffix,
+                       DEPTH_DIR, args.threads)
     
     print("Depth file generation complete!")
 
@@ -339,6 +329,8 @@ def cmain(args):
     # Validate that necessary programs exist
     validate_samtools_exists()
     validate_bcftools_exists()
+    validate_bgzip_exists()
+    validate_vt_exists()
     
     # Handle argument parsing and cache formatting
     paramsDict = load_param_cache(args.workingDirectory)
@@ -358,12 +350,36 @@ def cmain(args):
     # Run bcftools mpileup->call on each contig
     run_bcftools_call(BAMLIST_FILE, args.genomeFasta, CALL_DIR, args.threads)
     
+    # Index each VCF file
+    for vcfFile in [ os.path.join(CALL_DIR, f) for f in os.listdir(CALL_DIR) ]:
+        if vcfFile.endswith(".vcf.gz") and not os.path.isfile(vcfFile + ".csi"):
+            run_bcftools_index(vcfFile)
+    
+    # Run normalisation on each contig's VCF
+    run_normalisation(args.genomeFasta, CALL_DIR, args.threads)
+    
+    # Index each VCF file
+    for vcfFile in [ os.path.join(CALL_DIR, f) for f in os.listdir(CALL_DIR) ]:
+        if vcfFile.endswith(".vcf.gz") and not os.path.isfile(vcfFile + ".csi"):
+            run_bcftools_index(vcfFile)
+    
+    # Concatenate all VCF files
+    FINAL_VCF_FILE = os.path.join(CALL_DIR, "psQTL_prep.vcf.gz")
+    run_bcftools_concat(args.genomeFasta, CALL_DIR, FINAL_VCF_FILE)
+    
+    # Index the final VCF file
+    if not os.path.isfile(FINAL_VCF_FILE + ".csi"):
+        run_bcftools_index(vcfFile)
+    
+    # Update the param and VCF caches
+    update_param_cache(args.workingDirectory, {"vcfFile" : FINAL_VCF_FILE})
+    initialise_vcf_cache(args.workingDirectory)
+    
     print("Variant calling complete!")
 
 def vmain(args):
     # Handle argument parsing and cache formatting
     paramsDict = load_param_cache(args.workingDirectory)
-    vcfDict = load_vcf_cache(args.workingDirectory)
     
     # Present standard parameters
     print("# Parameters:")
@@ -380,12 +396,13 @@ def vmain(args):
     else:
         print("Depth files: None")
     
-    # Present extra parameters
-    
-    
     # Present VCF cache
     print("# VCF details:")
     if paramsDict['vcfFile'] is not None:
+        if vcfDict == {}:
+            initialise_vcf_cache(args.workingDirectory)
+        vcfDict = load_vcf_cache(args.workingDirectory)
+        
         print(f"VCF file: {paramsDict['vcfFile']}")
         print(f"Num. variants: {vcfDict['variants']}")
         print(f"{len(vcfDict['samples'])} samples: {vcfDict['samples']}")
