@@ -1,4 +1,14 @@
-import os, json
+import os, json, gzip
+from contextlib import contextmanager
+
+@contextmanager
+def open_vcf_file(filename):
+    if filename.endswith(".gz"):
+        with gzip.open(filename, "rt") as f:
+            yield f
+    else:
+        with open(filename, "r", encoding=get_codec(filename)) as f:
+            yield f
 
 # Parameter cache functions
 def load_param_cache(workingDirectory):
@@ -60,7 +70,7 @@ def update_param_cache(workingDirectory, updatesDict):
         updatesDict -- a dictionary containing the parameters to update, with the keys
                        being the parameter names and the values being the new values.
     '''
-    ALLOWED_PARAMS = ["bamFiles", "vcf", "depth", "binSize", "binStep"]
+    ALLOWED_PARAMS = ["bamFiles", "depthFiles", "vcfFile", "depth", "binSize", "binStep"]
     
     # Detect any existing param cache file
     paramsDict = load_param_cache(workingDirectory)
@@ -88,15 +98,17 @@ def initialise_vcf_cache(workingDirectory):
     '''
     CACHEABLE_PARAMS = ["workingDirectory", "metadataFile", "vcfFile", "bamFiles", "depthFiles"]
     
-    # Detect any existing VCF cache file
-    vcfDict = load_vcf_cache(workingDirectory)
-    if vcfDict != {}:
-        raise FileExistsError("VCF cache has already been initialised; no need to initialise a new one.")
-    
     # Detect any existing param cache file
     paramsDict = load_param_cache(workingDirectory)
     if paramsDict == {}:
         raise FileExistsError("Directory has not been initialised yet.")
+    
+    # Detect any existing VCF cache file
+    vcfDict = load_vcf_cache(workingDirectory)
+    if vcfDict != {}:
+        if vcfDict["vcfFile"] == paramsDict["vcfFile"]:
+            print("# VCF cache already exists and is up-to-date; skipping ...")
+            return
     
     # Parse the VCF file for cacheable metadata values
     vcfFile = paramsDict["vcfFile"]
@@ -105,7 +117,7 @@ def initialise_vcf_cache(workingDirectory):
     
     numVariants = 0
     contigs = {} # using as an ordered set
-    with open(vcfFile, "r") as fileIn:
+    with open_vcf_file(vcfFile) as fileIn:
         for line in fileIn:
             if line.startswith("#CHROM"):
                 samples = line.strip().split("\t")[9:]

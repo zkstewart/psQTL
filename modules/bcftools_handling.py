@@ -92,6 +92,7 @@ def run_bcftools_concat(genomeFasta, workingDirectory, outputFileName):
     cmd = ["bcftools", "concat", "-Oz", "-o", outputFileName, *vcfFileNames]
     
     # Run samtools depth
+    print(f"# Concatenating {len(vcfFileNames)} VCF file{'s' if len(vcfFileNames) > 1 else ''} ...")
     run_concat = subprocess.Popen(" ".join(cmd), shell=True,
                                   stdout = subprocess.DEVNULL,
                                   stderr = subprocess.PIPE)
@@ -99,6 +100,7 @@ def run_bcftools_concat(genomeFasta, workingDirectory, outputFileName):
     
     # Check for errors
     if run_concat.returncode == 0:
+        open(outputFileName + ".ok", "w").close() # touch a .ok file to indicate success
         return None
     else:
         errorMsg = concaterr.decode("utf-8").rstrip("\r\n ")
@@ -157,20 +159,25 @@ def run_bcftools_call(bamListFile, genomeFasta, outputDirectory, threads):
     # Drop any contig IDs that have already been processed
     contigsToProcess = []
     outputFileNames = []
+    skipMessages = []
     for contigID in contigIDs:
         outputFileName = os.path.join(outputDirectory, f"{contigID}.vcf.gz")
         if not os.path.exists(outputFileName + ".ok"):
             contigsToProcess.append(contigID)
             outputFileNames.append(outputFileName)
         else:
-            print(f"# '{contigID}' has already had variants called on it; skipping...")
+            skipMessages.append(f"# '{contigID}' has already had variants called on it; skipping...")
     
     # Skip if there's nothing to do
     if len(contigsToProcess) == 0:
         print("# No contigs to call variants on; skipping...")
         return
+    else:
+        for skipMessage in skipMessages:
+            print(skipMessage)
     
     # Plug data into the threaded function
+    print(f"# Calling variants on {len(contigsToProcess)} contig{'s' if len(contigsToProcess) > 1 else ''} ...")
     with concurrent.futures.ProcessPoolExecutor(max_workers=threads) as executor:
         executor.map(
             call_task,
@@ -229,6 +236,7 @@ def run_normalisation(genomeFasta, workingDirectory, threads):
     # Drop any contig IDs that have already been processed
     inputFileNames = []
     outputFileNames = []
+    skipMessages = []
     for contigID in contigIDs:
         inputFileName = os.path.join(workingDirectory, f"{contigID}.vcf.gz")
         if not os.path.exists(inputFileName + ".ok"):
@@ -239,14 +247,18 @@ def run_normalisation(genomeFasta, workingDirectory, threads):
             inputFileNames.append(inputFileName)
             outputFileNames.append(outputFileName)
         else:
-            print(f"# '{contigID}' has already had variants called on it; skipping...")
+            skipMessages.append(f"# '{contigID}' has already been normalised; skipping...")
     
     # Skip if there's nothing to do
     if len(inputFileNames) == 0:
-        print("# No contigs to call variants on; skipping...")
+        print("# No contigs to normalise; skipping...")
         return
+    else:
+        for skipMessage in skipMessages:
+            print(skipMessage)
     
     # Plug data into the threaded function
+    print(f"# Normalising variants for {len(inputFileNames)} VCF{'s' if len(inputFileNames) > 1 else ''} ...")
     with concurrent.futures.ProcessPoolExecutor(max_workers=threads) as executor:
         executor.map(
             normalisation_task,
