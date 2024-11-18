@@ -1,15 +1,6 @@
 import os, json, gzip
 from contextlib import contextmanager
 
-@contextmanager
-def open_vcf_file(filename):
-    if filename.endswith(".gz"):
-        with gzip.open(filename, "rt") as f:
-            yield f
-    else:
-        with open(filename, "r", encoding=get_codec(filename)) as f:
-            yield f
-
 # Parameter cache functions
 def load_param_cache(workingDirectory):
     '''

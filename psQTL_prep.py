@@ -7,7 +7,7 @@
 import os, argparse, sys
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-from modules.parsing import initialise_param_cache, update_param_cache, load_param_cache, \
+from modules.cache_handling import initialise_param_cache, update_param_cache, load_param_cache, \
                             load_vcf_cache, initialise_vcf_cache
 from modules.samtools_handling import validate_samtools_exists, run_samtools_depth, run_samtools_index
 from modules.bcftools_handling import validate_bcftools_exists, validate_bgzip_exists, validate_vt_exists, \
