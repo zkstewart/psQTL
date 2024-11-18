@@ -3,7 +3,28 @@ from contextlib import contextmanager
 
 from .parsing import open_gz_file, parse_metadata
 
+CACHEABLE_PARAMS = ["workingDirectory", "metadataFile",
+                    "vcfFile", "deletionFile",
+                    "bamFiles", "bamSuffix"]
+
 # Parameter cache functions
+def merge_cache_into_args(args):
+    '''
+    Takes the values in the parameter cache and merges them into the argparse object
+    if the argparse object has empty values for the cacheable parameters. In practice,
+    this allows the 'initialise' submodule of psQTL_prep to be run, with subsequent
+    submodules using the cache values if the user does not specify them in the command
+    line.
+    '''
+    paramsDict = load_param_cache(args.workingDirectory)
+    for param in CACHEABLE_PARAMS:
+        if param in paramsDict and param in args.__dict__: # only merge if the parameter is both the cache and the args
+            if args.__dict__[param] == None or args.__dict__[param] == []: # only use existing cache values if args are empty
+                if paramsDict[param] != None or paramsDict[param] != []: # only use cache values if they are _not_ empty
+                    args.__dict__[param] = paramsDict[param]
+        elif param in paramsDict: # if the parameter is in the cache but not in the args, add it to the args
+            args.__dict__[param] = paramsDict[param]
+
 def load_param_cache(workingDirectory):
     '''
     Loads the parameter cache file from the working directory, if it exists,
@@ -35,25 +56,21 @@ def initialise_param_cache(args):
     Parameters:
         args -- the argparse object generated through the psQTL_prep 'initialise' submodule.
     '''
-    CACHEABLE_PARAMS = ["workingDirectory", "metadataFile",
-                        "vcfFile", "deletionFile",
-                        "bamFiles", "bamSuffix",
-                        "depthFiles", "depthSuffix"]
-    
     # Detect any existing param cache file
     paramsDict = load_param_cache(args.workingDirectory)
-    if paramsDict != {}:
-        raise FileExistsError("Directory has already been initialised; delete this folder or use a new one.")
     
-    # Initialise param cache dictionary
-    paramsDict = {
+    # Initialise new param cache dictionary values
+    newParamsDict = {
         param : args.__dict__[param]
         for param in CACHEABLE_PARAMS
     }
     
     # Write updated param cache to file
-    with open(os.path.join(args.workingDirectory, "param_cache.json"), "w") as fileOut:
-        json.dump(paramsDict, fileOut)
+    if paramsDict != newParamsDict:
+        with open(os.path.join(args.workingDirectory, "param_cache.json"), "w") as fileOut:
+            json.dump(newParamsDict, fileOut)
+    else:
+        print("# Parameter cache already exists and is up-to-date; skipping ...")
 
 def update_param_cache(workingDirectory, updatesDict):
     '''
@@ -66,7 +83,7 @@ def update_param_cache(workingDirectory, updatesDict):
         updatesDict -- a dictionary containing the parameters to update, with the keys
                        being the parameter names and the values being the new values.
     '''
-    ALLOWED_PARAMS = ["bamFiles", "bamSuffix", "depthFiles", "depthSuffix", "vcfFile", "deletionFile"]
+    ALLOWED_PARAMS = ["metadataFile", "bamFiles", "bamSuffix", "vcfFile", "deletionFile"]
     
     # Detect any existing param cache file
     paramsDict = load_param_cache(workingDirectory)
@@ -74,14 +91,22 @@ def update_param_cache(workingDirectory, updatesDict):
         raise FileExistsError("Directory has not been initialised yet.")
     
     # Update param cache dictionary
+    madeChanges = False
     for key, value in updatesDict.items():
         if key not in ALLOWED_PARAMS:
             raise KeyError(f"Parameter '{key}' not allowed to be updated!")
-        paramsDict[key] = value
+        else:
+            if paramsDict[key] == value: # skip if the value is unchanged
+                pass
+            else:
+                paramsDict[key] = value
+                print(f"# Updated '{key}' in parameters cache.")
+                madeChanges = True
     
     # Write updated param cache to file
-    with open(os.path.join(workingDirectory, "param_cache.json"), "w") as fileOut:
-        json.dump(paramsDict, fileOut)
+    if madeChanges:
+        with open(os.path.join(workingDirectory, "param_cache.json"), "w") as fileOut:
+            json.dump(paramsDict, fileOut)
 
 # VCF cache functions
 def initialise_vcf_cache(workingDirectory):
@@ -91,7 +116,7 @@ def initialise_vcf_cache(workingDirectory):
     
     Parameters:
         args -- the argparse object generated through the psQTL_prep 'initialise' submodule.
-    '''    
+    '''
     # Detect any existing param cache file
     paramsDict = load_param_cache(workingDirectory)
     if paramsDict == {}:
@@ -166,8 +191,8 @@ def initialise_deletion_cache(workingDirectory, windowSize):
     
     Parameters:
         args -- the argparse object generated through the psQTL_prep 'initialise' submodule.
-        windowSize -- an integer indicating the size of the window used when binning depth values.
-    '''    
+        windowSize -- the size of the window to use for depth binning.
+    '''
     # Detect any existing param cache file
     paramsDict = load_param_cache(workingDirectory)
     if paramsDict == {}:
@@ -203,17 +228,17 @@ def initialise_deletion_cache(workingDirectory, windowSize):
                 deletionBins += 1 if any([ "1" in x for x in sl[9:]]) else 0
                 totalBins += 1
     
-    # Initialise VCF cache dictionary
+    # Initialise deletion cache dictionary
     deletionDict = {
         "deletionFile" : deletionFile,
         "totalBins" : totalBins,
         "deletionBins" : deletionBins,
         "samples" : samples,
         "contigs" : list(contigs.keys()),
-        "windowSize" : windowSize
+        "windowSize": windowSize
     }
     
-    # Write VCF cache to file
+    # Write deletion cache to file
     with open(os.path.join(workingDirectory, "deletion_cache.json"), "w") as fileOut:
         json.dump(deletionDict, fileOut)
 
@@ -248,7 +273,7 @@ def initialise_metadata_cache(workingDirectory):
     
     Parameters:
         args -- the argparse object generated through the psQTL_prep 'initialise' submodule.
-    '''    
+    '''
     # Detect any existing param cache file
     paramsDict = load_param_cache(workingDirectory)
     if paramsDict == {}:

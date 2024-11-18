@@ -29,7 +29,7 @@ def get_contig_ids(genomeFasta):
     '''
     # Get contig IDs from the genome FASTA
     contigIDs = set()
-    with open_gz_file(genomeFasta, "r") as fastaFile:
+    with open_gz_file(genomeFasta) as fastaFile:
         for line in fastaFile:
             if line.startswith(">"):
                 contigID = line[1:].split(" ")[0].rstrip("\r\n")

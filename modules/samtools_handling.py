@@ -80,8 +80,9 @@ def run_samtools_depth(ioList, threads):
     '''
     if len(ioList) == 0:
         print("# All depth files already exist; skipping...")
+        return
     else:
-        print(f"# Generating depth files for {len(ioList)} unprocessed BAM file{'s' if len(ioList) > 1 else ''} ...")
+        print(f"# Generating depth files for {len(ioList)} BAM file{'s' if len(ioList) > 1 else ''} ...")
     
     futures = []
     with concurrent.futures.ProcessPoolExecutor(max_workers=threads) as executor:
@@ -138,6 +139,7 @@ def bin_samtools_depth(ioList, lengthsDict, threads, binSize):
     '''
     if len(ioList) == 0:
         print("# All depth files have already been binned; skipping...")
+        return
     else:
         print(f"# Binning {len(ioList)} depth file{'s' if len(ioList) > 1 else ''} ...")
     
