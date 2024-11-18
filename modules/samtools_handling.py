@@ -1,5 +1,9 @@
-import os, shutil, subprocess
+import os, shutil, subprocess, math
 import concurrent.futures
+import numpy as np
+from itertools import repeat
+
+from .parsing import open_gz_file, parse_samtools_depth_tsv
 
 # Validation functions
 def validate_samtools_exists():
@@ -10,7 +14,7 @@ def validate_samtools_exists():
         raise FileNotFoundError("samtools not found in PATH")
 
 # Single threaded operations
-def run_samtools_index(fastaFile):
+def run_samtools_faidx(fastaFile):
     '''
     Indexes a FASTA file using samtools faidx.
     
@@ -31,7 +35,7 @@ def run_samtools_index(fastaFile):
         return None
     else:
         errorMsg = faidxerr.decode("utf-8").rstrip("\r\n ")
-        raise Exception(("run_samtools_index encountered an unhandled situation when processing " + 
+        raise Exception(("run_samtools_faidx encountered an unhandled situation when processing " + 
                          f"'{fastaFile}'; have a look at the stderr '{errorMsg}' " +
                          "to make sense of this."))
 
@@ -72,12 +76,77 @@ def run_samtools_depth(ioList, threads):
     Parameters:
         ioList -- a list of lists containing paired strings for the input BAM
                   file and the output file name.
-        threads -- an integer indicating how many threads to run GMAP with.
+        threads -- an integer indicating how many threads to run.
     '''
     if len(ioList) == 0:
         print("# All depth files already exist; skipping...")
     else:
         print(f"# Generating depth files for {len(ioList)} unprocessed BAM file{'s' if len(ioList) > 1 else ''} ...")
     
+    futures = []
     with concurrent.futures.ProcessPoolExecutor(max_workers=threads) as executor:
-        executor.map(depth_task, ioList)
+        for ioPair in ioList:
+            futures.append(executor.submit(depth_task, ioPair))
+    for f in futures:
+        try:
+            result = f.result()
+        except Exception as e:
+            raise Exception(f"run_samtools_depth encountered the following error: {e}")
+
+##
+
+def bin_task(ioPair, lengthsDict, binSize):
+    '''
+    Partner function for bin_samtools_depth. Will receive samtools depth outputs and bin them
+    into a new TSV file.
+    
+    Parameters:
+        ioPair -- a list of lists containing the input depth file and the output file name.
+        lengthsDict -- a dictionary pairing contig IDs (keys) with their lengths (values).
+    '''
+    depthFile, outputFileName = ioPair
+    if binSize < 1:
+        raise ValueError("bin_task failed: binSize must be a positive integer")
+    
+    # Parse the input depth file
+    histoDict = {}
+    for contigID, pos, depth in parse_samtools_depth_tsv(depthFile):
+        if not contigID in histoDict:
+            histoDict[contigID] = np.array([ 0
+                for windowChunk in range(math.ceil(lengthsDict[contigID] / binSize))
+            ])
+        binIndex = pos // binSize
+        histoDict[contigID][binIndex] += depth
+    
+    # Write the binned depth values to a file
+    with open(outputFileName, "w") as fileOut:
+        for contigID, depthList in histoDict.items():
+            for binIndex, depthValue in enumerate(depthList):
+                fileOut.write(f"{contigID}\t{binIndex * binSize}\t{depthValue}\n")
+    open(outputFileName + ".ok", "w").close() # touch a .ok file to indicate success
+
+def bin_samtools_depth(ioList, lengthsDict, threads, binSize):
+    '''
+    Will receive TSV files output by samtools depth to bin them into new TSV files in parallel.
+    
+    Parameters:
+        ioList -- a list of lists containing paired strings for the input depth
+                  file and the output file name.
+        lengthsDict -- a dictionary pairing contig IDs (keys) with their lengths (values).
+        threads -- an integer indicating how many threads to run.
+        binSize --  an integer indicating the size of the bin to sum depth values within.
+    '''
+    if len(ioList) == 0:
+        print("# All depth files have already been binned; skipping...")
+    else:
+        print(f"# Binning {len(ioList)} depth file{'s' if len(ioList) > 1 else ''} ...")
+    
+    futures = []
+    with concurrent.futures.ProcessPoolExecutor(max_workers=threads) as executor:
+        for ioPair in ioList:
+            futures.append(executor.submit(bin_task, ioPair, lengthsDict, binSize))
+    for f in futures:
+        try:
+            result = f.result()
+        except Exception as e:
+            raise Exception(f"bin_samtools_depth encountered the following error: {e}")

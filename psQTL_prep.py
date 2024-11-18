@@ -5,13 +5,17 @@
 # Called variants and depth files can be used as input to the psQTL_proc.py script.
 
 import os, argparse, sys
+from Bio import SeqIO
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from modules.cache_handling import initialise_param_cache, update_param_cache, load_param_cache, \
-                            load_vcf_cache, initialise_vcf_cache
-from modules.samtools_handling import validate_samtools_exists, run_samtools_depth, run_samtools_index
+                            load_vcf_cache, initialise_vcf_cache, initialise_deletion_cache, \
+                            load_deletion_cache, initialise_metadata_cache, load_metadata_cache
+from modules.samtools_handling import validate_samtools_exists, run_samtools_depth, run_samtools_faidx, \
+                                      bin_samtools_depth
 from modules.bcftools_handling import validate_bcftools_exists, validate_bgzip_exists, validate_vt_exists, \
                                       run_bcftools_call, run_bcftools_index, run_normalisation, run_bcftools_concat
+from modules.depth import call_deletions_from_depth
 
 def validate_args(args):
     # Validate working directory
@@ -97,8 +101,9 @@ def validate_i(args):
     any provided files actually exist.
     '''
     # Check that at least one input was given
-    if args.metadataFile is None and args.vcfFile is None and args.bamFiles == [] and args.depthFiles == []:
-        raise ValueError("At least one of --meta, --vcf, --bam, or --depth must be specified!")
+    if args.metadataFile is None and args.vcfFile is None and args.bamFiles == [] \
+    and args.depthFiles == [] and args.deletionFile == []:
+        raise ValueError("At least one of --meta, --vcf, --deletion, --bam, or --depth must be specified!")
     
     # Validate metadata file
     if args.metadataFile is not None:
@@ -111,6 +116,12 @@ def validate_i(args):
         args.vcfFile = os.path.abspath(args.vcfFile)
         if not os.path.isfile(args.vcfFile):
             raise FileNotFoundError(f"VCF file '{args.vcfFile}' does not exist!")
+    
+    # Validate deletion file
+    if args.deletionFile is not None:
+        args.deletionFile = os.path.abspath(args.deletionFile)
+        if not os.path.isfile(args.deletionFile):
+            raise FileNotFoundError(f"Deletion VCF-like file '{args.deletionFile}' does not exist!")
     
     # Validate BAM files
     validate_bam_files(args)
@@ -128,6 +139,10 @@ def validate_d(args, paramsDict):
     # Validate threads
     if args.threads < 1:
         raise ValueError("Number of threads must be at least 1!")
+    
+    # Validate window size
+    if args.windowSize < 1:
+        raise ValueError("Window size must be at least 1!")
     
     # Validate logic of providing --bam and --depth files
     if args.bamFiles != [] and args.depthFiles != []:
@@ -164,6 +179,11 @@ def validate_d(args, paramsDict):
         if paramsDict['bamFiles'] != []:
             print("# Found existing BAM files; will use the newly provided --bam files instead")
         validate_bam_files(args)
+    
+    # Validate genome FASTA file
+    args.genomeFasta = os.path.abspath(args.genomeFasta)
+    if not os.path.isfile(args.genomeFasta):
+        raise FileNotFoundError(f"Genome FASTA file '{args.genomeFasta}' does not exist!")
 
 def validate_c(args, paramsDict):
     # Validate threads
@@ -239,46 +259,61 @@ def main():
     
     # Init-subparser arguments
     iparser.add_argument("--meta", dest="metadataFile",
-                        required=False,
-                        help="""Optionally, specify the location of a metadata TSV file containing two
-                        columns indicating 1) sample ID and 2) the bulk it belongs to""",
-                        default=None)
+                         required=False,
+                         help="""Optionally, specify the location of a metadata TSV file containing two
+                         columns indicating 1) sample ID and 2) the bulk it belongs to""",
+                         default=None)
     iparser.add_argument("--vcf", dest="vcfFile",
-                        required=False,
-                        help="""Optionally, specify a VCF file containg per-sample variant
-                        calls that you have already produced""",
-                        default=None)
+                         required=False,
+                         help="""Optionally, specify a VCF file containg per-sample variant
+                         calls that you have already produced""",
+                         default=None)
+    iparser.add_argument("--deletion", dest="deletionFile",
+                         required=False,
+                         help="""Optionally, specify a deletion VCF-like file containg per-sample
+                         deletion calls that you have already produced""",
+                         default=None)
     iparser.add_argument("--bam", dest="bamFiles",
-                        required=False,
-                        nargs="+",
-                        help="""Optionally, specify one or more locations of BAM files and/or
-                        directories containing BAM files for variant calling and/or depth
-                        calculations""",
-                        default=[])
+                         required=False,
+                         nargs="+",
+                         help="""Optionally, specify one or more locations of BAM files and/or
+                         directories containing BAM files for variant calling and/or depth
+                         calculations""",
+                         default=[])
     iparser.add_argument("--bamSuffix", dest="bamSuffix",
-                        required=False,
-                        help="""Optionally, specify the suffix used to denote BAM files;
-                        relevant if directories are provided to --bam (default: '.bam')""",
-                        default=".bam")
+                         required=False,
+                         help="""Optionally, specify the suffix used to denote BAM files;
+                         relevant if directories are provided to --bam (default: '.bam')""",
+                         default=".bam")
     iparser.add_argument("--depth", dest="depthFiles",
-                        required=False,
-                        nargs="+",
-                        help="""Optionally, specify one or more locations of samtools depth
-                        files and/or directories containing depth files""",
-                        default=[])
+                         required=False,
+                         nargs="+",
+                         help="""Optionally, specify one or more locations of samtools depth
+                         files and/or directories containing depth files""",
+                         default=[])
     iparser.add_argument("--depthSuffix", dest="depthSuffix",
-                        required=False,
-                        help="""Optionally, specify the suffix used to denote samtools depth files;
-                        relevant if directories are provided to --depth (default: '.tsv')""",
-                        default=".tsv")
+                         required=False,
+                         help="""Optionally, specify the suffix used to denote samtools depth files;
+                         relevant if directories are provided to --depth (default: '.tsv')""",
+                         default=".tsv")
     
     # Depth-subparser arguments
+    dparser.add_argument("-f", dest="genomeFasta",
+                         required=True,
+                         help="""Specify the location of the genome FASTA file that BAM files
+                         are aligned to""")
+    dparser.add_argument("--windowSize", dest="windowSize",
+                         type=int,
+                         required=False,
+                         help="""Optionally, specify the window size to sum reads within
+                         (default=1000)""",
+                         default=1000)
     dparser.add_argument("--depth", dest="depthFiles",
-                        required=False,
-                        nargs="+",
-                        help="""Optionally, specify one or more locations of samtools depth
-                        files and/or directories containing depth files""",
-                        default=[])
+                         required=False,
+                         nargs="+",
+                         help="""Optionally, specify one or more locations of samtools depth
+                         files and/or directories containing depth files""",
+                         default=[])
     dparser.add_argument("--depthSuffix", dest="depthSuffix",
                          required=False,
                          help="""Optionally, specify the suffix used to denote depth files;
@@ -350,6 +385,8 @@ def imain(args):
     # Handle argument parsing and cache formatting
     validate_i(args)
     initialise_param_cache(args)
+    if args.metadataFile != None:
+        initialise_metadata_cache(args)
     print("Initialisation complete!")
 
 def dmain(args):
@@ -366,13 +403,15 @@ def dmain(args):
     
     if args.bamFiles != []:
         print("# Updated BAM files listed in directory cache")
-        update_param_cache(args.workingDirectory, {"bamFiles" : args.bamFiles})
+        update_param_cache(args.workingDirectory, {"bamFiles" : args.bamFiles,
+                                                   "bamSuffix": args.bamSuffix})
     elif args.depthFiles != []:
         print("# Updated depth files listed in directory cache")
-        update_param_cache(args.workingDirectory, {"depthFiles" : args.depthFiles})
+        update_param_cache(args.workingDirectory, {"depthFiles" : args.depthFiles,
+                                                   "depthSuffix": args.depthSuffix})
     
     # Generate depth files
-    if args.bamFiles != []: # if this list is not empty, we don't have existing depth files
+    if args.bamFiles != []: # if this list is not empty, we haven't specified existing depth files
         # Figure out depth file names
         depthIO = []
         for bamFile in args.bamFiles:
@@ -396,8 +435,53 @@ def dmain(args):
               f"depth file{'s' if len(args.depthFiles) > 1 else ''} " + 
               f"already exist{'s' if len(args.depthFiles) == 0 else ''}; skipping...")
     
+    # Parse the genome FASTA file to get contig lengths
+    genomeRecords = SeqIO.parse(open(args.genomeFasta, 'r'), "fasta")
+    lengthsDict = { record.id:len(record) for record in genomeRecords }
+    
     # Bin depth values according to window size
-    ## TBD
+    binIO = []
+    skipMessages = []
+    for depthFile in args.depthFiles:
+        # Error out if depth file is missing
+        if not os.path.isfile(depthFile):
+            raise FileNotFoundError(f"Depth file '{depthFile}' not found!")
+        
+        # Format the binned file name for this depth file
+        depthPrefix = os.path.basename(depthFile).rsplit(args.depthSuffix, maxsplit=1)[0]
+        binFile = os.path.join(DEPTH_DIR, f"{depthPrefix}.binned.{args.windowSize}.tsv")
+        
+        # Skip if the binned file already exists
+        if os.path.isfile(binFile) and os.path.isfile(binFile + ".ok"):
+            skipMessages.append(f"# '{depthPrefix}' has already been depth binned; skipping...")
+            continue
+        binIO.append([depthFile, binFile])
+    
+    if len(skipMessages) != len(args.depthFiles):
+        print("\n".join(skipMessages))
+    bin_samtools_depth(binIO, lengthsDict, args.threads, args.windowSize)
+    
+    # Collate binned files into a VCF-like format of deletion calls
+    samplePairs = []
+    for depthFile in args.depthFiles:
+        # Error out if depth file is missing
+        if not os.path.isfile(depthFile):
+            raise FileNotFoundError(f"Depth file '{depthFile}' not found!")
+        
+        # Format the binned file name
+        depthPrefix = os.path.basename(depthFile).rsplit(args.depthSuffix, maxsplit=1)[0]
+        binFile = os.path.join(DEPTH_DIR, f"{depthPrefix}.binned.{args.windowSize}.tsv")
+        
+        # Store file paied with sample prefix
+        samplePairs.append([depthPrefix, binFile])
+    
+    FINAL_DELETION_FILE = os.path.join(DEPTH_DIR, "psQTL_deletions.vcf")
+    if not os.path.isfile(FINAL_DELETION_FILE + ".ok"):
+        call_deletions_from_depth(samplePairs, FINAL_DELETION_FILE, args.windowSize)
+    
+    # Update the param and deletion caches
+    update_param_cache(args.workingDirectory, {"deletionFile" : FINAL_DELETION_FILE})
+    initialise_deletion_cache(args.workingDirectory, args.windowSize)
     
     print("Depth file generation complete!")
 
@@ -427,7 +511,7 @@ def cmain(args):
     
     # Index the reference genome (if necessary)
     if not os.path.isfile(args.genomeFasta + ".fai"):
-        run_samtools_index(args.genomeFasta)
+        run_samtools_faidx(args.genomeFasta)
     
     # Create a bamlist file
     BAMLIST_FILE = os.path.join(CALL_DIR, "bamlist.txt")
@@ -473,7 +557,6 @@ def vmain(args):
     # Present standard parameters
     print("# Parameters:")
     print(f"Working directory: {paramsDict['workingDirectory']}")
-    print(f"Metadata file: {paramsDict['metadataFile']}")
     
     if paramsDict['bamFiles'] != []:
         print(f"BAM files: {paramsDict['bamFiles']}")
@@ -485,23 +568,85 @@ def vmain(args):
     else:
         print("Depth files: None")
     
+    # Present metadata cache
+    print() # blank line for spacing
+    print("# Metadata details:")
+    if paramsDict['metadataFile'] is not None:
+        metadataDict = load_metadata_cache(args.workingDirectory)
+        if metadataDict == {}:
+            initialise_metadata_cache(args.workingDirectory)
+            metadataDict = load_metadata_cache(args.workingDirectory)
+        
+        print(f"Metadata file: {paramsDict['metadataFile']}")
+        print(f"Bulk 1 samples (n={len(metadataDict['bulk1'])}): {metadataDict['bulk1']}")
+        print(f"Bulk 2 samples (n={len(metadataDict['bulk2'])}): {metadataDict['bulk2']}")
+    else:
+        print("Metadata file: None")
+    
     # Present VCF cache
     print() # blank line for spacing
-    print("# VCF details:")
+    print("# Variants VCF details:")
     if paramsDict['vcfFile'] is not None:
         vcfDict = load_vcf_cache(args.workingDirectory)
         if vcfDict == {}:
             initialise_vcf_cache(args.workingDirectory)
+            vcfDict = load_vcf_cache(args.workingDirectory)
         
         print(f"VCF file: {paramsDict['vcfFile']}")
         print(f"Num. variants: {vcfDict['variants']}")
-        print(f"{len(vcfDict['samples'])} samples: {vcfDict['samples']}")
-        print(f"{len(vcfDict['contigs'])} contigs: {vcfDict['contigs']}")
+        print(f"Samples (n={len(vcfDict['samples'])}): {vcfDict['samples']}")
+        print(f"Contigs (n={len(vcfDict['contigs'])}): {vcfDict['contigs']}")
     else:
         print("VCF files: None")
     print() # blank line for spacing
     
-    print("Metadata viewing complete!")
+    # Present deletion cache
+    print("# Deletion VCF-like details:")
+    if paramsDict['deletionFile'] is not None:
+        deletionDict = load_deletion_cache(args.workingDirectory)
+        if deletionDict == {}:
+            initialise_deletion_cache(args.workingDirectory)
+            deletionDict = load_deletion_cache(args.workingDirectory)
+        
+        print(f"Deletion file: {paramsDict['deletionFile']}")
+        print(f"Window size: {deletionDict['windowSize']} bp")
+        print(f"Total num. bins: {deletionDict['totalBins']}")
+        print(f"Num. bins with deletion: {deletionDict['deletionBins']}")
+        print(f"Samples (n={len(deletionDict['samples'])}): {deletionDict['samples']}")
+        print(f"Contigs (n={len(deletionDict['contigs'])}): {deletionDict['contigs']}")
+    else:
+        print("Deletion file: None")
+    print() # blank line for spacing
+    
+    # Identify potential conflicts or issues
+    issues = []
+    
+    ## Sample issues
+    metaSamples = set(metadataDict['bulk1'] + metadataDict['bulk2'])
+    vcfSamples = set(vcfDict['samples'])
+    deletionSamples = set(deletionDict['samples'])
+    if len(metaSamples) == 2:
+        issues.append("Metadata only indicates two samples; analysis interpretation may be limited")
+    if metaSamples != vcfSamples:
+        issues.append(f"Metadata samples (n={len(metaSamples)}) do not match VCF samples (n={len(vcfDict['samples'])})")
+    if metaSamples != deletionSamples:
+        issues.append(f"Metadata samples (n={len(metaSamples)}) do not match deletion samples (n={len(deletionDict['samples'])})")
+    if vcfSamples != deletionSamples:
+        issues.append(f"VCF samples (n={len(vcfSamples)}) do not match deletion samples (n={len(deletionSamples)})")
+    
+    ## Contig issues
+    vcfContigs = set(vcfDict['contigs'])
+    deletionContigs = set(deletionDict['contigs'])
+    if vcfContigs != deletionContigs:
+        issues.append(f"VCF contigs (n={len(vcfContigs)}) do not match deletion contigs (n={len(deletionContigs)})")
+    
+    print("# Potential issues:")
+    if issues == []:
+        print("No issues found!")
+    else:
+        print("\n".join(issues))
+    
+    print("Analysis viewing complete!")
 
 if __name__ == "__main__":
     main()

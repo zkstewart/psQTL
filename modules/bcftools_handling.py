@@ -2,6 +2,8 @@ import os, shutil, subprocess
 import concurrent.futures
 from itertools import repeat
 
+from .parsing import open_gz_file
+
 # Validation functions
 def validate_bcftools_exists():
     if not shutil.which("bcftools"):
@@ -27,7 +29,7 @@ def get_contig_ids(genomeFasta):
     '''
     # Get contig IDs from the genome FASTA
     contigIDs = set()
-    with open(genomeFasta, "r") as fastaFile:
+    with open_gz_file(genomeFasta, "r") as fastaFile:
         for line in fastaFile:
             if line.startswith(">"):
                 contigID = line[1:].split(" ")[0].rstrip("\r\n")
@@ -145,7 +147,7 @@ def call_task(bamListFile, genomeFasta, contigID, outputFileName):
 
 def run_bcftools_call(bamListFile, genomeFasta, outputDirectory, threads):
     '''
-    Will run samtools depth on a list of BAM files in parallel.
+    Will run bcftools mpileup->call on a list of BAM files in parallel.
     
     Parameters:
         bamListFile -- a string pointing to a file containing a list of BAM files to process.
@@ -178,14 +180,17 @@ def run_bcftools_call(bamListFile, genomeFasta, outputDirectory, threads):
     
     # Plug data into the threaded function
     print(f"# Calling variants on {len(contigsToProcess)} contig{'s' if len(contigsToProcess) > 1 else ''} ...")
+    futures = []
     with concurrent.futures.ProcessPoolExecutor(max_workers=threads) as executor:
-        executor.map(
-            call_task,
-            repeat(bamListFile, len(contigsToProcess)),
-            repeat(genomeFasta, len(contigsToProcess)),
-            contigsToProcess,
-            outputFileNames
-        )
+        for contigID, outputFileName in zip(contigsToProcess, outputFileNames):
+            futures.append(executor.submit(call_task, bamListFile, genomeFasta, contigID, outputFileName))
+    for f in futures:
+        try:
+            result = f.result()
+        except Exception as e:
+            raise Exception(f"run_bcftools_call encountered the following error: {e}")
+
+##
 
 def normalisation_task(inputFileName, outputFileName, genomeFasta):
     '''
@@ -223,7 +228,7 @@ def normalisation_task(inputFileName, outputFileName, genomeFasta):
 
 def run_normalisation(genomeFasta, workingDirectory, threads):
     '''
-    Will run samtools depth on a list of BAM files in parallel.
+    Will run bcftools/vt normalisation procedure on a list of BAM files in parallel.
     
     Parameters:
         genomeFasta -- a string pointing to the genome FASTA that the BAM files were aligned to.
@@ -259,10 +264,12 @@ def run_normalisation(genomeFasta, workingDirectory, threads):
     
     # Plug data into the threaded function
     print(f"# Normalising variants for {len(inputFileNames)} VCF{'s' if len(inputFileNames) > 1 else ''} ...")
+    futures = []
     with concurrent.futures.ProcessPoolExecutor(max_workers=threads) as executor:
-        executor.map(
-            normalisation_task,
-            inputFileNames,
-            outputFileNames,
-            repeat(genomeFasta, len(inputFileNames))
-        )
+        for inputFileName, outputFileName in zip(inputFileNames, outputFileNames):
+            futures.append(executor.submit(normalisation_task, inputFileName, outputFileName, genomeFasta))
+    for f in futures:
+        try:
+            result = f.result()
+        except Exception as e:
+            raise Exception(f"run_normalisation encountered the following error: {e}")
