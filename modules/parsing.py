@@ -30,7 +30,11 @@ def parse_metadata(metadataFile):
     Parameters:
         metadataFile -- a string indicating the path to a metadata file
     Returns:
-        metadataDict -- a dictionary mapping population names to one of two bulks
+        metadataDict -- a dictionary with structure like:
+                        {
+                            "bulk1": set([ "sample1", "sample2", ... ]),
+                            "bulk2": set([ "sample3", "sample4", ... ])
+                        }
     '''
     ACCEPTED_BULK1 = ['bulk1', '1', 'bulk 1', 'b1']
     ACCEPTED_BULK2 = ['bulk2', '2', 'bulk 2', 'b2']
@@ -137,79 +141,134 @@ def parse_binned_tsv(binFile):
             histoDict[contigID][pos] = depth
     return histoDict
 
-class SimpleGenotypeIterator:
+def vcf_header_to_metadata_validation(vcfSamples, metadataDict, strict=True):
     '''
-    A class to iterate through a VCF file and yield the genotype calls.
-    The first value yielded is the sample IDs, with subsequent yields
-    providing the following parameters:
-        - chrom -- a string indicating the chromosome
-        - pos -- an int indicating the position
-        - ref -- a string indicating the reference allele
-        - alt -- a list of strings indicating the alternate allele(s)
-        - posGenotypeDict -- a dictionary with sample IDs as keys and
-                             genotype calls as lists of integers (0 for ref, 1 for alt,
-                             and so on...)
+    Validates that the VCF file and metadata file are compatible with each other,
+    printing warnings and producing errors as necessary.
+    
+    Parameters:
+        vcfSamples -- a list or set of strings indicating the sample IDs in the VCF file.
+        metadataDict -- a dictionary with structure like:
+                        {
+                            "bulk1": set([ "sample1", "sample2", ... ]),
+                            "bulk2": set([ "sample3", "sample4", ... ])
+                        }
+        strict -- OPTIONAL; a boolean indicating whether to error out if the files
+                  show any discrepancies. Default is True.
     '''
-    def __init__(self, file_location):
-        assert os.path.exists(file_location), \
-            f"SimpleGenotypeIterator can't find file existing at '{file_location}'"
+    vcfSamples = set(vcfSamples) # convert to set if not already one
+    
+    # Extract metadata sample IDs from dict
+    metadataSamples = set([
+        sample
+        for samples in metadataDict.values()
+        for sample in samples
+    ])
+    
+    # Check for sample ID discrepancies between the two files
+    if vcfSamples != metadataSamples:
+        # Find differences between the two sample ID sets
+        vcfDiff = vcfSamples.difference(metadataSamples)
+        metadataDiff = metadataSamples.difference(vcfSamples)
         
-        self.fileLocation = file_location
+        # Error out if files are incompatible
+        if len(metadataDiff) == len(metadataSamples):
+            raise ValueError("Metadata file has no samples in common with VCF file; " +
+                             f"Metadata samples: {metadataSamples}\nVCF samples: {vcfSamples}")
+        
+        # Error out or warn if some samples are missing (depending on 'strict' parameter)
+        if len(vcfDiff) > 0:
+            if strict:
+                raise ValueError(f"VCF file has samples not present in metadata file: {', '.join(vcfDiff)}")
+            else:
+                print("# WARNING: In your VCF, the following samples exist which are " +
+                      "absent from the metadata: ", ", ".join(vcfDiff))
+                print("# These samples will not be considered when generating the resulting file.")
+        if len(metadataDiff) > 0:
+            if strict:
+                raise ValueError(f"Metadata file has samples not present in VCF file: {', '.join(metadataDiff)}")
+            else:
+                print("# WARNING: In your metadata, the following samples exist which are " + 
+                      "absent from the VCF: ", ", ".join(metadataDiff))
+                print("# These samples will not be considered when generating the resulting file.")
     
-    def parse(self):
-        with read_gz_file(self.fileLocation) as fileIn:
-            for line in fileIn:
-                sl = line.rstrip("\r\n").replace('"', '').split("\t") # remove quotations to help with files opened by Excel
-                
-                # Handle header lines
-                if line.startswith("#CHROM"):
-                    samples = sl[9:] # This gives us the ordered sample IDs
-                    yield samples
-                    continue
-                if line.startswith("#"):
-                    continue
-                
-                # Extract relevant details
-                chrom = sl[0]
-                pos = int(sl[1])
-                ref = sl[3]
-                alt = sl[4].split(",")
-                
-                # Determine which field position we're extracting to get our GT value
-                fieldsDescription = sl[8]
-                if ":" not in fieldsDescription:
-                    gtIndex = 0
-                else:
-                    gtIndex = fieldsDescription.split(":").index("GT")
-                
-                # Format a dictionary to store sample genotypes for this position
-                posGenotypeDict = {}
-                ongoingCount = 0 # This gives us the index for our samples header list 
-                for sampleResult in sl[9:]: # This gives us the results for each sample as per fieldsDescription
-                    # Grab our genotype
-                    if gtIndex != -1:
-                        genotype = sampleResult.split(":")[gtIndex]
-                    else:
-                        genotype = sampleResult
-                    
-                    # Edit genotype to have a consistently predictable separator
-                    "We don't care if the VCF is phased or not for this function"
-                    genotype = genotype.replace("/", "|")
-                    
-                    # Skip uncalled genotypes
-                    if "." in genotype:
-                        ongoingCount += 1
-                        continue
-                    
-                    # Parse and store genotype
-                    samplePopulation = samples[ongoingCount]
-                    posGenotypeDict[samplePopulation] = list(map(int, genotype.split("|")))
-                    
-                    ongoingCount += 1
-                
-                # Yield result
-                yield chrom, pos, ref, alt, posGenotypeDict
+    # Error out if we don't have samples from both bulks
+    b1Samples = [ sample for sample in vcfSamples if sample in metadataDict["bulk1"] ]
+    if len(b1Samples) == 0:
+        raise ValueError("No samples from bulk 1 are present in the VCF file.")
     
-    def __iter__(self):
-        for x in self.parse():
-            yield x
+    b2Samples = [ sample for sample in vcfSamples if sample in metadataDict["bulk2"] ] 
+    if len(b2Samples) == 0:
+        raise ValueError("No samples from bulk 2 are present in the VCF file.")
+    
+    # Notify user of samples that will be used
+    print(f"# Samples used as part of bulk 1 (n={len(b1Samples)}) include: " + ", ".join(b1Samples))
+    print(f"# Samples used as part of bulk 2 (n={len(b2Samples)}) include: " + ", ".join(b2Samples))
+
+def parse_vcf_line(sl):
+    '''
+    Parameters:
+        line -- a line from a VCF file
+    Returns:
+        chrom -- a string indicating the chromosome
+        pos -- an int indicating the position
+        ref -- a string indicating the reference allele
+        alt -- a list of strings indicating the alternate allele(s)
+        qual -- a float indicating the quality of the call
+    '''
+    sl = line.rstrip("\r\n").replace('"', '').split("\t") # remove quotations to help with files opened by Excel
+    
+    # Extract relevant details
+    chrom = sl[0]
+    pos = int(sl[1])
+    ref = sl[3]
+    alt = sl[4].split(",")
+    try:
+        qual = float(sl[5])
+    except:
+        qual = 0.0 # If the quality is missing, we'll just assume it's zero
+    
+    return chrom, pos, ref, alt, qual
+
+def parse_vcf_genotypes(formatField, sampleFields, samples):
+    '''
+    Parameters:
+        formatField -- a string from a split VCF line; if the split line is 'sl',
+                       this should be 'sl[8]'
+        sampleFields -- a list of string from a VCF line; if the split line is 'sl',
+                        this should be 'sl[9:]'
+        samples -- a list of strings indicating the sample IDs as obtained from the 
+                   header line of the VCF file
+    Returns:
+        posGenotypeDict -- a dictionary with sample IDs as keys and genotype calls as
+                           lists of integers; for example, '0/0' in the VCF file would
+                           be stored as [0, 0] in the dictionary.
+    '''
+    # Determine which field position we're extracting to get our GT value
+    if not ":" in formatField:
+        gtIndex = 0
+    else:
+        gtIndex = formatField.split(":").index("GT")
+    
+    # Format a dictionary to store sample genotypes for this position
+    posGenotypeDict = {}
+    ongoingCount = 0 # This gives us the index for our samples header list 
+    for sampleResult in sampleFields:
+        # Grab our genotype
+        genotype = sampleResult.split(":")[gtIndex]
+        
+        # Edit genotype to have a consistently predictable separator
+        "Phasing information is irrelevant for psQTL analysis"
+        genotype = genotype.replace("/", "|")
+        
+        # Skip uncalled genotypes
+        if "." in genotype:
+            ongoingCount += 1
+            continue
+        
+        # Parse and store genotype
+        samplePopulation = samples[ongoingCount]
+        posGenotypeDict[samplePopulation] = list(map(int, genotype.split("|")))
+        
+        ongoingCount += 1
+    return posGenotypeDict

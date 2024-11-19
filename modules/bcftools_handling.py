@@ -50,7 +50,7 @@ def run_bcftools_index(bamFile):
     # Format command
     cmd = ["bcftools", "index", bamFile]
     
-    # Run samtools depth
+    # Run bcftools index
     run_index = subprocess.Popen(" ".join(cmd), shell=True,
                                  stdout = subprocess.DEVNULL,
                                  stderr = subprocess.PIPE)
@@ -93,7 +93,7 @@ def run_bcftools_concat(genomeFasta, workingDirectory, outputFileName):
     # Format command
     cmd = ["bcftools", "concat", "-Oz", "-o", outputFileName, *vcfFileNames]
     
-    # Run samtools depth
+    # Run bcftools concat
     print(f"# Concatenating {len(vcfFileNames)} VCF file{'s' if len(vcfFileNames) > 1 else ''} ...")
     run_concat = subprocess.Popen(" ".join(cmd), shell=True,
                                   stdout = subprocess.DEVNULL,
@@ -108,6 +108,31 @@ def run_bcftools_concat(genomeFasta, workingDirectory, outputFileName):
         errorMsg = concaterr.decode("utf-8").rstrip("\r\n ")
         raise Exception(("run_bcftools_concat encountered an unhandled situation; " + 
                          f"have a look at the stderr '{errorMsg}' " +
+                         "to make sense of this."))
+
+def run_bgzip(vcfFile):
+    '''
+    Compresses a VCF file using bgzip.
+    
+    Parameters:
+        vcfFile -- a string pointing to the VCF to compress
+    '''
+    # Format command
+    cmd = ["bgzip", vcfFile]
+    
+    # Run bcftools index
+    run_bgzip = subprocess.Popen(" ".join(cmd), shell=True,
+                                 stdout = subprocess.DEVNULL,
+                                 stderr = subprocess.PIPE)
+    bgzipout, bgziperr = run_bgzip.communicate()
+    
+    # Check for errors
+    if run_bgzip.returncode == 0:
+        return None
+    else:
+        errorMsg = bgziperr.decode("utf-8").rstrip("\r\n ")
+        raise Exception(("run_bgzip encountered an unhandled situation when processing " + 
+                         f"'{vcfFile}'; have a look at the stderr '{errorMsg}' " +
                          "to make sense of this."))
 
 # Threaded operations

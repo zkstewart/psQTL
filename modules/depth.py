@@ -115,4 +115,3 @@ def call_deletions_from_depth(samplePairs, outputFileName, windowSize):
         fileOut.write("##1/1=homozygousdeletion\n")
         fileOut.write("##psQTL_prepDeletionPrediction\n")
         exploded_df.to_csv(fileOut, sep="\t", index=False)
-    open(outputFileName + ".ok", "w").close() # touch a .ok file to indicate success

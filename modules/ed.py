@@ -1,6 +1,6 @@
 from math import sqrt
 
-from .parsing import SimpleGenotypeIterator
+from .parsing import read_gz_file, vcf_header_to_metadata_validation, parse_vcf_genotypes
 
 def calculate_snp_ed(b1Gt, b2Gt):
     '''
@@ -75,62 +75,32 @@ def parse_vcf_for_ed(vcfFile, metadataDict, ignoreIdentical=False):
         numAllelesB2 -- the number of genotyped alleles in bulk 2
         euclideanDist -- the Euclidean distance between the two bulks
     '''
-    # Extract metadata sample IDs from dict
-    metadataSamples = set([
-        sample
-        for samples in metadataDict.values()
-        for sample in samples
-    ])
-    
-    # Iterate through VCF / VCF-like file
-    firstYield = True
-    for values in SimpleGenotypeIterator(vcfFile):
-        # Grab header line containing sample IDs
-        if firstYield:
-            vcfSamples = set(values) # first yield gives the sample IDs
-            firstYield = False
+    with read_gz_file(vcfFile) as fileIn:
+        for line in fileIn:
+            sl = line.rstrip("\r\n").replace('"', '').split("\t") # remove quotations to help with files opened by Excel
             
-            # Check that the metadata file matches the VCF file
-            if vcfSamples != metadataSamples:
-                vcfDiff = vcfSamples.difference(metadataSamples)
-                metadataDiff = metadataSamples.difference(vcfSamples)
-                
-                # Error out if files are incompatible
-                if len(metadataDiff) == len(metadataSamples):
-                    raise ValueError("Metadata file has no samples in common with VCF file; " +
-                                     f"Metadata samples: {metadataSamples}\nVCF samples: {vcfSamples}")
-                
-                # Error out if we don't have samples from both bulks
-                b1Samples = [ sample for sample in vcfSamples if sample in metadataDict["bulk1"] ]
-                if len(b1Samples) == 0:
-                    raise ValueError("No samples from bulk 1 are present in the VCF file.")
-                
-                b2Samples = [ sample for sample in vcfSamples if sample in metadataDict["bulk2"] ] 
-                if len(b2Samples) == 0:
-                    raise ValueError("No samples from bulk 2 are present in the VCF file.")
-                
-                # Warn if some samples are missing
-                needsSpace = False
-                if len(vcfDiff) > 0:
-                    print("# WARNING: In your VCF, the following samples exist which are " + 
-                        "absent from the metadata: ", ", ".join(vcfDiff))
-                    print("# These will be ignored during the Euclidean distance calculation")
-                    needsSpace = True
-                if len(metadataDiff) > 0:
-                    print("# WARNING: In your metadata, the following samples exist which are " + 
-                        "absent from the VCF: ", ", ".join(metadataDiff))
-                    print("# These will be ignored during the Euclidean distance calculation")
-                    needsSpace = True
-                if needsSpace:
-                    print("")
-                
-                # Notify user of samples that will be used
-                print(f"# Samples used as part of bulk 1 (n={len(b1Samples)}) include: " + ", ".join(b1Samples))
-                print(f"# Samples used as part of bulk 2 (n={len(b2Samples)}) include: " + ", ".join(b2Samples))
-        # Handle content lines
-        else:
-            contig, pos, ref, alt, snpDict = values
+            # Handle header line
+            if line.startswith("#CHROM"):
+                samples = sl[9:] # This gives us the ordered sample IDs
+                vcf_header_to_metadata_validation(samples, metadataDict, strict=False)
+            if line.startswith("#"):
+                continue
+            
+            # Extract relevant details from line
+            chrom = sl[0]
+            pos = int(sl[1])
+            ref = sl[3]
+            alt = sl[4].split(",")
             ref_alt = [ref, *alt]
+            try:
+                qual = float(sl[5])
+            except:
+                qual = 0.0 # If the quality is missing, we'll just assume it's zero
+            formatField = sl[8]
+            sampleFields = sl[9:]
+            
+            # Parse the genotypes out of the sample fields
+            snpDict = parse_vcf_genotypes(formatField, sampleFields, samples)
             
             # Figure out what type of variant this is
             if any([ x == "." for x in ref_alt ]):

@@ -4,7 +4,7 @@ from contextlib import contextmanager
 from .parsing import read_gz_file, parse_metadata
 
 CACHEABLE_PARAMS = ["workingDirectory", "metadataFile",
-                    "vcfFile", "deletionFile",
+                    "vcfFile", "filteredVcfFile", "deletionFile",
                     "bamFiles", "bamSuffix"]
 
 # Parameter cache functions
@@ -83,7 +83,7 @@ def update_param_cache(workingDirectory, updatesDict):
         updatesDict -- a dictionary containing the parameters to update, with the keys
                        being the parameter names and the values being the new values.
     '''
-    ALLOWED_PARAMS = ["metadataFile", "bamFiles", "bamSuffix", "vcfFile", "deletionFile"]
+    ALLOWED_PARAMS = ["metadataFile", "bamFiles", "bamSuffix", "vcfFile", "filteredVcfFile", "deletionFile"]
     
     # Detect any existing param cache file
     paramsDict = load_param_cache(workingDirectory)
@@ -109,51 +109,103 @@ def update_param_cache(workingDirectory, updatesDict):
             json.dump(paramsDict, fileOut)
 
 # VCF cache functions
-def initialise_vcf_cache(workingDirectory):
+def update_vcf_cache(workingDirectory, qualFilter, missingFilter):
     '''
-    Initialises a new VCF cache file in the output directory, storing details pertaining
+    Initialises or modifies a new VCF cache file in the output directory, storing details pertaining
     to the VCF file used in the current program run.
     
     Parameters:
-        args -- the argparse object generated through the psQTL_prep 'initialise' submodule.
+        workingDirectory -- a string indicating the parent dir where the analysis is being
+                            run.
+        qualFilter -- the minimum quality threshold for filtering variants OR None if unknown.
+        missingFilter -- the maximum missingness threshold for both bulks OR None if unknown.
     '''
     # Detect any existing param cache file
     paramsDict = load_param_cache(workingDirectory)
     if paramsDict == {}:
         raise FileExistsError("Directory has not been initialised yet.")
     
+    # Get the file names from our params cache
+    vcfFile = paramsDict["vcfFile"]
+    filteredVcfFile = paramsDict["filteredVcfFile"]
+    
     # Detect any existing VCF cache file
     vcfDict = load_vcf_cache(workingDirectory)
-    if vcfDict != {}:
-        if vcfDict["vcfFile"] == paramsDict["vcfFile"]:
-            print("# VCF cache already exists and is up-to-date; skipping ...")
-            return
+    # if vcfDict != {}:
+    #     # Skip if the cache is already up-to-date
+    #     if vcfDict["vcfFile"] == vcfFile and vcfDict["filteredVcfFile"] == filteredVcfFile:
+    #         print("# VCF cache already exists and is up-to-date; skipping ...")
+    #         return
     
-    # Parse the VCF file for cacheable metadata values
-    vcfFile = paramsDict["vcfFile"]
+    # Parse the raw VCF file for cacheable metadata values
     if vcfFile == None:
         raise ValueError("VCF file not specified in params cache; cannot initialise VCF cache.")
+    elif vcfDict == {} or vcfDict["vcfFile"] != vcfFile: # vcfDict might be empty
+        print("# VCF details being added to cache ...")
+        numVariants = 0
+        contigs = {} # using as an ordered set
+        with read_gz_file(vcfFile) as fileIn:
+            for line in fileIn:
+                if line.startswith("#CHROM"):
+                    samples = line.strip().split("\t")[9:]
+                elif line.startswith("#"):
+                    continue
+                else:
+                    contig = line.split("\t")[0]
+                    if contig not in contigs:
+                        contigs[contig] = None
+                    numVariants += 1
+        contigs = list(contigs.keys()) # convert to list so we can use it the same as the reused values immediately below
+    else: # if vcfDict is not empty, these values should be cached and reusable
+        numVariants = vcfDict["variants"]
+        samples = vcfDict["samples"]
+        contigs = vcfDict["contigs"]
     
-    numVariants = 0
-    contigs = {} # using as an ordered set
-    with read_gz_file(vcfFile) as fileIn:
-        for line in fileIn:
-            if line.startswith("#CHROM"):
-                samples = line.strip().split("\t")[9:]
-            elif line.startswith("#"):
-                continue
-            else:
-                contig = line.split("\t")[0]
-                if contig not in contigs:
-                    contigs[contig] = None
-                numVariants += 1
+    # Parse the filtered VCF file for cacheable metadata values
+    if filteredVcfFile == None: # filtered VCF is allowed to be None
+        numFilteredVariants = None
+        filteredSamples = None
+        filteredContigs = None
+    elif vcfDict.get("filteredVcfFile", None) == None or vcfDict["filteredVcfFile"] != filteredVcfFile:
+        "vcfDict might be empty OR the filteredVcfFile value might not have been specified"
+        print("# Filtered VCF details being added to cache ...")
+        numFilteredVariants = 0
+        filteredContigs = {} # using as an ordered set
+        with read_gz_file(filteredVcfFile) as fileIn:
+            for line in fileIn:
+                if line.startswith("#CHROM"):
+                    filteredSamples = line.strip().split("\t")[9:]
+                elif line.startswith("#"):
+                    continue
+                else:
+                    contig = line.split("\t")[0]
+                    if contig not in filteredContigs:
+                        filteredContigs[contig] = None
+                    numFilteredVariants += 1
+        filteredContigs = list(filteredContigs.keys()) # convert to list so we can use it the same as a None value
+    else: # if vcfDict is not empty, these values should be cached and reusable
+        numFilteredVariants = vcfDict["filteredVariants"]
+        filteredSamples = vcfDict["filteredSamples"]
+        filteredContigs = list(vcfDict["filteredContigs"].keys())
+    
+    # Unify filtering parameters
+    if qualFilter == None:
+        qualFilter = vcfDict.get("qualFilter", None)
+    if missingFilter == None:
+        missingFilter = vcfDict.get("missingFilter", None)
     
     # Initialise VCF cache dictionary
     vcfDict = {
         "vcfFile" : vcfFile,
         "variants" : numVariants,
         "samples" : samples,
-        "contigs" : list(contigs.keys())
+        "contigs" : contigs,
+        "filteredVcfFile" : filteredVcfFile,
+        "qualFilter" : qualFilter,
+        "missingFilter" : missingFilter,
+        "filteredVariants" : numFilteredVariants,
+        "filteredSamples" : filteredSamples,
+        "filteredContigs" : filteredContigs
     }
     
     # Write VCF cache to file
@@ -227,6 +279,10 @@ def initialise_deletion_cache(workingDirectory, windowSize):
                 # Tally bins
                 deletionBins += 1 if any([ "1" in x for x in sl[9:]]) else 0
                 totalBins += 1
+    
+    # Unify window size parameter
+    if windowSize == None:
+        windowSize = deletionDict.get("windowSize", None)
     
     # Initialise deletion cache dictionary
     deletionDict = {

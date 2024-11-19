@@ -3,7 +3,7 @@ import concurrent.futures
 import numpy as np
 from itertools import repeat
 
-from .parsing import open_gz_file, parse_samtools_depth_tsv
+from .parsing import parse_samtools_depth_tsv
 
 # Validation functions
 def validate_samtools_exists():

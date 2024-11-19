@@ -9,14 +9,17 @@ from Bio import SeqIO
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from modules.cache_handling import initialise_param_cache, update_param_cache, load_param_cache, \
-                            load_vcf_cache, initialise_vcf_cache, initialise_deletion_cache, \
+                            load_vcf_cache, update_vcf_cache, initialise_deletion_cache, \
                             load_deletion_cache, initialise_metadata_cache, load_metadata_cache, \
                             merge_cache_into_args
 from modules.samtools_handling import validate_samtools_exists, run_samtools_depth, run_samtools_faidx, \
                                       bin_samtools_depth
 from modules.bcftools_handling import validate_bcftools_exists, validate_bgzip_exists, validate_vt_exists, \
-                                      run_bcftools_call, run_bcftools_index, run_normalisation, run_bcftools_concat
+                                      run_bcftools_call, run_bcftools_index, run_normalisation, \
+                                      run_bcftools_concat, run_bgzip
 from modules.depth import call_deletions_from_depth
+from modules.parsing import parse_metadata
+from modules.filter import filter_vcf
 
 def validate_args(args):
     # Validate working directory
@@ -122,16 +125,6 @@ def validate_d(args):
     are necessary i.e., an existing deletion file is not provided. If so, BAM file locations
     are verified to ensure that they exist in order for depth calculations to proceed.
     '''
-    # Skip if we have a deletion file already
-    if args.deletionFile != None:
-        args.deletionFile = os.path.abspath(args.deletionFile)
-        if os.path.isfile(args.deletionFile):
-            raise FileExistsError(f"Deletion file '{args.deletionFile}' already exists; " +
-                                  "depth calculations are not necessary!")
-        else:
-            raise FileNotFoundError(f"Deletion file '{args.deletionFile}' was identified in " +
-                                    "the parameters cache, but it's now absent!")
-    
     # Validate threads
     if args.threads < 1:
         raise ValueError("Number of threads must be at least 1!")
@@ -152,19 +145,17 @@ def validate_d(args):
         raise FileNotFoundError(f"Genome FASTA file '{args.genomeFasta}' does not exist!")
 
 def validate_c(args):
-    # Skip if we have a VCF file already
-    if args.vcfFile != None:
-        args.vcfFile = os.path.abspath(args.vcfFile)
-        if os.path.isfile(args.vcfFile):
-            raise FileExistsError(f"VCF file '{args.vcfFile}' already exists; " +
-                                  "variant calling is not necessary!")
-        else:
-            raise FileNotFoundError(f"VCF file '{args.vcfFile}' was identified in " +
-                                    "the parameters cache, but it's now absent!")
-    
     # Validate threads
     if args.threads < 1:
         raise ValueError("Number of threads must be at least 1!")
+    
+    # Validate qual and missing filters
+    if args.qualFilter < 0:
+        raise ValueError("QUAL filter value must be at least 0!")
+    if args.missingFilter < 0:
+        raise ValueError("Missing filter value must be at least 0!")
+    elif args.missingFilter > 1:
+        raise ValueError("Missing filter value must be at most 1!")
     
     # Validate BAM files
     if args.bamFiles == []:
@@ -286,6 +277,19 @@ def main():
                          required=True,
                          help="""Specify the location of the genome FASTA file that BAM files
                          are aligned to""")
+    cparser.add_argument("--qual", dest="qualFilter",
+                         type=float,
+                         required=False,
+                         help="""Optionally, specify the QUAL value that variants must equal or
+                         exceed to be included in the final VCF file (default: 30.0)""",
+                         default=30.0)
+    cparser.add_argument("--missing", dest="missingFilter",
+                         type=float,
+                         required=False,
+                         help="""Optionally, specify the proportion of missing data that is
+                         tolerated in both bulk populations before a variant is filtered out
+                         (default: 0.25)""",
+                         default=0.25)
     cparser.add_argument("--bam", dest="bamFiles",
                          required=False,
                          nargs="+",
@@ -339,7 +343,7 @@ def imain(args):
         "If we receive a pre-computed deletion file, our windowSize value will be unknown"
         initialise_deletion_cache(args.workingDirectory, None)
     if args.vcfFile != None:
-        initialise_vcf_cache(args.workingDirectory)
+        update_vcf_cache(args.workingDirectory, None, None)
     print("Initialisation complete!")
 
 def dmain(args):
@@ -411,12 +415,16 @@ def dmain(args):
     
     # Collate binned files into a VCF-like format of deletion calls
     FINAL_DELETION_FILE = os.path.join(DEPTH_DIR, "psQTL_deletions.vcf")
-    if not os.path.isfile(FINAL_DELETION_FILE + ".ok"):
+    if (not os.path.isfile(FINAL_DELETION_FILE)) or (not os.path.isfile(FINAL_DELETION_FILE + ".ok")):
+        print("# Generating deletion file...")
         call_deletions_from_depth(samplePairs, FINAL_DELETION_FILE, args.windowSize)
-    
-    # Update the param and deletion caches
-    update_param_cache(args.workingDirectory, {"deletionFile" : FINAL_DELETION_FILE})
-    initialise_deletion_cache(args.workingDirectory, args.windowSize)
+        open(FINAL_DELETION_FILE + ".ok", "w").close() # touch a .ok file to indicate success
+        
+        # Update the param and deletion caches
+        update_param_cache(args.workingDirectory, {"deletionFile" : FINAL_DELETION_FILE})
+        initialise_deletion_cache(args.workingDirectory, args.windowSize)
+    else:
+        print(f"# Deletion file '{FINAL_DELETION_FILE}' exists; skipping ...")
     
     print("Depth file generation complete!")
 
@@ -455,7 +463,7 @@ def cmain(args):
             bamlistFile.write(f"{bamFile}\n")
     
     # Run bcftools mpileup->call on each contig
-    run_bcftools_call(BAMLIST_FILE, args.genomeFasta, CALL_DIR, args.threads)
+    run_bcftools_call(BAMLIST_FILE, args.genomeFasta, CALL_DIR, args.threads) # handles skipping internally
     
     # Index each VCF file
     for vcfFile in [ os.path.join(CALL_DIR, f) for f in os.listdir(CALL_DIR) ]:
@@ -463,7 +471,7 @@ def cmain(args):
             run_bcftools_index(vcfFile)
     
     # Run normalisation on each contig's VCF
-    run_normalisation(args.genomeFasta, CALL_DIR, args.threads)
+    run_normalisation(args.genomeFasta, CALL_DIR, args.threads) # handles skipping internally
     
     # Index each VCF file
     for vcfFile in [ os.path.join(CALL_DIR, f) for f in os.listdir(CALL_DIR) ]:
@@ -471,17 +479,59 @@ def cmain(args):
             run_bcftools_index(vcfFile)
     
     # Concatenate all VCF files
-    FINAL_VCF_FILE = os.path.join(CALL_DIR, "psQTL_variants.vcf.gz")
-    if not os.path.isfile(FINAL_VCF_FILE + ".ok"):
-        run_bcftools_concat(args.genomeFasta, CALL_DIR, FINAL_VCF_FILE)
+    CONCAT_VCF_FILE = os.path.join(CALL_DIR, "psQTL_variants.vcf.gz")
+    if (not os.path.isfile(CONCAT_VCF_FILE)) or (not os.path.isfile(CONCAT_VCF_FILE + ".ok")):
+        print("# Concatenating VCF files...")
+        run_bcftools_concat(args.genomeFasta, CALL_DIR, CONCAT_VCF_FILE)
+    else:
+        print(f"# Concatenated VCF file '{CONCAT_VCF_FILE}' exists; skipping ...")
     
-    # Index the final VCF file
-    if not os.path.isfile(FINAL_VCF_FILE + ".csi"):
-        run_bcftools_index(vcfFile)
+    # Index the concatenated VCF file
+    if not os.path.isfile(CONCAT_VCF_FILE + ".csi"):
+        run_bcftools_index(CONCAT_VCF_FILE)
     
     # Update the param and VCF caches
-    update_param_cache(args.workingDirectory, {"vcfFile" : FINAL_VCF_FILE})
-    initialise_vcf_cache(args.workingDirectory)
+    update_param_cache(args.workingDirectory, {"vcfFile" : CONCAT_VCF_FILE})
+    update_vcf_cache(args.workingDirectory, None, None)
+    
+    # Filter the VCF file
+    FILTERED_FILE = os.path.join(CALL_DIR, "psQTL_variants.filtered.vcf")
+    FINAL_FILTERED_FILE = FILTERED_FILE + ".gz"
+    if (not os.path.isfile(FINAL_FILTERED_FILE)) or (not os.path.isfile(FINAL_FILTERED_FILE + ".ok")):
+        paramsDict = load_param_cache(args.workingDirectory)
+        
+        # Skip filtering if metadata is not initialised
+        if paramsDict['metadataFile'] == None:
+            print("# Metadata file not initialised; skipping final VCF filtering...")
+            print("# Run 'psQTL_prep.py initialise' to set the metadata file and you can filter the VCF later.")
+        
+        # Raise error if metadata is initialised, but file is now missing
+        elif not os.path.isfile(paramsDict['metadataFile']):
+            raise FileNotFoundError(f"Metadata file '{paramsDict['metadataFile']}' is specified in your " +
+                                    "parameters cache but can no longer be found!")
+        
+        # Otherwise, proceed with filtering
+        else:
+            # Parse the metadata file
+            metadataDict = parse_metadata(paramsDict['metadataFile'])
+            
+            # Filter the VCF file
+            print("# Filtering VCF file...")
+            filter_vcf(CONCAT_VCF_FILE, FILTERED_FILE, metadataDict, args.missingFilter, args.qualFilter)
+            
+            # bgzip the filtered VCF file
+            print("# bgzipping filtered VCF file...")
+            run_bgzip(FILTERED_FILE)
+            
+            # Index the concatenated VCF file
+            run_bcftools_index(FINAL_FILTERED_FILE)
+            open(FINAL_FILTERED_FILE + ".ok", "w").close() # touch a .ok file to indicate success
+            
+            # Update the param and VCF caches
+            update_param_cache(args.workingDirectory, {"filteredVcfFile" : FINAL_FILTERED_FILE})
+            update_vcf_cache(args.workingDirectory, args.qualFilter, args.missingFilter)
+    else:
+        print(f"# Filtered VCF file '{FINAL_FILTERED_FILE}' exists; skipping ...")
     
     print("Variant calling complete!")
 
@@ -520,7 +570,7 @@ def vmain(args):
         vcfDict = load_vcf_cache(args.workingDirectory)
         if vcfDict == {}:
             print("## VCF cache not found; re-initialising...")
-            initialise_vcf_cache(args.workingDirectory)
+            update_vcf_cache(args.workingDirectory, None, None)
             vcfDict = load_vcf_cache(args.workingDirectory)
         
         print(f"VCF file: {paramsDict['vcfFile']}")
@@ -528,7 +578,21 @@ def vmain(args):
         print(f"Samples (n={len(vcfDict['samples'])}): {vcfDict['samples']}")
         print(f"Contigs (n={len(vcfDict['contigs'])}): {vcfDict['contigs']}")
     else:
-        print("VCF files: None")
+        print("VCF file: None")
+    
+    if paramsDict['filteredVcfFile'] is not None:
+        vcfDict = load_vcf_cache(args.workingDirectory)
+        if vcfDict == {}: # this shouldn't happen unless the user is messing with the cache
+            print("## VCF cache not found; re-initialising...")
+            update_vcf_cache(args.workingDirectory, None, None)
+            vcfDict = load_vcf_cache(args.workingDirectory)
+        
+        print(f"Filtered VCF file: {paramsDict['filteredVcfFile']}")
+        print(f"Num. filtered variants: {vcfDict['filteredVariants']}")
+        print(f"Filtered samples (n={len(vcfDict['filteredSamples'])}): {vcfDict['filteredSamples']}")
+        print(f"Filtered contigs (n={len(vcfDict['filteredContigs'])}): {vcfDict['filteredContigs']}")
+    else:
+        print("Filtered VCF file: None")
     print() # blank line for spacing
     
     # Present deletion cache
@@ -569,7 +633,7 @@ def vmain(args):
     
     if keepFindingIssues:
         try:
-            vcfSamples = set(vcfDict['samples'])
+            vcfSamples = set(vcfDict['filteredSamples']) if vcfDict['filteredSamples'] != None else set(vcfDict['samples'])
             if metaSamples != vcfSamples:
                 issues.append(f"Metadata samples (n={len(metaSamples)}) do not match VCF samples (n={len(vcfDict['samples'])})")
         except:
@@ -589,7 +653,7 @@ def vmain(args):
     
     ## Contig issues
     if keepFindingIssues:
-        vcfContigs = set(vcfDict['contigs'])
+        vcfContigs = set(vcfDict['filteredContigs']) if vcfDict['filteredContigs'] != None else set(vcfDict['contigs'])
         deletionContigs = set(deletionDict['contigs'])
         if vcfContigs != deletionContigs:
             issues.append(f"VCF contigs (n={len(vcfContigs)}) do not match deletion contigs (n={len(deletionContigs)})")
