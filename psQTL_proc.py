@@ -4,7 +4,7 @@
 # 'proc'ess it to calculate Euclidean distance values of variants or deletions among bulks.
 # These results can then be used as input to psQTL_post.py to plot and tabulate relevant details.
 
-import os, argparse, sys
+import os, argparse, sys, gzip
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from modules.cache_handling import load_param_cache, load_vcf_cache, load_deletion_cache, \
@@ -76,7 +76,7 @@ def generate_ed_file(vcfFile, metadataDict, outputFileName, ignoreIdentical):
         ignoreIdentical -- a boolean indicating whether to ignore variants where both bulks
                            are identical
     '''
-    with open(outputFileName, "w") as fileOut:
+    with gzip.open(outputFileName, "wt") as fileOut:
         # Write header line
         fileOut.write("{0}\n".format("\t".join([
             "CHROM", "POSI", "variant",
@@ -155,7 +155,7 @@ def main():
 
 def cmain(args, metadataDict):
     validate_c(args)
-    FINAL_ED_FILE = os.path.join(args.workingDirectory, "psQTL_variants.ed.tsv")
+    FINAL_ED_FILE = os.path.join(args.workingDirectory, "psQTL_variants.ed.tsv.gz")
     
     # Generate Euclidean distance file if it doesn't exist
     if not os.path.isfile(FINAL_ED_FILE + ".ok"):
@@ -167,7 +167,7 @@ def cmain(args, metadataDict):
 
 def dmain(args, metadataDict):
     validate_d(args)
-    FINAL_ED_FILE = os.path.join(args.workingDirectory, "psQTL_depth.ed.tsv")
+    FINAL_ED_FILE = os.path.join(args.workingDirectory, "psQTL_depth.ed.tsv.gz")
     
     # Generate Euclidean distance file if it doesn't exist
     if not os.path.isfile(FINAL_ED_FILE + ".ok"):

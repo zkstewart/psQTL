@@ -17,7 +17,7 @@ def get_codec(fileName):
             print(f"Can't tell what codec '{fileName}' is!!")
 
 @contextmanager
-def open_gz_file(filename):
+def read_gz_file(filename):
     if filename.endswith(".gz"):
         with gzip.open(filename, "rt") as f:
             yield f
@@ -37,7 +37,7 @@ def parse_metadata(metadataFile):
     
     metadataDict = {}
     foundSamples = set()
-    with open_gz_file(metadataFile) as fileIn:
+    with read_gz_file(metadataFile) as fileIn:
         for line in fileIn:
             # Split line based on delimiter
             if "\t" in line:
@@ -102,7 +102,7 @@ def parse_samtools_depth_tsv(depthFile):
         pos -- an integer indicating the position on the contig
         depth -- an integer indicating the depth at this position
     '''
-    with open_gz_file(depthFile) as fileIn:
+    with read_gz_file(depthFile) as fileIn:
         for line in fileIn:
             # Parse out relevant details from this line
             try:
@@ -123,7 +123,7 @@ def parse_binned_tsv(binFile):
         histoDict -- a dictionary mapping contig IDs to depth bins
     '''
     histoDict = {}
-    with open_gz_file(binFile) as fileIn:
+    with read_gz_file(binFile) as fileIn:
         for line in fileIn:
             # Parse out relevant details from this line
             try:
@@ -157,7 +157,7 @@ class SimpleGenotypeIterator:
         self.fileLocation = file_location
     
     def parse(self):
-        with open_gz_file(self.fileLocation) as fileIn:
+        with read_gz_file(self.fileLocation) as fileIn:
             for line in fileIn:
                 sl = line.rstrip("\r\n").replace('"', '').split("\t") # remove quotations to help with files opened by Excel
                 

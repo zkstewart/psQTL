@@ -1,7 +1,7 @@
 import os, json, gzip
 from contextlib import contextmanager
 
-from .parsing import open_gz_file, parse_metadata
+from .parsing import read_gz_file, parse_metadata
 
 CACHEABLE_PARAMS = ["workingDirectory", "metadataFile",
                     "vcfFile", "deletionFile",
@@ -136,7 +136,7 @@ def initialise_vcf_cache(workingDirectory):
     
     numVariants = 0
     contigs = {} # using as an ordered set
-    with open_gz_file(vcfFile) as fileIn:
+    with read_gz_file(vcfFile) as fileIn:
         for line in fileIn:
             if line.startswith("#CHROM"):
                 samples = line.strip().split("\t")[9:]
@@ -213,7 +213,7 @@ def initialise_deletion_cache(workingDirectory, windowSize):
     totalBins = 0
     deletionBins = 0
     contigs = {} # using as an ordered set
-    with open_gz_file(deletionFile) as fileIn:
+    with read_gz_file(deletionFile) as fileIn:
         for line in fileIn:
             if line.startswith("#CHROM"):
                 samples = line.strip().split("\t")[9:]

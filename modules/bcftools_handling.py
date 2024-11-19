@@ -2,7 +2,7 @@ import os, shutil, subprocess
 import concurrent.futures
 from itertools import repeat
 
-from .parsing import open_gz_file
+from .parsing import read_gz_file
 
 # Validation functions
 def validate_bcftools_exists():
@@ -29,7 +29,7 @@ def get_contig_ids(genomeFasta):
     '''
     # Get contig IDs from the genome FASTA
     contigIDs = set()
-    with open_gz_file(genomeFasta) as fastaFile:
+    with read_gz_file(genomeFasta) as fastaFile:
         for line in fastaFile:
             if line.startswith(">"):
                 contigID = line[1:].split(" ")[0].rstrip("\r\n")

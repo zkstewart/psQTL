@@ -124,6 +124,7 @@ def validate_d(args):
     '''
     # Skip if we have a deletion file already
     if args.deletionFile != None:
+        args.deletionFile = os.path.abspath(args.deletionFile)
         if os.path.isfile(args.deletionFile):
             raise FileExistsError(f"Deletion file '{args.deletionFile}' already exists; " +
                                   "depth calculations are not necessary!")
@@ -153,6 +154,7 @@ def validate_d(args):
 def validate_c(args):
     # Skip if we have a VCF file already
     if args.vcfFile != None:
+        args.vcfFile = os.path.abspath(args.vcfFile)
         if os.path.isfile(args.vcfFile):
             raise FileExistsError(f"VCF file '{args.vcfFile}' already exists; " +
                                   "variant calling is not necessary!")
