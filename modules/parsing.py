@@ -136,3 +136,80 @@ def parse_binned_tsv(binFile):
             histoDict.setdefault(contigID, {})
             histoDict[contigID][pos] = depth
     return histoDict
+
+class SimpleGenotypeIterator:
+    '''
+    A class to iterate through a VCF file and yield the genotype calls.
+    The first value yielded is the sample IDs, with subsequent yields
+    providing the following parameters:
+        - chrom -- a string indicating the chromosome
+        - pos -- an int indicating the position
+        - ref -- a string indicating the reference allele
+        - alt -- a list of strings indicating the alternate allele(s)
+        - posGenotypeDict -- a dictionary with sample IDs as keys and
+                             genotype calls as lists of integers (0 for ref, 1 for alt,
+                             and so on...)
+    '''
+    def __init__(self, file_location):
+        assert os.path.exists(file_location), \
+            f"SimpleGenotypeIterator can't find file existing at '{file_location}'"
+        
+        self.fileLocation = file_location
+    
+    def parse(self):
+        with open_gz_file(self.fileLocation) as fileIn:
+            for line in fileIn:
+                sl = line.rstrip("\r\n").replace('"', '').split("\t") # remove quotations to help with files opened by Excel
+                
+                # Handle header lines
+                if line.startswith("#CHROM"):
+                    samples = sl[9:] # This gives us the ordered sample IDs
+                    yield samples
+                    continue
+                if line.startswith("#"):
+                    continue
+                
+                # Extract relevant details
+                chrom = sl[0]
+                pos = int(sl[1])
+                ref = sl[3]
+                alt = sl[4].split(",")
+                
+                # Determine which field position we're extracting to get our GT value
+                fieldsDescription = sl[8]
+                if ":" not in fieldsDescription:
+                    gtIndex = 0
+                else:
+                    gtIndex = fieldsDescription.split(":").index("GT")
+                
+                # Format a dictionary to store sample genotypes for this position
+                posGenotypeDict = {}
+                ongoingCount = 0 # This gives us the index for our samples header list 
+                for sampleResult in sl[9:]: # This gives us the results for each sample as per fieldsDescription
+                    # Grab our genotype
+                    if gtIndex != -1:
+                        genotype = sampleResult.split(":")[gtIndex]
+                    else:
+                        genotype = sampleResult
+                    
+                    # Edit genotype to have a consistently predictable separator
+                    "We don't care if the VCF is phased or not for this function"
+                    genotype = genotype.replace("/", "|")
+                    
+                    # Skip uncalled genotypes
+                    if "." in genotype:
+                        ongoingCount += 1
+                        continue
+                    
+                    # Parse and store genotype
+                    samplePopulation = samples[ongoingCount]
+                    posGenotypeDict[samplePopulation] = list(map(int, genotype.split("|")))
+                    
+                    ongoingCount += 1
+                
+                # Yield result
+                yield chrom, pos, ref, alt, posGenotypeDict
+    
+    def __iter__(self):
+        for x in self.parse():
+            yield x
