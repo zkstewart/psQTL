@@ -170,13 +170,13 @@ def parse_vcf_stats(vcfFile):
     
     return variants, samples, contigs
 
-def parse_deletion_stats(vcfFile):
+def parse_deletion_stats(deletionFile):
     '''
     Parses a deletions VCF-like file to determine the number of bins,
     bins that had a deletion in at least one sample, the sample IDs, and contig IDs.
     
     Parameters:
-        vcfFile -- a string indicating the path to a VCF file
+        deletionFile -- a string indicating the path to a VCF-like file
     Returns:
         bins -- an integer indicating the number of bins in the VCF file
         deletionBins -- an integer indicating the number of bins with deletions in the VCF file

@@ -4,8 +4,8 @@ from .parsing import parse_vcf_stats, parse_deletion_stats, parse_metadata
 
 class ParameterCache:
     def __init__(self, workingDirectory):
-        if not os.path.exists(workingDirectory):
-            raise FileNotFoundError(f"Directory '{workingDirectory}' does not exist.")
+        if not os.path.isdir(workingDirectory):
+            raise FileNotFoundError(f"Directory '{workingDirectory}' is not a directory.")
         self.workingDirectory = workingDirectory
         
         self._metadataFile = None
@@ -121,8 +121,10 @@ class ParameterCache:
         if value == self.metadataFile:
             return
         # Validate file existence
-        if value != None and not os.path.exists(value):
-            raise FileNotFoundError(f"Metadata file '{value}' does not exist.")
+        if value != None:
+            if not os.path.isfile(value):
+                raise FileNotFoundError(f"Metadata file '{value}' is not a file.")
+            value = os.path.abspath(value) # store absolute path
         # Store updated value
         updateMsg = f"# Parameter cache: 'metadataFile' changed from '{self._metadataFile}' to '{value}'"
         self._metadataFile = value
@@ -144,8 +146,10 @@ class ParameterCache:
         if value == self.vcfFile:
             return
         # Validate file existence
-        if value != None and not os.path.exists(value):
-            raise FileNotFoundError(f"VCF file '{value}' does not exist.")
+        if value != None:
+            if not os.path.isfile(value):
+                raise FileNotFoundError(f"VCF file '{value}' is not a file.")
+            value = os.path.abspath(value) # store absolute path
         # Store updated value
         updateMsg = f"# Parameter cache: 'vcfFile' changed from '{self._vcfFile}' to '{value}'"
         self._vcfFile = value
@@ -167,8 +171,10 @@ class ParameterCache:
         if value == self.filteredVcfFile:
             return
         # Validate file existence
-        if value != None and not os.path.exists(value):
-            raise FileNotFoundError(f"Filtered VCF file '{value}' does not exist.")
+        if value != None:
+            if not os.path.isfile(value):
+                raise FileNotFoundError(f"Filtered VCF file '{value}' is not a file.")
+            value = os.path.abspath(value) # store absolute path
         # Store updated value
         updateMsg = f"# Parameter cache: 'filteredVcfFile' changed from '{self._filteredVcfFile}' to '{value}'"
         self._filteredVcfFile = value
@@ -190,8 +196,10 @@ class ParameterCache:
         if value == self.deletionFile:
             return
         # Validate file existence
-        if value != None and not os.path.exists(value):
-            raise FileNotFoundError(f"Deletion file '{value}' does not exist.")
+        if value != None:
+            if not os.path.isfile(value):
+                raise FileNotFoundError(f"Deletion file '{value}' is not a file.")
+            value = os.path.abspath(value) # store absolute path
         # Store updated value
         updateMsg = f"# Parameter cache: 'deletionFile' changed from '{self._deletionFile}' to '{value}'"
         self._deletionFile = value
@@ -216,8 +224,9 @@ class ParameterCache:
         if value == self.bamSuffix:
             return
         # Validate that the suffix is not empty
-        if value == None or value == "":
-            raise ValueError(f"bamSuffix cannot be None or an empty string.")
+        if value != None:
+            if value == "":
+                raise ValueError(f"--bamSuffix cannot be an empty string.")
         # Store and save
         updateMsg = f"# Parameter cache: 'bamSuffix' changed from '{self._bamSuffix}' to '{value}'"
         self._bamSuffix = value
@@ -234,10 +243,11 @@ class ParameterCache:
         if value == self.bamFiles:
             return
         # Locate and validate files
+        foundBAMs = value
         if value != None:
             # Error out if bamSuffix is not set
             if self.bamSuffix == None:
-                raise ValueError("BAM suffix must be set before BAM files.")
+                raise ValueError("--bamSuffix must be set for --bam files to be validated.")
             
             # Iterate through provided locations
             bamPrefixes = set()
@@ -271,7 +281,12 @@ class ParameterCache:
                 # Error out if location does not exist
                 else:
                     raise FileNotFoundError(f"Input BAM file or directory '{location}' not found!")
-        
+        # Ignore again if value is unchanged
+        """The value from the cmdline may differ from the cached value if user input includes directories
+        which get expanded out into full constituent file paths. This isn't exactly planned behaviour but
+        it does allow for re-validation of the files in the cache which is nice."""
+        if foundBAMs == self.bamFiles:
+            return
         # Store and save
         updateMsg = f"# Parameter cache: 'bamFiles' changed from '{self._bamFiles}' to '{foundBAMs}'"
         self._bamFiles = foundBAMs
@@ -290,9 +305,9 @@ class ParameterCache:
         # Validate value format and sensibility
         if value != None:
             if not type(value) == int:
-                raise ValueError("Window size must be an integer.")
+                raise ValueError("--windowSize must be an integer.")
             if value < 1:
-                raise ValueError("Window size must be a positive integer.")
+                raise ValueError("--windowSize must be a positive integer.")
         # Store and save
         updateMsg = f"# Parameter cache: 'windowSize' changed from '{self._windowSize}' to '{value}'"
         self._windowSize = value
@@ -313,9 +328,9 @@ class ParameterCache:
             try:
                 value = float(value)
             except ValueError:
-                raise ValueError("Quality filter must be a float or integer number.")
+                raise ValueError("--qual must be a float or integer number.")
             if value < 0:
-                raise ValueError("Quality filter must be at least 0.")
+                raise ValueError("--qual must be at least 0.")
         # Store and save
         updateMsg = f"# Parameter cache: 'qualFilter' changed from '{self._qualFilter}' to '{value}'"
         self._qualFilter = value
@@ -336,11 +351,11 @@ class ParameterCache:
             try:
                 value = float(value)
             except ValueError:
-                raise ValueError("Missing filter must be a float or integer number.")
+                raise ValueError("--missing must be a float or integer number.")
             if value < 0:
-                raise ValueError("Missing filter must be at least 0.")
+                raise ValueError("--missing must be at least 0.")
             if value > 1:
-                raise ValueError("Missing filter must be at most 1.")
+                raise ValueError("--missing must be at most 1.")
         # Store and save
         updateMsg = f"# Parameter cache: 'missingFilter' changed from '{self._missingFilter}' to '{value}'"
         self._missingFilter = value
@@ -349,8 +364,8 @@ class ParameterCache:
 
 class VcfCache:
     def __init__(self, workingDirectory):
-        if not os.path.exists(workingDirectory):
-            raise FileNotFoundError(f"Directory '{workingDirectory}' does not exist.")
+        if not os.path.isdir(workingDirectory):
+            raise FileNotFoundError(f"Directory '{workingDirectory}' is not a directory.")
         self.workingDirectory = workingDirectory
         
         self._vcfFile = None
@@ -415,12 +430,12 @@ class VcfCache:
     
     def _parse_vcf(self):
         if self._vcfFile == None or not os.path.isfile(self._vcfFile):
-            raise FileNotFoundError(f"VCF file '{self._vcfFile}' does not exist.")
+            raise FileNotFoundError(f"VCF file '{self._vcfFile}' is not a file.")
         self._variants, self._samples, self._contigs = parse_vcf_stats(self._vcfFile)
     
     def _parse_filtered_vcf(self):
         if self._filteredVcfFile == None or not os.path.isfile(self._filteredVcfFile):
-            raise FileNotFoundError(f"Filtered VCF file '{self._filteredVcfFile}' does not exist.")
+            raise FileNotFoundError(f"Filtered VCF file '{self._filteredVcfFile}' is not a file.")
         self._filteredVariants, self._filteredSamples, self._filteredContigs = parse_vcf_stats(self._filteredVcfFile)
     
     @property
@@ -447,7 +462,8 @@ class VcfCache:
             return
         # Validate file existence
         if not os.path.isfile(value):
-            raise FileNotFoundError(f"VCF file '{value}' does not exist.")
+            raise FileNotFoundError(f"VCF file '{value}' is not a file.")
+        value = os.path.abspath(value) # store absolute path
         # Store and parse
         updateMsg = f"# VCF cache: 'vcfFile' changed from '{self._vcfFile}' to '{value}'"
         self._vcfFile = value
@@ -487,7 +503,8 @@ class VcfCache:
             return
         # Validate file existence
         if not os.path.isfile(value):
-            raise FileNotFoundError(f"Filtered VCF file '{value}' does not exist.")
+            raise FileNotFoundError(f"Filtered VCF file '{value}' is not a file.")
+        value = os.path.abspath(value) # store absolute path
         # Store and parse
         updateMsg = f"# VCF cache: 'filteredVcfFile' changed from '{self._filteredVcfFile}' to '{value}'"
         self._filteredVcfFile = value
@@ -509,8 +526,8 @@ class VcfCache:
 
 class DeletionCache:
     def __init__(self, workingDirectory):
-        if not os.path.exists(workingDirectory):
-            raise FileNotFoundError(f"Directory '{workingDirectory}' does not exist.")
+        if not os.path.isdir(workingDirectory):
+            raise FileNotFoundError(f"Directory '{workingDirectory}' is not a directory.")
         self.workingDirectory = workingDirectory
         
         self._deletionFile = None
@@ -563,7 +580,7 @@ class DeletionCache:
     
     def _parse_deletion_vcf(self):
         if self.deletionFile == None or not os.path.isfile(self.deletionFile):
-            raise FileNotFoundError(f"Deletion file '{self.deletionFile}' does not exist.")
+            raise FileNotFoundError(f"Deletion file '{self.deletionFile}' is not a file.")
         self._bins, self._deletionBins, self._samples, self._contigs = parse_deletion_stats(self.deletionFile)
     
     @property
@@ -591,11 +608,12 @@ class DeletionCache:
             return
         # Validate file existence
         if not os.path.isfile(value):
-            raise FileNotFoundError(f"Deletion file '{value}' does not exist.")
+            raise FileNotFoundError(f"Deletion file '{value}' is not a file.")
+        value = os.path.abspath(value) # store absolute path
         # Store and parse
         updateMsg = f"# Deletion cache: 'deletionFile' changed from '{self._deletionFile}' to '{value}'"
         self._deletionFile = value
-        self._parse_deletion_vcf(value)
+        self._parse_deletion_vcf()
         self.save() # save after all changes are made
         print(updateMsg)
     
@@ -617,8 +635,8 @@ class DeletionCache:
 
 class MetadataCache:
     def __init__(self, workingDirectory):
-        if not os.path.exists(workingDirectory):
-            raise FileNotFoundError(f"Directory '{workingDirectory}' does not exist.")
+        if not os.path.isdir(workingDirectory):
+            raise FileNotFoundError(f"Directory '{workingDirectory}' is not a directory.")
         self.workingDirectory = workingDirectory
         
         self._metadataFile = None
@@ -663,7 +681,7 @@ class MetadataCache:
     
     def _parse_metadata(self):
         if self.metadataFile == None or not os.path.isfile(self.metadataFile):
-            raise FileNotFoundError(f"Metadata file '{self.metadataFile}' does not exist.")
+            raise FileNotFoundError(f"Metadata file '{self.metadataFile}' is not a file.")
         metadataDict = parse_metadata(self.metadataFile)
         self._bulk1, self._bulk2 = metadataDict["bulk1"], metadataDict["bulk2"]
     
@@ -690,7 +708,8 @@ class MetadataCache:
             return
         # Validate file existence
         if not os.path.isfile(value):
-            raise FileNotFoundError(f"Metadata file '{value}' does not exist.")
+            raise FileNotFoundError(f"Metadata file '{value}' is not a file.")
+        value = os.path.abspath(value) # store absolute path
         # Store and parse
         updateMsg = f"# Metadata cache: 'metadataFile' changed from '{self._metadataFile}' to '{value}'"
         self._metadataFile = value

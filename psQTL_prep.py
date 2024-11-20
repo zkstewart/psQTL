@@ -124,7 +124,7 @@ def main():
     iparser.add_argument("--bamSuffix", dest="bamSuffix",
                          required=False,
                          help="""Optionally, specify the suffix used to denote BAM files;
-                         relevant if directories are provided to --bam (default: '.bam')""")
+                         relevant if directories are provided to --bam""")
     iparser.add_argument("--windowSize", dest="windowSize",
                          type=int,
                          required=False,
@@ -134,13 +134,13 @@ def main():
                          type=float,
                          required=False,
                          help="""Optionally, specify the QUAL value that variants must equal or
-                         exceed to be included in the final VCF file (default: 30.0)""")
+                         exceed to be included in the final VCF file (recommended: 30.0)""")
     iparser.add_argument("--missing", dest="missingFilter",
                          type=float,
                          required=False,
                          help="""Optionally, specify the proportion of missing data that is
                          tolerated in both bulk populations before a variant is filtered out
-                         (default: 0.25)""")
+                         (recommended: 0.25)""")
     
     # Depth-subparser arguments
     dparser.add_argument("-f", dest="genomeFasta",
@@ -151,19 +151,16 @@ def main():
                          type=int,
                          required=False,
                          help="""Optionally, specify the window size that reads will be
-                         binned into for deletion calling""",
-                         default=1000)
+                         binned into for deletion calling (recommended: 1000)""")
     dparser.add_argument("--bam", dest="bamFiles",
                          required=False,
                          nargs="+",
                          help="""Optionally, specify one or more locations of BAM files and/or
-                         directories containing BAM files for depth calculations""",
-                         default=None) # not required, but a value must be provided here or during the init
+                         directories containing BAM files for depth calculations""")
     dparser.add_argument("--bamSuffix", dest="bamSuffix",
                          required=False,
                          help="""Optionally, specify the suffix used to denote BAM files;
-                         relevant if directories are provided to --bam (default: '.bam')""",
-                         default=".bam")
+                         relevant if directories are provided to --bam""")
     dparser.add_argument("--threads", dest="threads",
                          type=int,
                          required=False,
@@ -180,27 +177,23 @@ def main():
                          type=float,
                          required=False,
                          help="""Optionally, specify the QUAL value that variants must equal or
-                         exceed to be included in the final VCF file (default: 30.0)""",
-                         default=30.0)
+                         exceed to be included in the final VCF file (recommended: 30.0)""")
     cparser.add_argument("--missing", dest="missingFilter",
                          type=float,
                          required=False,
                          help="""Optionally, specify the proportion of missing data that is
                          tolerated in both bulk populations before a variant is filtered out
-                         (default: 0.25)""",
-                         default=0.25)
+                         (recommended: 0.25)""")
     cparser.add_argument("--bam", dest="bamFiles",
                          required=False,
                          nargs="+",
                          help="""Optionally, specify one or more locations of BAM files and/or
                          directories containing BAM files for variant calling and/or depth
-                         calculations""",
-                         default=[])
+                         calculations""")
     cparser.add_argument("--bamSuffix", dest="bamSuffix",
                          required=False,
                          help="""Optionally, specify the suffix used to denote BAM files;
-                         relevant if directories are provided to --bam (default: '.bam')""",
-                         default=[])
+                         relevant if directories are provided to --bam""")
     cparser.add_argument("--threads", dest="threads",
                          type=int,
                          required=False,
@@ -253,6 +246,12 @@ def dmain(args):
     # Merge params and args
     paramsCache = ParameterCache(args.workingDirectory)
     paramsCache.merge(args) # raises FileNotFoundError if cache does not exist
+    
+    # Validate that necessary arguments are provided
+    if args.bamFiles == None or args.bamFiles == []:
+        raise ValueError("--bam files not yet provided for depth calculation!")
+    if args.windowSize == None:
+        raise ValueError("--windowSize not yet provided for depth calculation!")
     
     # Get the sample prefixes from the BAM files
     bamPrefixes = [ os.path.basename(f).rsplit(args.bamSuffix, maxsplit=1)[0] for f in args.bamFiles ]
@@ -312,12 +311,12 @@ def dmain(args):
         print("# Generating deletion file...")
         call_deletions_from_depth(samplePairs, FINAL_DELETION_FILE, args.windowSize)
         open(FINAL_DELETION_FILE + ".ok", "w").close() # touch a .ok file to indicate success
-        
-        # Update param cache with newly produced deletion file
-        paramsCache.deletionFile = FINAL_DELETION_FILE
-        paramsCache.windowSize = args.windowSize
     else:
         print(f"# Deletion file '{FINAL_DELETION_FILE}' exists; skipping ...")
+    
+    # Update param cache with (potentially) newly produced deletion file
+    paramsCache.deletionFile = FINAL_DELETION_FILE
+    paramsCache.windowSize = args.windowSize
     
     print("Depth file generation complete!")
 
@@ -341,6 +340,14 @@ def cmain(args):
     # Merge params and args
     paramsCache = ParameterCache(args.workingDirectory)
     paramsCache.merge(args) # raises FileNotFoundError if cache does not exist
+    
+    # Validate that BAM files have been provided
+    if args.bamFiles == None or args.bamFiles == []:
+        raise ValueError("--bam files not yet provided for variant calling!")
+    if args.qualFilter == None:
+        raise ValueError("--qual not yet provided for variant calling!")
+    if args.missingFilter == None:
+        raise ValueError("--missing not yet provided for variant calling!")
     
     # Index the reference genome (if necessary)
     if not os.path.isfile(args.genomeFasta + ".fai"):
@@ -412,11 +419,11 @@ def cmain(args):
             # Index the concatenated VCF file
             run_bcftools_index(FINAL_FILTERED_FILE)
             open(FINAL_FILTERED_FILE + ".ok", "w").close() # touch a .ok file to indicate success
-            
-            # Update param cache with newly produced filtered VCF file
-            paramsCache.filteredVcfFile = FINAL_FILTERED_FILE
     else:
         print(f"# Filtered VCF file '{FINAL_FILTERED_FILE}' exists; skipping ...")
+    
+    # Update param cache with (potentially) newly produced filtered VCF file
+    paramsCache.filteredVcfFile = FINAL_FILTERED_FILE
     
     print("Variant calling complete!")
 
