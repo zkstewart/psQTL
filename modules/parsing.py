@@ -32,8 +32,8 @@ def parse_metadata(metadataFile):
     Returns:
         metadataDict -- a dictionary with structure like:
                         {
-                            "bulk1": set([ "sample1", "sample2", ... ]),
-                            "bulk2": set([ "sample3", "sample4", ... ])
+                            "bulk1": [ "sample1", "sample2", ... ],
+                            "bulk2": [ "sample3", "sample4", ... ]
                         }
     '''
     ACCEPTED_BULK1 = ['bulk1', '1', 'bulk 1', 'b1']
@@ -140,6 +140,69 @@ def parse_binned_tsv(binFile):
             histoDict.setdefault(contigID, {})
             histoDict[contigID][pos] = depth
     return histoDict
+
+def parse_vcf_stats(vcfFile):
+    '''
+    Parses a VCF file to determine the number of variants, the sample IDs, and
+    contig IDs.
+    
+    Parameters:
+        vcfFile -- a string indicating the path to a VCF file
+    Returns:
+        variants -- an integer indicating the number of variants in the VCF file
+        samples -- a list of strings indicating the sample IDs in the VCF file
+        contigs -- a list of strings indicating the contig IDs in the VCF file
+    '''
+    variants = 0
+    contigs = {} # using as an ordered set
+    with read_gz_file(vcfFile) as fileIn:
+        for line in fileIn:
+            if line.startswith("#CHROM"):
+                samples = line.strip().split("\t")[9:]
+            elif line.startswith("#"):
+                continue
+            else:
+                contig = line.split("\t")[0]
+                if contig not in contigs:
+                    contigs[contig] = None
+                variants += 1
+    contigs = list(contigs.keys()) # convert to list
+    
+    return variants, samples, contigs
+
+def parse_deletion_stats(vcfFile):
+    '''
+    Parses a deletions VCF-like file to determine the number of bins,
+    bins that had a deletion in at least one sample, the sample IDs, and contig IDs.
+    
+    Parameters:
+        vcfFile -- a string indicating the path to a VCF file
+    Returns:
+        bins -- an integer indicating the number of bins in the VCF file
+        deletionBins -- an integer indicating the number of bins with deletions in the VCF file
+        samples -- a list of strings indicating the sample IDs in the VCF file
+        contigs -- a list of strings indicating the contig IDs in the VCF file
+    '''
+    bins = 0
+    deletionBins = 0
+    contigs = {} # using as an ordered set
+    with read_gz_file(deletionFile) as fileIn:
+        for line in fileIn:
+            if line.startswith("#CHROM"):
+                samples = line.strip().split("\t")[9:]
+            elif line.startswith("#"):
+                continue
+            else:
+                sl = line.split("\t")
+                if sl[0] not in contigs:
+                    contigs[sl[0]] = None
+                
+                # Tally bins
+                deletionBins += 1 if any([ "1" in x for x in sl[9:]]) else 0
+                bins += 1
+    contigs = list(contigs.keys()) # convert to list
+    
+    return bins, deletionBins, samples, contigs
 
 def vcf_header_to_metadata_validation(vcfSamples, metadataDict, strict=True):
     '''

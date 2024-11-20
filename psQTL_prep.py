@@ -8,10 +8,7 @@ import os, argparse, sys
 from Bio import SeqIO
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-from modules.cache_handling import initialise_param_cache, update_param_cache, load_param_cache, \
-                            load_vcf_cache, update_vcf_cache, initialise_deletion_cache, \
-                            load_deletion_cache, initialise_metadata_cache, load_metadata_cache, \
-                            merge_cache_into_args
+from modules.parameters import ParameterCache, VcfCache, DeletionCache, MetadataCache
 from modules.samtools_handling import validate_samtools_exists, run_samtools_depth, run_samtools_faidx, \
                                       bin_samtools_depth
 from modules.bcftools_handling import validate_bcftools_exists, validate_bgzip_exists, validate_vt_exists, \
@@ -38,130 +35,17 @@ def validate_args(args):
     
     # Validate cache existence
     if not args.mode in ["initialise", "init"]:
-        paramsDict = load_param_cache(args.workingDirectory)
-        if paramsDict == {}:
-            raise FileNotFoundError("Working directory has not been initialised;" +
-                                    f"parameter cache not found in '{args.workingDirectory}'!")
+        paramsCache = ParameterCache(args.workingDirectory)
+        paramsCache.load() # raises FileNotFoundError if cache does not exist
 
-def validate_bam_files(args):
+def validate_uncached(args):
     '''
-    Performs validations to make sure that 1) any indicated files exists, 2) any directories
-    provided contain BAM files, and 3) that no duplicate prefixes are found, as that may
-    cause issues when producing VCF and depth files.
-    '''
-    # Validate BAM files
-    bamPrefixes = set()
-    foundBAMs = []
-    for location in args.bamFiles:
-        location = os.path.abspath(location)
-        
-        # Handle an existing file
-        if os.path.isfile(location):
-            if not location.endswith(args.bamSuffix):
-                raise ValueError(f"BAM file '{location}' does not end with the specified suffix '{args.bamSuffix}'")
-            else:
-                bamPrefix = os.path.basename(location).rsplit(args.bamSuffix, maxsplit=1)[0]
-                if bamPrefix in bamPrefixes:
-                    raise ValueError(f"Duplicate BAM prefix found: '{bamPrefix}'")
-                
-                foundBAMs.append(location)
-        # Handle an existing directory
-        elif os.path.isdir(location):
-            foundAny = False
-            for f in os.listdir(location):
-                if f.endswith(args.bamSuffix):
-                    bamPrefix = os.path.basename(location).rsplit(args.bamSuffix, maxsplit=1)[0]
-                    if bamPrefix in bamPrefixes:
-                        raise ValueError(f"Duplicate BAM prefix found: '{bamPrefix}'")
-                    
-                    foundBAMs.append(os.path.join(location, f))
-                    foundAny = True
-            if not foundAny:
-                raise FileNotFoundError(f"No BAM files found in directory '{location}' ending with '{args.bamSuffix}'")
-        # Error out if location does not exist
-        else:
-            raise FileNotFoundError(f"Input BAM file or directory '{location}' not found!")
-    args.bamFiles = foundBAMs
-
-def validate_i(args):
-    '''
-    The goal of this function is to make sure that at least one input was given, and that
-    any provided files actually exist.
-    '''
-    # Check that at least one input was given
-    if args.metadataFile == None and args.vcfFile == None and args.bamFiles == [] \
-    and args.deletionFile == []:
-        raise ValueError("At least one of --meta, --vcf, --deletion, or --bam must be specified!")
-    
-    # Check that we some sort of useful file input
-    if args.bamFiles == None and args.vcfFile == None and args.deletionFile == None:
-        raise ValueError("Downstream psQTL processing requires at least one of --vcf, --deletion, or --bam!")
-    
-    # Validate metadata file
-    if args.metadataFile is not None:
-        args.metadataFile = os.path.abspath(args.metadataFile)
-        if not os.path.isfile(args.metadataFile):
-            raise FileNotFoundError(f"Metadata file '{args.metadataFile}' does not exist!")
-    
-    # Validate VCF file
-    if args.vcfFile is not None:
-        args.vcfFile = os.path.abspath(args.vcfFile)
-        if not os.path.isfile(args.vcfFile):
-            raise FileNotFoundError(f"VCF file '{args.vcfFile}' does not exist!")
-    
-    # Validate deletion file
-    if args.deletionFile is not None:
-        args.deletionFile = os.path.abspath(args.deletionFile)
-        if not os.path.isfile(args.deletionFile):
-            raise FileNotFoundError(f"Deletion VCF-like file '{args.deletionFile}' does not exist!")
-    
-    # Validate BAM files
-    if args.bamFiles != []:
-        validate_bam_files(args)
-
-def validate_d(args):
-    '''
-    The goal of this function is to determine whether this submodule's depth calculations
-    are necessary i.e., an existing deletion file is not provided. If so, BAM file locations
-    are verified to ensure that they exist in order for depth calculations to proceed.
+    This function just needs to validate any arguments that are not found within the
+    parameter cache.
     '''
     # Validate threads
     if args.threads < 1:
         raise ValueError("Number of threads must be at least 1!")
-    
-    # Validate window size
-    if args.windowSize < 1:
-        raise ValueError("Window size must be at least 1!")
-    
-    # Validate BAM files
-    if args.bamFiles == []:
-        raise ValueError("No BAM files have yet been provided for depth calculations!")
-    else:
-        validate_bam_files(args)
-    
-    # Validate genome FASTA file
-    args.genomeFasta = os.path.abspath(args.genomeFasta)
-    if not os.path.isfile(args.genomeFasta):
-        raise FileNotFoundError(f"Genome FASTA file '{args.genomeFasta}' does not exist!")
-
-def validate_c(args):
-    # Validate threads
-    if args.threads < 1:
-        raise ValueError("Number of threads must be at least 1!")
-    
-    # Validate qual and missing filters
-    if args.qualFilter < 0:
-        raise ValueError("QUAL filter value must be at least 0!")
-    if args.missingFilter < 0:
-        raise ValueError("Missing filter value must be at least 0!")
-    elif args.missingFilter > 1:
-        raise ValueError("Missing filter value must be at most 1!")
-    
-    # Validate BAM files
-    if args.bamFiles == []:
-        raise ValueError("No BAM files have yet been provided for variant calling!")
-    else:
-        validate_bam_files(args)
     
     # Validate genome FASTA file
     args.genomeFasta = os.path.abspath(args.genomeFasta)
@@ -218,30 +102,45 @@ def main():
     iparser.add_argument("--meta", dest="metadataFile",
                          required=False,
                          help="""Optionally, specify the location of a metadata TSV file containing two
-                         columns indicating 1) sample ID and 2) the bulk it belongs to""",
-                         default=None)
+                         columns indicating 1) sample ID and 2) the bulk it belongs to""")
     iparser.add_argument("--vcf", dest="vcfFile",
                          required=False,
                          help="""Optionally, specify a VCF file containg per-sample variant
-                         calls that you have already produced""",
-                         default=None)
+                         calls that you have already produced""")
+    iparser.add_argument("--fvcf", dest="filteredVcfFile",
+                         required=False,
+                         help="""Optionally, specify a filtered VCF file containg per-sample variant
+                         calls that you have already produced""")
     iparser.add_argument("--deletion", dest="deletionFile",
                          required=False,
                          help="""Optionally, specify a deletion VCF-like file containing per-sample
-                         deletion calls that you have already produced""",
-                         default=None)
+                         deletion calls that you have already produced""")
     iparser.add_argument("--bam", dest="bamFiles",
                          required=False,
                          nargs="+",
                          help="""Optionally, specify one or more locations of BAM files and/or
                          directories containing BAM files for variant calling and/or depth
-                         calculations""",
-                         default=[])
+                         calculations""")
     iparser.add_argument("--bamSuffix", dest="bamSuffix",
                          required=False,
                          help="""Optionally, specify the suffix used to denote BAM files;
-                         relevant if directories are provided to --bam (default: '.bam')""",
-                         default=".bam")
+                         relevant if directories are provided to --bam (default: '.bam')""")
+    iparser.add_argument("--windowSize", dest="windowSize",
+                         type=int,
+                         required=False,
+                         help="""Optionally, specify the window size that reads will be
+                         binned into for deletion calling""")
+    iparser.add_argument("--qual", dest="qualFilter",
+                         type=float,
+                         required=False,
+                         help="""Optionally, specify the QUAL value that variants must equal or
+                         exceed to be included in the final VCF file (default: 30.0)""")
+    iparser.add_argument("--missing", dest="missingFilter",
+                         type=float,
+                         required=False,
+                         help="""Optionally, specify the proportion of missing data that is
+                         tolerated in both bulk populations before a variant is filtered out
+                         (default: 0.25)""")
     
     # Depth-subparser arguments
     dparser.add_argument("-f", dest="genomeFasta",
@@ -259,12 +158,12 @@ def main():
                          nargs="+",
                          help="""Optionally, specify one or more locations of BAM files and/or
                          directories containing BAM files for depth calculations""",
-                         default=[])
+                         default=None) # not required, but a value must be provided here or during the init
     dparser.add_argument("--bamSuffix", dest="bamSuffix",
                          required=False,
                          help="""Optionally, specify the suffix used to denote BAM files;
                          relevant if directories are provided to --bam (default: '.bam')""",
-                         default=[])
+                         default=".bam")
     dparser.add_argument("--threads", dest="threads",
                          type=int,
                          required=False,
@@ -309,20 +208,24 @@ def main():
                          variant calling (default: 1)""",
                          default=1)
     
+    # View-subparser arguments
+    # N/A
+    
     args = subParentParser.parse_args()
     validate_args(args)
-    merge_cache_into_args(args)
     
     # Split into mode-specific functions
-    if args.mode == "depth":
+    if args.mode in ["initialise", "init"]:
+        print("## psQTL_prep.py - Initialisation ##")
+        imain(args)
+    elif args.mode == "depth":
+        validate_uncached(args)
         print("## psQTL_prep.py - Depth Calculation ##")
         dmain(args)
     elif args.mode == "call":
+        validate_uncached(args)
         print("## psQTL_prep.py - Variant Calling ##")
         cmain(args)
-    elif args.mode in ["initialise", "init"]:
-        print("## psQTL_prep.py - Initialisation ##")
-        imain(args)
     elif args.mode == "view":
         print("## psQTL_prep.py - View Directory ##")
         vmain(args)
@@ -331,35 +234,25 @@ def main():
     print("Program completed successfully!")
 
 def imain(args):
-    validate_i(args)
+    paramsCache = ParameterCache(args.workingDirectory)
+    try:
+        paramsCache.initialise(args)
+    except FileExistsError:
+        paramsCache.merge(args)
     
-    # Initialise or update the param cache
-    initialise_param_cache(args)
-    
-    # Initialise or update other caches
-    if args.metadataFile != None:
-        initialise_metadata_cache(args.workingDirectory)
-    if args.deletionFile != None:
-        "If we receive a pre-computed deletion file, our windowSize value will be unknown"
-        initialise_deletion_cache(args.workingDirectory, None)
-    if args.vcfFile != None:
-        update_vcf_cache(args.workingDirectory, None, None)
     print("Initialisation complete!")
 
 def dmain(args):
     DEPTH_SUFFIX = ".depth.tsv"
-    validate_d(args)
+    DEPTH_DIR = os.path.join(args.workingDirectory, "depth")
+    os.makedirs(DEPTH_DIR, exist_ok=True)
     
     # Validate that necessary programs exist
     validate_samtools_exists()
     
-    # Create depth directory if it doesn't exist
-    DEPTH_DIR = os.path.join(args.workingDirectory, "depth")
-    os.makedirs(DEPTH_DIR, exist_ok=True)
-    
-    # Store any newly provided values in the cache
-    update_param_cache(args.workingDirectory, {"bamFiles" : args.bamFiles,
-                                               "bamSuffix": args.bamSuffix})
+    # Merge params and args
+    paramsCache = ParameterCache(args.workingDirectory)
+    paramsCache.merge(args) # raises FileNotFoundError if cache does not exist
     
     # Get the sample prefixes from the BAM files
     bamPrefixes = [ os.path.basename(f).rsplit(args.bamSuffix, maxsplit=1)[0] for f in args.bamFiles ]
@@ -420,9 +313,9 @@ def dmain(args):
         call_deletions_from_depth(samplePairs, FINAL_DELETION_FILE, args.windowSize)
         open(FINAL_DELETION_FILE + ".ok", "w").close() # touch a .ok file to indicate success
         
-        # Update the param and deletion caches
-        update_param_cache(args.workingDirectory, {"deletionFile" : FINAL_DELETION_FILE})
-        initialise_deletion_cache(args.workingDirectory, args.windowSize)
+        # Update param cache with newly produced deletion file
+        paramsCache.deletionFile = FINAL_DELETION_FILE
+        paramsCache.windowSize = args.windowSize
     else:
         print(f"# Deletion file '{FINAL_DELETION_FILE}' exists; skipping ...")
     
@@ -436,7 +329,8 @@ def cmain(args):
     an index that was partially created. It is expected that stderr values will provide
     this information but this hasn't been validated yet.
     '''
-    validate_c(args)
+    CALL_DIR = os.path.join(args.workingDirectory, "call")
+    os.makedirs(CALL_DIR, exist_ok=True)
     
     # Validate that necessary programs exist
     validate_samtools_exists()
@@ -444,13 +338,9 @@ def cmain(args):
     validate_bgzip_exists()
     validate_vt_exists()
     
-    # Create call directory if it doesn't exist
-    CALL_DIR = os.path.join(args.workingDirectory, "call")
-    os.makedirs(CALL_DIR, exist_ok=True)
-    
-    # Store any newly provided values in the cache
-    update_param_cache(args.workingDirectory, {"bamFiles" : args.bamFiles,
-                                               "bamSuffix": args.bamSuffix})
+    # Merge params and args
+    paramsCache = ParameterCache(args.workingDirectory)
+    paramsCache.merge(args) # raises FileNotFoundError if cache does not exist
     
     # Index the reference genome (if necessary)
     if not os.path.isfile(args.genomeFasta + ".fai"):
@@ -490,30 +380,26 @@ def cmain(args):
     if not os.path.isfile(CONCAT_VCF_FILE + ".csi"):
         run_bcftools_index(CONCAT_VCF_FILE)
     
-    # Update the param and VCF caches
-    update_param_cache(args.workingDirectory, {"vcfFile" : CONCAT_VCF_FILE})
-    update_vcf_cache(args.workingDirectory, None, None)
+    # Update param cache with newly produced VCF file
+    paramsCache.vcfFile = CONCAT_VCF_FILE
     
     # Filter the VCF file
     FILTERED_FILE = os.path.join(CALL_DIR, "psQTL_variants.filtered.vcf")
     FINAL_FILTERED_FILE = FILTERED_FILE + ".gz"
-    if (not os.path.isfile(FINAL_FILTERED_FILE)) or (not os.path.isfile(FINAL_FILTERED_FILE + ".ok")):
-        paramsDict = load_param_cache(args.workingDirectory)
-        
+    if (not os.path.isfile(FINAL_FILTERED_FILE)) or (not os.path.isfile(FINAL_FILTERED_FILE + ".ok")):        
         # Skip filtering if metadata is not initialised
-        if paramsDict['metadataFile'] == None:
+        if args.metadataFile == None:
             print("# Metadata file not initialised; skipping final VCF filtering...")
             print("# Run 'psQTL_prep.py initialise' to set the metadata file and you can filter the VCF later.")
         
         # Raise error if metadata is initialised, but file is now missing
-        elif not os.path.isfile(paramsDict['metadataFile']):
-            raise FileNotFoundError(f"Metadata file '{paramsDict['metadataFile']}' is specified in your " +
-                                    "parameters cache but can no longer be found!")
+        elif not os.path.isfile(args.metadataFile):
+            raise FileNotFoundError(f"Metadata file '{args.metadataFile}' can no longer be found!")
         
         # Otherwise, proceed with filtering
         else:
             # Parse the metadata file
-            metadataDict = parse_metadata(paramsDict['metadataFile'])
+            metadataDict = parse_metadata(args.metadataFile)
             
             # Filter the VCF file
             print("# Filtering VCF file...")
@@ -527,92 +413,92 @@ def cmain(args):
             run_bcftools_index(FINAL_FILTERED_FILE)
             open(FINAL_FILTERED_FILE + ".ok", "w").close() # touch a .ok file to indicate success
             
-            # Update the param and VCF caches
-            update_param_cache(args.workingDirectory, {"filteredVcfFile" : FINAL_FILTERED_FILE})
-            update_vcf_cache(args.workingDirectory, args.qualFilter, args.missingFilter)
+            # Update param cache with newly produced filtered VCF file
+            paramsCache.filteredVcfFile = FINAL_FILTERED_FILE
     else:
         print(f"# Filtered VCF file '{FINAL_FILTERED_FILE}' exists; skipping ...")
     
     print("Variant calling complete!")
 
 def vmain(args):
-    # Handle argument parsing and cache formatting
-    paramsDict = load_param_cache(args.workingDirectory)
+    paramsCache = ParameterCache(args.workingDirectory)
+    paramsCache.merge(args) # raises FileNotFoundError if cache does not exist
     
     # Present standard parameters
     print("# Parameters:")
-    print(f"Working directory: {paramsDict['workingDirectory']}")
+    print(f"Working directory: {args.workingDirectory}")
     
-    if paramsDict['bamFiles'] != []:
-        print(f"BAM files: {paramsDict['bamFiles']}")
+    if args.bamFiles != []:
+        print(f"BAM files: {args.bamFiles}")
     else:
         print("BAM files: None")
     
     # Present metadata cache
     print() # blank line for spacing
     print("# Metadata details:")
-    if paramsDict['metadataFile'] is not None:
-        metadataDict = load_metadata_cache(args.workingDirectory)
-        if metadataDict == {}:
-            initialise_metadata_cache(args.workingDirectory)
-            metadataDict = load_metadata_cache(args.workingDirectory)
+    if args.metadataFile is not None:
+        metadataCache = MetadataCache(args.workingDirectory)
+        metadataCache.establish()
+        if metadataCache.metadataFile == None:
+            print("## Metadata cache not found; re-initialising...")
+            metadataCache.metadataFile = args.metadataFile
         
-        print(f"Metadata file: {paramsDict['metadataFile']}")
-        print(f"Bulk 1 samples (n={len(metadataDict['bulk1'])}): {metadataDict['bulk1']}")
-        print(f"Bulk 2 samples (n={len(metadataDict['bulk2'])}): {metadataDict['bulk2']}")
+        print(f"Metadata file: {args.metadataFile}")
+        print(f"Bulk 1 samples (n={len(metadataCache.bulk1)}): {metadataCache.bulk1}")
+        print(f"Bulk 2 samples (n={len(metadataCache.bulk2)}): {metadataCache.bulk2}")
     else:
         print("Metadata file: None")
     
     # Present VCF cache
     print() # blank line for spacing
     print("# Variants VCF details:")
-    if paramsDict['vcfFile'] is not None:
-        vcfDict = load_vcf_cache(args.workingDirectory)
-        if vcfDict == {}:
+    if args.vcfFile is not None:
+        vcfCache = VcfCache(args.workingDirectory)
+        vcfCache.establish()
+        if vcfCache.vcfFile == None:
             print("## VCF cache not found; re-initialising...")
-            update_vcf_cache(args.workingDirectory, None, None)
-            vcfDict = load_vcf_cache(args.workingDirectory)
+            vcfCache.vcfFile = args.vcfFile
         
-        print(f"VCF file: {paramsDict['vcfFile']}")
-        print(f"Num. variants: {vcfDict['variants']}")
-        print(f"Samples (n={len(vcfDict['samples'])}): {vcfDict['samples']}")
-        print(f"Contigs (n={len(vcfDict['contigs'])}): {vcfDict['contigs']}")
+        print(f"VCF file: {args.vcfFile}")
+        print(f"Num. variants: {vcfCache.variants}")
+        print(f"Samples (n={len(vcfCache.samples)}): {vcfCache.samples}")
+        print(f"Contigs (n={len(vcfCache.contigs)}): {vcfCache.contigs}")
     else:
         print("VCF file: None")
     
-    if paramsDict['filteredVcfFile'] is not None:
-        vcfDict = load_vcf_cache(args.workingDirectory)
-        if vcfDict == {}: # this shouldn't happen unless the user is messing with the cache
+    if args.filteredVcfFile is not None:
+        vcfCache = VcfCache(args.workingDirectory)
+        vcfCache.establish()
+        if vcfCache.filteredVcfFile == None:
             print("## VCF cache not found; re-initialising...")
-            update_vcf_cache(args.workingDirectory, None, None)
-            vcfDict = load_vcf_cache(args.workingDirectory)
+            vcfCache.filteredVcfFile = args.filteredVcfFile
         
-        print(f"Filtered VCF file: {paramsDict['filteredVcfFile']}")
-        print(f"Num. filtered variants: {vcfDict['filteredVariants']}")
-        print(f"Filtered samples (n={len(vcfDict['filteredSamples'])}): {vcfDict['filteredSamples']}")
-        print(f"Filtered contigs (n={len(vcfDict['filteredContigs'])}): {vcfDict['filteredContigs']}")
+        print(f"Filtered VCF file: {args.filteredVcfFile}")
+        print(f"Num. filtered variants: {vcfCache.filteredVariants}")
+        print(f"Filtered samples (n={len(vcfCache.filteredSamples)}): {vcfCache.filteredSamples}")
+        print(f"Filtered contigs (n={len(vcfCache.filteredContigs)}): {vcfCache.filteredContigs}")
     else:
         print("Filtered VCF file: None")
     print() # blank line for spacing
     
     # Present deletion cache
     print("# Deletion VCF-like details:")
-    if paramsDict['deletionFile'] is not None:
-        deletionDict = load_deletion_cache(args.workingDirectory)
-        if deletionDict == {}:
+    if args.deletionFile is not None:
+        deletionCache = DeletionCache(args.workingDirectory)
+        deletionCache.establish()
+        if deletionCache.deletionFile == None:
             print("## Deletion cache not found; re-initialising...")
-            initialise_deletion_cache(args.workingDirectory, None)
-            deletionDict = load_deletion_cache(args.workingDirectory)
+            deletionCache.deletionFile = args.deletionFile
         
-        print(f"Deletion file: {paramsDict['deletionFile']}")
-        if deletionDict['windowSize'] == None:
+        print(f"Deletion file: {args.deletionFile}")
+        if deletionCache.windowSize == None:
             print(f"Window size: unknown")
         else:
-            print(f"Window size: {deletionDict['windowSize']} bp")
-        print(f"Total num. bins: {deletionDict['totalBins']}")
-        print(f"Num. bins with deletion: {deletionDict['deletionBins']}")
-        print(f"Samples (n={len(deletionDict['samples'])}): {deletionDict['samples']}")
-        print(f"Contigs (n={len(deletionDict['contigs'])}): {deletionDict['contigs']}")
+            print(f"Window size: {deletionCache.windowSize} bp")
+        print(f"Total num. bins: {deletionCache.totalBins}")
+        print(f"Num. bins with deletion: {deletionCache.deletionBins}")
+        print(f"Samples (n={len(deletionCache.samples)}): {deletionCache.samples}")
+        print(f"Contigs (n={len(deletionCache.contigs)}): {deletionCache.contigs}")
         
     else:
         print("Deletion file: None")
@@ -624,7 +510,7 @@ def vmain(args):
     ## Sample issues
     keepFindingIssues = True
     try:
-        metaSamples = set(metadataDict['bulk1'] + metadataDict['bulk2'])
+        metaSamples = set(metadataCache.bulk1 + metadataCache.bulk2)
         if len(metaSamples) == 2:
             issues.append("Metadata only indicates two samples; analysis interpretation may be limited")
     except:
@@ -633,18 +519,18 @@ def vmain(args):
     
     if keepFindingIssues:
         try:
-            vcfSamples = set(vcfDict['filteredSamples']) if vcfDict['filteredSamples'] != None else set(vcfDict['samples'])
+            vcfSamples = set(vcfCache.filteredSamples) if vcfCache.filteredSamples != None else set(vcfCache.samples)
             if metaSamples != vcfSamples:
-                issues.append(f"Metadata samples (n={len(metaSamples)}) do not match VCF samples (n={len(vcfDict['samples'])})")
+                issues.append(f"Metadata samples (n={len(metaSamples)}) do not match VCF samples (n={len(vcfCache.samples)})")
         except:
             issues.append("VCF file may need to be set or generated before further analysis can proceed")
             keepFindingIssues = False
     
     if keepFindingIssues:
         try:
-            deletionSamples = set(deletionDict['samples'])
+            deletionSamples = set(deletionCache.samples)
             if metaSamples != deletionSamples:
-                issues.append(f"Metadata samples (n={len(metaSamples)}) do not match deletion samples (n={len(deletionDict['samples'])})")
+                issues.append(f"Metadata samples (n={len(metaSamples)}) do not match deletion samples (n={len(deletionCache.samples)})")
             if vcfSamples != deletionSamples:
                 issues.append(f"VCF samples (n={len(vcfSamples)}) do not match deletion samples (n={len(deletionSamples)})")
         except:
@@ -653,8 +539,8 @@ def vmain(args):
     
     ## Contig issues
     if keepFindingIssues:
-        vcfContigs = set(vcfDict['filteredContigs']) if vcfDict['filteredContigs'] != None else set(vcfDict['contigs'])
-        deletionContigs = set(deletionDict['contigs'])
+        vcfContigs = set(vcfCache.filteredContigs) if vcfCache.filteredContigs != None else set(vcfCache.contigs)
+        deletionContigs = set(deletionCache.contigs)
         if vcfContigs != deletionContigs:
             issues.append(f"VCF contigs (n={len(vcfContigs)}) do not match deletion contigs (n={len(deletionContigs)})")
     
