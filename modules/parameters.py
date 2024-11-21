@@ -6,7 +6,7 @@ class ParameterCache:
     def __init__(self, workingDirectory):
         if not os.path.isdir(workingDirectory):
             raise FileNotFoundError(f"Directory '{workingDirectory}' is not a directory.")
-        self.workingDirectory = workingDirectory
+        self.workingDirectory = os.path.abspath(workingDirectory)
         
         self._metadataFile = None
         self._vcfFile = None
@@ -90,7 +90,7 @@ class ParameterCache:
             self.qualFilter = data["qualFilter"]
             self.missingFilter = data["missingFilter"]
         else:
-            raise FileNotFoundError(f"Directory '{self.workingDirectory}' has not been initialised.")
+            raise FileNotFoundError(f"Working directory '{self.workingDirectory}' has not been initialised.")
     
     def save(self):
         data = {
@@ -125,6 +125,9 @@ class ParameterCache:
             if not os.path.isfile(value):
                 raise FileNotFoundError(f"Metadata file '{value}' is not a file.")
             value = os.path.abspath(value) # store absolute path
+            # Ignore again if value is unchanged after getting absolute path
+            if value == self.metadataFile:
+                return
         # Store updated value
         updateMsg = f"# Parameter cache: 'metadataFile' changed from '{self._metadataFile}' to '{value}'"
         self._metadataFile = value
@@ -150,6 +153,9 @@ class ParameterCache:
             if not os.path.isfile(value):
                 raise FileNotFoundError(f"VCF file '{value}' is not a file.")
             value = os.path.abspath(value) # store absolute path
+            # Ignore again if value is unchanged after getting absolute path
+            if value == self.vcfFile:
+                return
         # Store updated value
         updateMsg = f"# Parameter cache: 'vcfFile' changed from '{self._vcfFile}' to '{value}'"
         self._vcfFile = value
@@ -175,6 +181,9 @@ class ParameterCache:
             if not os.path.isfile(value):
                 raise FileNotFoundError(f"Filtered VCF file '{value}' is not a file.")
             value = os.path.abspath(value) # store absolute path
+            # Ignore again if value is unchanged after getting absolute path
+            if value == self.filteredVcfFile:
+                return
         # Store updated value
         updateMsg = f"# Parameter cache: 'filteredVcfFile' changed from '{self._filteredVcfFile}' to '{value}'"
         self._filteredVcfFile = value
@@ -200,6 +209,9 @@ class ParameterCache:
             if not os.path.isfile(value):
                 raise FileNotFoundError(f"Deletion file '{value}' is not a file.")
             value = os.path.abspath(value) # store absolute path
+            # Ignore again if value is unchanged after getting absolute path
+            if value == self.deletionFile:
+                return
         # Store updated value
         updateMsg = f"# Parameter cache: 'deletionFile' changed from '{self._deletionFile}' to '{value}'"
         self._deletionFile = value
@@ -366,7 +378,7 @@ class VcfCache:
     def __init__(self, workingDirectory):
         if not os.path.isdir(workingDirectory):
             raise FileNotFoundError(f"Directory '{workingDirectory}' is not a directory.")
-        self.workingDirectory = workingDirectory
+        self.workingDirectory = os.path.abspath(workingDirectory)
         
         self._vcfFile = None
         self._variants = None
@@ -412,7 +424,7 @@ class VcfCache:
             self._filteredSamples = data["filteredSamples"]
             self._filteredContigs = data["filteredContigs"]
         else:
-            raise FileNotFoundError(f"Directory '{self.workingDirectory}' has not had its VCF cache initialised.")
+            raise FileNotFoundError(f"Working directory '{self.workingDirectory}' has not had its VCF cache initialised.")
     
     def save(self):
         data = {
@@ -464,6 +476,9 @@ class VcfCache:
         if not os.path.isfile(value):
             raise FileNotFoundError(f"VCF file '{value}' is not a file.")
         value = os.path.abspath(value) # store absolute path
+        # Ignore again if value is unchanged after getting absolute path
+        if value == self.vcfFile:
+            return
         # Store and parse
         updateMsg = f"# VCF cache: 'vcfFile' changed from '{self._vcfFile}' to '{value}'"
         self._vcfFile = value
@@ -505,6 +520,9 @@ class VcfCache:
         if not os.path.isfile(value):
             raise FileNotFoundError(f"Filtered VCF file '{value}' is not a file.")
         value = os.path.abspath(value) # store absolute path
+        # Ignore again if value is unchanged after getting absolute path
+        if value == self.filteredVcfFile:
+            return
         # Store and parse
         updateMsg = f"# VCF cache: 'filteredVcfFile' changed from '{self._filteredVcfFile}' to '{value}'"
         self._filteredVcfFile = value
@@ -528,7 +546,7 @@ class DeletionCache:
     def __init__(self, workingDirectory):
         if not os.path.isdir(workingDirectory):
             raise FileNotFoundError(f"Directory '{workingDirectory}' is not a directory.")
-        self.workingDirectory = workingDirectory
+        self.workingDirectory = os.path.abspath(workingDirectory)
         
         self._deletionFile = None
         self._bins = None
@@ -565,7 +583,7 @@ class DeletionCache:
             self._samples = data["samples"]
             self._contigs = data["contigs"]
         else:
-            raise FileNotFoundError(f"Directory '{self.workingDirectory}' has not had its deletion cache initialised.")
+            raise FileNotFoundError(f"Working directory '{self.workingDirectory}' has not had its deletion cache initialised.")
     
     def save(self):
         data = {
@@ -610,6 +628,9 @@ class DeletionCache:
         if not os.path.isfile(value):
             raise FileNotFoundError(f"Deletion file '{value}' is not a file.")
         value = os.path.abspath(value) # store absolute path
+        # Ignore again if value is unchanged after getting absolute path
+        if value == self.deletionFile:
+            return
         # Store and parse
         updateMsg = f"# Deletion cache: 'deletionFile' changed from '{self._deletionFile}' to '{value}'"
         self._deletionFile = value
@@ -637,7 +658,7 @@ class MetadataCache:
     def __init__(self, workingDirectory):
         if not os.path.isdir(workingDirectory):
             raise FileNotFoundError(f"Directory '{workingDirectory}' is not a directory.")
-        self.workingDirectory = workingDirectory
+        self.workingDirectory = os.path.abspath(workingDirectory)
         
         self._metadataFile = None
         self._bulk1 = None
@@ -668,7 +689,7 @@ class MetadataCache:
             self._bulk1 = data["bulk1"]
             self._bulk2 = data["bulk2"]
         else:
-            raise FileNotFoundError(f"Directory '{self.workingDirectory}' has not had its metadata cache initialised.")
+            raise FileNotFoundError(f"Working directory '{self.workingDirectory}' has not had its metadata cache initialised.")
     
     def save(self):
         data = {
@@ -710,6 +731,9 @@ class MetadataCache:
         if not os.path.isfile(value):
             raise FileNotFoundError(f"Metadata file '{value}' is not a file.")
         value = os.path.abspath(value) # store absolute path
+        # Ignore again if value is unchanged after getting absolute path
+        if value == self.metadataFile:
+            return
         # Store and parse
         updateMsg = f"# Metadata cache: 'metadataFile' changed from '{self._metadataFile}' to '{value}'"
         self._metadataFile = value

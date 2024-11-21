@@ -7,47 +7,42 @@
 import os, argparse, sys, gzip
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-from modules.cache_handling import load_param_cache, load_vcf_cache, load_deletion_cache, \
-                                   merge_cache_into_args, initialise_deletion_cache, initialise_vcf_cache
+from modules.parameters import ParameterCache
 from modules.parsing import parse_metadata
 from modules.ed import parse_vcf_for_ed
 
 def validate_args(args):
     # Validate working directory
     args.workingDirectory = os.path.abspath(args.workingDirectory)
-    if not os.path.exists(args.workingDirectory):
-        raise FileNotFoundError(f"-d working directory '{args.workingDirectory}' does not exist!")
+    if not os.path.isdir(args.workingDirectory):
+        raise FileNotFoundError(f"-d working directory '{args.workingDirectory}' is not a directory!")
     
-    # Validate cache existence
-    paramsDict = load_param_cache(args.workingDirectory)
-    if paramsDict == {}:
-        raise FileNotFoundError("Working directory has not been initialised;" +
-                                f"parameter cache not found in '{args.workingDirectory}'!")
+    # Validate cache existence & merge into args
+    paramsCache = ParameterCache(args.workingDirectory)
+    paramsCache.merge(args) # raises FileNotFoundError if cache does not exist
     
     # Validate metadata file
-    if paramsDict["metadataFile"] == None:
+    if args.metadataFile == None:
         raise FileNotFoundError("Working directory has not been initialised with a metadata file!")
-    elif not os.path.isfile(paramsDict["metadataFile"]):
-            raise FileNotFoundError(f"Metadata file '{paramsDict['metadataFile']}' was identified in " +
-                                    "the parameters cache, but it's now absent!")
+    elif not os.path.isfile(args.metadataFile):
+            raise FileNotFoundError(f"Metadata file '{args.metadataFile}' was identified in " +
+                                    "the parameters cache, but it doesn't exist or is not a file!")
 
 def validate_c(args):
     '''
     Params cache should have been merged into args before calling this function.
     '''
+    # Choose which VCF file to use
+    args.vcfFile = args.filteredVcfFile if args.filteredVcfFile != None else args.vcfFile
+    
+    # Validate VCF file
     if args.vcfFile == None:
         raise FileNotFoundError("Working directory has not been initialised with a VCF file!")
     else:
         args.vcfFile = os.path.abspath(args.vcfFile)
         if not os.path.isfile(args.vcfFile):
             raise FileNotFoundError(f"VCF file '{args.vcfFile}' was identified in " +
-                                    "the parameters cache, but it's now absent!")
-    
-    # Validate VCF cache
-    vcfDict = load_vcf_cache(args.workingDirectory)
-    if vcfDict == {}:
-        print("## VCF cache not found; re-initialising...")
-        initialise_vcf_cache(args.workingDirectory)
+                                    "the parameters cache, but it doesn't exist or is not a file!")
 
 def validate_d(args):
     '''
@@ -59,13 +54,7 @@ def validate_d(args):
         args.deletionFile = os.path.abspath(args.deletionFile)
         if not os.path.isfile(args.deletionFile):
             raise FileNotFoundError(f"Deletion file '{args.deletionFile}' was identified in " +
-                                    "the parameters cache, but it's now absent!")
-    
-    # Validate deletion cache
-    deletionDict = load_deletion_cache(args.workingDirectory)
-    if deletionDict == {}:
-        print("## Deletion cache not found; re-initialising...")
-        initialise_deletion_cache(args.workingDirectory, None)
+                                    "the parameters cache, but it doesn't exist or is not a file!")
 
 def generate_ed_file(vcfFile, metadataDict, outputFileName, ignoreIdentical):
     '''
@@ -137,7 +126,6 @@ def main():
     
     args = subParentParser.parse_args()
     validate_args(args)
-    merge_cache_into_args(args)
     
     # Parse metadata file
     metadataDict = parse_metadata(args.metadataFile)

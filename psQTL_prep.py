@@ -341,7 +341,7 @@ def cmain(args):
     paramsCache = ParameterCache(args.workingDirectory)
     paramsCache.merge(args) # raises FileNotFoundError if cache does not exist
     
-    # Validate that BAM files have been provided
+    # Validate that necessary parameters arguments are provided
     if args.bamFiles == None or args.bamFiles == []:
         raise ValueError("--bam files not yet provided for variant calling!")
     if args.qualFilter == None:
@@ -473,6 +473,8 @@ def vmain(args):
     else:
         print("VCF file: None")
     
+    print() # blank line for spacing
+    print("# Filtered variants VCF details:")
     if args.filteredVcfFile is not None:
         vcfCache = VcfCache(args.workingDirectory)
         vcfCache.establish()
@@ -481,6 +483,14 @@ def vmain(args):
             vcfCache.filteredVcfFile = args.filteredVcfFile
         
         print(f"Filtered VCF file: {args.filteredVcfFile}")
+        if paramsCache.qualFilter == None:
+            print(f"Quality filter: unknown")
+        else:
+            print(f"Quality filter: {paramsCache.qualFilter}")
+        if paramsCache.missingFilter == None:
+            print(f"Missing filter: unknown")
+        else:
+            print(f"Missing filter: {paramsCache.missingFilter}")
         print(f"Num. filtered variants: {vcfCache.filteredVariants}")
         print(f"Filtered samples (n={len(vcfCache.filteredSamples)}): {vcfCache.filteredSamples}")
         print(f"Filtered contigs (n={len(vcfCache.filteredContigs)}): {vcfCache.filteredContigs}")
@@ -498,11 +508,11 @@ def vmain(args):
             deletionCache.deletionFile = args.deletionFile
         
         print(f"Deletion file: {args.deletionFile}")
-        if deletionCache.windowSize == None:
+        if paramsCache.windowSize == None:
             print(f"Window size: unknown")
         else:
-            print(f"Window size: {deletionCache.windowSize} bp")
-        print(f"Total num. bins: {deletionCache.totalBins}")
+            print(f"Window size: {paramsCache.windowSize} bp")
+        print(f"Total num. bins: {deletionCache.bins}")
         print(f"Num. bins with deletion: {deletionCache.deletionBins}")
         print(f"Samples (n={len(deletionCache.samples)}): {deletionCache.samples}")
         print(f"Contigs (n={len(deletionCache.contigs)}): {deletionCache.contigs}")

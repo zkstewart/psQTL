@@ -87,7 +87,7 @@ def parse_vcf_for_ed(vcfFile, metadataDict, ignoreIdentical=False):
                 continue
             
             # Extract relevant details from line
-            chrom = sl[0]
+            contig = sl[0]
             pos = int(sl[1])
             ref = sl[3]
             alt = sl[4].split(",")
