@@ -6,7 +6,7 @@
   - [What psQTL does](#what-psqtl-does)
 - [Installation](#installation)
 - [How to use](#how-to-use)
-- - [Formatting a metadata file](#formatting-a-metadata-file)
+  - [Formatting a metadata file](#formatting-a-metadata-file)
   - [Interpreting results](#interpreting-results)
 - [A typical analysis pipeline](#a-typical-analysis-pipeline)
 - [How to cite](#how-to-cite)
@@ -17,11 +17,18 @@
 git clone https://github.com/zkstewart/psQTL.git
 
 # 'Prep'are for your analysis using psQTL_prep.py
-python psQTL/psQTL_prep.py initialise -d /location/of/your/working/directory --meta metadata.tsv --bam /location/of/bam_files --bamSuffix .sorted.bam
-python psQTL/psQTL_prep.py call -d /location/of/your/working/directory -f /location/of/genome.fasta --qual 30 --missing 0.25 --threads 12
-python psQTL/psQTL_prep.py depth -d /location/of/your/working/directory -f /location/of/genome.fasta --windowSize 1000 --threads 12
+python psQTL/psQTL_prep.py initialise -d /location/of/your/working/directory \
+    --meta metadata.tsv \
+    --bam /location/of/bam_files \
+    --bamSuffix .sorted.bam
+python psQTL/psQTL_prep.py call -d /location/of/your/working/directory \
+    -f /location/of/genome.fasta \
+    --qual 30 --missing 0.25 --threads 12
+python psQTL/psQTL_prep.py depth -d /location/of/your/working/directory \
+    -f /location/of/genome.fasta \
+    --windowSize 1000 --threads 12
 
-# 'Proc'ess your variant calls and deletion predictions, calculating the Euclidean distance of the bulk segregation
+# 'Proc'ess your variant and deletion predictions and calculate segregation statistics
 python /location/of/psQTL_proc.py call -d /location/of/your/working/directory
 python /location/of/psQTL_proc.py depth -d /location/of/your/working/directory
 
@@ -68,9 +75,9 @@ It calls upon the HTSlib (http://www.htslib.org/) programs including:
 
 As well as vt (https://genome.sph.umich.edu/wiki/Vt).
 
-psQTL should work on any system which can run Python, HTSlib, and vt; this likely limits its use to Unix systems or Windows Subsystem for Linux (WSL).
+psQTL should work on any system which can run Python, HTSlib, and vt; this likely precludes its use on Windows except if you use Windows Subsystem for Linux (WSL) which is compatible with these softwares.
 
-You should make sure these Python packages and external program dependencies are installed and locateable within your system PATH variable.
+You should make sure the Python packages and external program dependencies are installed and locateable within your system PATH variable.
 
 # How to use
 The psQTL pipeline is intended to proceed from **prep**aration, to **proc**essing, to **post**-processing as accomplished by the correspondingly named Python script files.
@@ -79,12 +86,14 @@ All scripts will return help information on the command line in order to assist 
 
 `python /location/of/psQTL_prep.py -h`
 
+All parameters provided with a single dash e.g., `-d /location/to/run/the/analysis` need to be provided each time you call the program. Other parameters specified with double dashes e.g., `--meta metadata.tsv` are remembered or *cached* by psQTL within the analysis directory and hence only need to be provided once since the cached value is retrieved on subsequent use of psQTL ***in the analysis folder***. In other words, each analysis directory has its own cached values and parameters won't carry over between separate analyses.
+
 ## Directory setup
 For any psQTL analysis, you must first *initialise* a working directory like:
 
 `python /location/of/psQTL_prep.py initialise -d /location/to/run/the/analysis`
 
-Using the *initialise* function, or when using the *call* or *depth* functions, you must indicate a metadata file and one of either:
+Using the *initialise* function, or when using the *call* or *depth* functions afterwards, you must indicate a metadata file and one of either:
 1. One or more BAM files or directories containing BAM files, in order to facilitate variant calling and/or deletion prediction.
 2. A VCF file you've already produced using your own methodology.
 
@@ -100,27 +109,36 @@ If you've provided a VCF file, then these sample identifiers should be the same 
 You *can* provide a metadata file that *doesn't exactly match* your VCF or BAM files. If you do so, the VCF filtering will only consider the samples contained within your metadata file, and results produced by `psQTL_proc.py` will only use the indicated samples when calculating the segregation statistics. However, I think you should avoid doing so unless you're intentionally using this mechanism to filter your results. The program will warn you when there's a discrepancy.
 
 ## Calling variants
-Variant calling is optionally assisted through the `psQTL_prep.py call` function. The options you'll need to specify to allow this to occur are:
+Variant calling is optionally assisted through the `psQTL_prep.py call` function. It automates a process involving *bcftools mpileup* followed by *bcftools call* with variant normalisation steps involving *bcftools norm* and *vt decompose_blocksub*.
+
+The options you'll need to specify to allow this to occur are:
 - BAM files or directories containing BAM files through `--bam`.
 - A BAM suffix through `--bamSuffix`.
   - Directories provided to `--bam` will be checked for files ending with this suffix, and will be included in the analysis.
 - A variant quality score to filter on through `--qual`.
   - The recommended value is `30` but you may increase this to make it more strict, or decrease it to reduce the amount of filtration.
 - The proportion of variants which are allowed to be ungenotyped in the population bulks with `--missing`.
-  - This value can range from 0 (0% are allowed to be missing; **strict**) to 1 (100% are allowed to be missing; **relaxed**) with the default recommendation being `0.25`.
+  - This value can range from `0` (0% are allowed to be missing; **strict**) to `1` (100% are allowed to be missing; **relaxed**) with the default recommendation being `0.25`.
   - If you specify a value of `0.25`, then we will filter out a variant if it's missing (i.e., hasn't been genotyped) in more than 25% of the samples of **both bulks**, noting that the missing percentage is calculated **per bulk**. Hence, if you have a bulk where no samples are genotyped (100% missing) and another bulk where all samples are genotyped (0% missing), we wouldn't filter the variant.
 
+Variant calling will produce a raw and filtered VCF file with standard formatting for downstream analysis.
+
 ## Predicting deletions
-Deletion prediction is optionally assisted through the `psQTL_prep.py depth` function. The options you'll need to specify to allow this to occur are:
+Deletion prediction is optionally assisted through the `psQTL_prep.py depth` function. It automates a process involving *samtools depth* from which position depth values are summed within non-overlapping window regions into a histogram. The median depth value of each chromosome within each sample is determined, and a simple heuristic employed to identify regions without deletions, as well as regions with hemizogous or homozygous deletion.
+
+The options you'll need to specify to allow this to occur are:
 - The `--bam` and `--bamSuffix` arguments; see notes in [Calling variants](#calling-variants) above.
 - The bin or window size to sum read alignments within using `--windowSize`.
   - We ideally want to pick a size that isn't *too small* and hence subject to bias from random data variations, but also not *too big* such that real deletions get hidden by their adjacent non-deleted regions.
   - The recommended size is `1000` which should balance these goals.
 
-## Interpreting results
-The deletion prediction will produce a VCF*-like* file. It does not contain the normal information fields that a true VCF has, but it conforms to VCF styling from the `#CHROM` line onwards albeit with dummy values used for the `REF` and `ALT` fields.
+The deletion prediction will produce a VCF-*like* file. It does not contain the normal information fields that a true VCF has, but it conforms to VCF styling from the `#CHROM` line onwards albeit with dummy values used for the `REF` and `ALT` fields. Genotypes are encoded as `0/0` for homozygous non-deletion, `0/1` for hemizygous deletion, and `1/1` for homozygous deletion.
 
-Remainder of this section TBD.
+## Plotting results
+TBD
+
+## Reporting gene proximity
+TBD
 
 # A typical analysis pipeline
 ## Preparation
