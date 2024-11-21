@@ -315,6 +315,8 @@ def dmain(args):
         print(f"# Deletion file '{FINAL_DELETION_FILE}' exists; skipping ...")
     
     # Update param cache with (potentially) newly produced deletion file
+    paramsCache = ParameterCache(args.workingDirectory)
+    paramsCache.load() # reload in case we're running call simultaneously
     paramsCache.deletionFile = FINAL_DELETION_FILE
     paramsCache.windowSize = args.windowSize
     
@@ -388,6 +390,8 @@ def cmain(args):
         run_bcftools_index(CONCAT_VCF_FILE)
     
     # Update param cache with newly produced VCF file
+    paramsCache = ParameterCache(args.workingDirectory)
+    paramsCache.load() # reload in case we're running depth simultaneously
     paramsCache.vcfFile = CONCAT_VCF_FILE
     
     # Filter the VCF file
@@ -423,6 +427,8 @@ def cmain(args):
         print(f"# Filtered VCF file '{FINAL_FILTERED_FILE}' exists; skipping ...")
     
     # Update param cache with (potentially) newly produced filtered VCF file
+    paramsCache = ParameterCache(args.workingDirectory)
+    paramsCache.load() # reload in case we're running depth simultaneously
     paramsCache.filteredVcfFile = FINAL_FILTERED_FILE
     
     print("Variant calling complete!")
