@@ -1,6 +1,71 @@
+import numpy as np
 from math import sqrt
+from ncls import NCLS
 
 from .parsing import read_gz_file, vcf_header_to_metadata_validation, parse_vcf_genotypes
+
+class EDNCLS:
+    def __init__(self, windowSize=0):
+        self.ncls = {}
+        self.windowSize = windowSize
+        
+        self.numPositions = 0
+        self.longestContig = 0
+    
+    @property
+    def contigs(self):
+        return list(self.ncls.keys())
+    
+    def add(self, chrom, positions, edValues):
+        '''
+        Parameters:
+            chrom -- a string indicating the chromosome name
+            positions -- a numpy array of integers indicating the positions of the ED values
+            edValues -- a numpy array of floats indicating the ED values
+        '''
+        if chrom in self.ncls:
+            raise ValueError(f"Chromosome '{chrom}' already exists in this EDNCLS object")
+        
+        ends = positions + 1 + self.windowSize
+        self.ncls[chrom] = NCLS(positions, ends, edValues)
+        self.numPositions += len(positions)
+        self.longestContig = max(self.longestContig, ends[-1])
+    
+    def find_overlap(self, chrom, start, end):
+        '''
+        Parameters:
+            chrom -- a string indicating the chromosome name
+            start -- an integer indicating the start position of the query
+            end -- an integer indicating the end position of the query
+        Returns:
+            results -- an iterator of tuples containing the start position, end position, and ED value
+        '''
+        if not chrom in self.ncls:
+            raise ValueError(f"Chromosome '{chrom}' does not exist in this EDNCLS object")
+        
+        return self.ncls[chrom].find_overlap(start, end)
+    
+    def find_all(self, chrom):
+        '''
+        Parameters:
+            chrom -- a string indicating the chromosome name
+        Returns:
+            results -- an iterator of tuples containing the start position, end position, and ED value
+        '''
+        if not chrom in self.ncls:
+            raise ValueError(f"Chromosome '{chrom}' does not exist in this EDNCLS object")
+        
+        return self.find_overlap(chrom, 0, self.longestContig+1)
+    
+    def __contains__(self, value):
+        return value in self.ncls
+    
+    def __repr__(self):
+        return "<EDNCLS object;num_contigs={0};numPositions={1};windowSize={2}>".format(
+            len(self.ncls),
+            self.numPositions,
+            self.windowSize
+        )
 
 def calculate_snp_ed(b1Gt, b2Gt):
     '''
@@ -128,3 +193,70 @@ def parse_vcf_for_ed(vcfFile, metadataDict, ignoreIdentical=False):
             
             # Yield results
             yield contig, pos, variant, numAllelesB1, numAllelesB2, euclideanDist
+
+def parse_ed_as_dict(edFile, windowSize=0):
+    '''
+    Parameters:
+        edFile -- a string indicating the path to an ED file
+    Returns:
+        edDict -- a dictionary with structure like:
+                  {
+                      "chr1": [[pos1, pos2, ...], [ed1, ed2, ...]],
+                      "chr2": [[pos1, pos2, ...], [ed1, ed2, ...]],
+                      ...
+                  }
+    '''
+    HEADER = ["CHROM", "POSI", "variant", "bulk1_alleles", "bulk2_alleles", "euclideanDist"]
+    
+    edDict = {}
+    starts, ends = [], []
+    with read_gz_file(edFile) as fileIn:
+        firstLine = True
+        for line in fileIn:
+            sl = line.rstrip("\r\n").split("\t")
+            if firstLine:
+                if not sl == HEADER:
+                    raise ValueError(f"ED file is improperly formatted; header line '{sl}' " + 
+                                     f"does not match expected header '{HEADER}'")
+                firstLine = False
+            else:
+                # Parse relevant details and validate format
+                chrom, posi, variant, bulk1_alleles, bulk2_alleles, euclideanDistance = sl
+                try:
+                    posi = int(posi)
+                except:
+                    raise ValueError(f"Position '{posi}' is not an integer; offending line is '{line}'")
+                try:
+                    euclideanDistance = float(euclideanDistance)
+                except:
+                    raise ValueError(f"Euclidean distance '{euclideanDistance}' is not a float; offending line is '{line}'")
+                
+                # Store in dictionary
+                edDict.setdefault(chrom, [[], []])
+                edDict[chrom][0].append(posi)
+                edDict[chrom][1].append(euclideanDistance)
+    return edDict
+
+def convert_dict_to_edncls(edDict, windowSize=0):
+    '''
+    Parameters:
+        edDict -- a dictionary with structure like:
+                  {
+                      "chr1": [[pos1, pos2, ...], [ed1, ed2, ...]],
+                      "chr2": [[pos1, pos2, ...], [ed1, ed2, ...]],
+                      ...
+                  }
+        windowSize -- OPTIONAL; an integer indicating the size of the window that was used
+                      when generating the depth file that led to the ED file. Default is 0
+                      (no window size) which is intended for use with variant calls, whereas
+                      depth deletions should use an actual window size.
+    Returns:
+        edNCLS -- an EDNCLS object containing the Euclidean distances indexed by chromosome
+                  and position
+    '''
+    edNCLS = EDNCLS(windowSize)
+    for chrom, value in edDict.items():
+        positions = np.array(value[0])
+        edValues = np.array(value[1])
+        edNCLS.add(chrom, positions, edValues)
+    return edNCLS
