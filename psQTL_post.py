@@ -5,8 +5,9 @@
 # approach of several different plot types (line, scatter, histogram, genes) or it
 # can report on genes that are proximal to or contained within potential QTLs.
 
-import os, argparse, re, sys, pickle, math
+import os, argparse, re, sys, pickle
 import numpy as np
+import matplotlib.pyplot as plt
 from Bio import SeqIO
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
@@ -49,6 +50,15 @@ def validate_args(args):
             raise FileNotFoundError(f"-a/--annotation file '{args.annotationGFF3}' is not a file!")
         else:
             args.gff3Obj = GFF3(args.annotationGFF3) # parsing now to raise errors early
+            args.gff3Obj.create_ncls_index("gene")
+    
+    # Validate output file
+    if os.path.exists(args.outputFileName):
+        raise FileExistsError(f"-o output file '{args.outputFileName}' already exists!")
+    args.outputFileName = os.path.abspath(args.outputFileName)
+    
+    if not os.path.isdir(os.path.dirname(args.outputFileName)):
+        raise FileNotFoundError(f"-o parent directory '{os.path.dirname(args.outputFileName)}' does not exist!")
 
 def validate_regions(args, lengthsDict):
     # Validate regions
@@ -60,13 +70,16 @@ def validate_regions(args, lengthsDict):
         # Handle chr:start-end format
         if reMatch != None:
             contigID, start, end = reMatch.groups()
+            start = int(start)
+            end = int(end)
+            
             # Validate contig ID
             if not contigID in lengthsDict:
                 raise ValueError(f"--region contig ID '{contigID}' not found in the -f FASTA!")
             # Validate start and end positions
-            if int(start) < 0:
+            if start < 0:
                 raise ValueError(f"--region start position '{start}' is < 0!")
-            if int(start) >= int(end):
+            if start >= end:
                 raise ValueError(f"--region start position '{start}' is >= end position '{end}'!")
             # Store region
             regions.append([contigID, start, end])
@@ -90,10 +103,12 @@ def validate_p(args):
     # Validate numeric arguments
     if args.wmaSize < 1:
         raise ValueError(f"--wma value '{args.wmaSize}' must be >= 1!")
-    if args.width < 1:
-        raise ValueError(f"--width value '{args.width}' must be >= 1!")
-    if args.height < 1:
-        raise ValueError(f"--height value '{args.height}' must be >= 1!")
+    if args.width != None:
+        if args.width < 1:
+            raise ValueError(f"--width value '{args.width}' must be >= 1!")
+    if args.height != None:
+        if args.height < 1:
+            raise ValueError(f"--height value '{args.height}' must be >= 1!")
     if args.binSize < 2:
         raise ValueError(f"--bin value '{args.binSize}' must be >= 2!")
     if args.binThreshold < 0:
@@ -106,6 +121,10 @@ def validate_p(args):
         raise ValueError(f"Cannot plot gene locations without providing an --annotation GFF3 file!")
     if "histogram" in args.plotTypes and args.inputType == "depth":
         raise ValueError(f"Cannot plot histogram for -i depth data!")
+    
+    # Validate output file suffix
+    if not args.outputFileName.endswith(".pdf") and not args.outputFileName.endswith(".png"):
+        raise ValueError(f"-o output file '{args.outputFileName}' must end with '.pdf' or '.png'!")
 
 def validate_r(args):
     # Validate numeric arguments
@@ -135,6 +154,9 @@ def main():
                    choices=["depth", "call"],
                    help="""Specify whether you are analysing the Euclidean distance calculation
                    from variant 'call's or 'depth' predictions of deleted regions""")
+    p.add_argument("-o", dest="outputFileName",
+                   required=True,
+                   help="Specify the location to write the output file")
     p.add_argument("--power", dest="power",
                    required=False,
                    type=int,
@@ -206,19 +228,15 @@ def main():
     pparser.add_argument("--width", dest="width",
                          type=int,
                          required=False,
-                         help="""Optionally, specify the output plot width (default: 10)""",
-                         default=10)
+                         help="""Optionally, specify the total output plot width
+                         (default: calculated internally)""",
+                         default=None)
     pparser.add_argument("--height", dest="height",
                          type=int,
                          required=False,
-                         help="""Optionally, specify the output plot height (default: 6)""",
-                         default=6)
-    pparser.add_argument("--pdf", dest="plotPDF",
-                         required=False,
-                         action="store_true",
-                         help="""Optionally, provide this flag if you want outputs to be
-                         in PDF format instead of PNG format""",
-                         default=False)
+                         help="""Optionally, specify the output plot height
+                         (default: calculated internally)""",
+                         default=None)
     
     # Report-subparser arguments
     rparser.add_argument("-a", dest="annotationGFF3",
@@ -259,11 +277,6 @@ def main():
         with open(PICKLE_FILE, "wb") as fileOut:
             pickle.dump(edDict, fileOut)
     
-    # Make sure all contigs in Euclidean distance data are in genome FASTA
-    for contigID in edNCLS.contigs:
-        if contigID not in lengthsDict:
-            raise ValueError(f"Contig ID '{contigID}' from Euclidean distance data not found in -f FASTA!")
-    
     # Derive window size from dictionary
     if args.inputType == "depth":
         windowSize = None
@@ -293,6 +306,11 @@ def main():
     "EDNCLS cannot be pickled so we need to do it like file->dict->EDNCLS"
     edNCLS = convert_dict_to_edncls(edDict, windowSize)
     
+    # Make sure all contigs in Euclidean distance data are in genome FASTA
+    for contigID in edNCLS.contigs:
+        if contigID not in lengthsDict:
+            raise ValueError(f"Contig ID '{contigID}' from Euclidean distance data not found in -f FASTA!")
+    
     # Split into mode-specific functions
     if args.mode == "plot":
         print("## psQTL_post.py - Plot Euclidean Statistics ##")
@@ -305,47 +323,64 @@ def main():
     print("Program completed successfully!")
 
 def pmain(args, edNCLS, lengthsDict):
+    PLOT_DIR = os.path.join(args.workingDirectory, "plots")
+    os.makedirs(PLOT_DIR, exist_ok=True)
+    
+    # Get our labels for the plots
+    rowLabels = [
+        f"Euclidean distance\n(to power {power})" if "scatter" in args.plotTypes or "line" in args.plotTypes else None,
+        f"Number of variants with Euclidean distance\n(to power {power}) >= {binThreshold}" if "histogram" in args.plotTypes else None,
+        "Gene locations" if "genes" in args.plotTypes else None
+    ]
+    rowLabels = [label for label in rowLabels if label != None]
+    colLabels = [f"{region[0]}:{region[1]}-{region[2]}" for region in args.regions]
+    
+    # Set up the overall figure object
+    STANDARD_DIMENSION = 5
+    if args.width == None:
+        args.width = STANDARD_DIMENSION * len(colLabels)
+    if args.height == None:
+        args.height = STANDARD_DIMENSION * len(rowLabels)
+    fig, axs = plt.subplots(nrows=len(rowLabels), ncols=len(colLabels),
+                            figsize=(args.width, args.height))
+    
+    # Set titles and labels
+    for ax, label in zip(axs[0], colLabels):
+        ax.set_title(label, fontweight="bold")
+    for ax, label in zip(axs[:,0], rowLabels):
+        ax.set_ylabel(label, fontweight="bold")
+    for ax in axs[-1]:
+        ax.set_xlabel(f"Chromosomal position", fontweight="bold")
+    
     # Plot a line and/or scatter plot
-    if "line" in args.plotTypes or "scatter" in args.plotTypes:
-        linePltList = linescatter(edNCLS, args.regions, args.wmaSize,
-                                  True if "line" in args.plotTypes else False,
-                                  True if "scatter" in args.plotTypes else False,
-                                  args.power, args.width, args.height)
-    else:
-        linePltList = None
+    rowNum = 0
+    if "line" in args.plotTypes or "scatter" in args.plotTypes:        
+        linescatter(axs, rowNum, edNCLS, args.regions, args.wmaSize,
+                    True if "line" in args.plotTypes else False,
+                    True if "scatter" in args.plotTypes else False,
+                    args.power, args.width, args.height, PLOT_DIR)
+        rowNum += 1
     
     # Plot a histogram
     if "histogram" in args.plotTypes:
-        # Bin data into histograms
-        histoDict = {}
-        for contigID in edNCLS.contigs:
-            histoDict[contigID] = np.array([
-                0 for _ in range(math.ceil(lengthsDict[contigID] / args.binSize))
-            ])
-            for pos, _, ed in edNCLS.find_all(contigID):
-                if ed >= args.binThreshold:
-                    binIndex = pos // args.binSize
-                    histoDict[contigID][binIndex] += 1
-        
-        # Plot histogram(s)
-        histoPltList = histogram(edNCLS, args.regions, args.binSize, args.binThreshold,
-                                  args.power, args.width, args.height)
-    else:
-        histoPltList = None
+        histogram(axs, rowNum, edNCLS, args.regions, args.binSize, args.binThreshold,
+                  args.power, args.width, args.height, PLOT_DIR)
+        rowNum += 1
     
     # Plot gene locations
     if "genes" in args.plotTypes:
-        genesPltList = genes(edNCLS, args.regions, args.gff3Obj,
-                             args.power, args.width, args.height)
-    else:
-        genesPltList = None
+        genes(axs, rowNum, edNCLS, args.regions, args.gff3Obj,
+              args.power, args.width, args.height)
     
-    # Combine plots together
-    ## TBD: Something to do with matplotlib GridSpec or subplots
+    # Write plot to file
+    fig.savefig(args.outputFileName)
     
     print("Plotting complete!")
 
 def rmain(args, edNCLS):
+    REPORT_DIR = os.path.join(args.workingDirectory, "reports")
+    os.makedirs(REPORT_DIR, exist_ok=True)
+    
     print("Reporting complete!")
 
 if __name__ == "__main__":
