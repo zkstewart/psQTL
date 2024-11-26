@@ -12,8 +12,9 @@ from Bio import SeqIO
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from modules.parameters import ParameterCache
+from modules.parsing import parse_metadata
 from modules.ed import parse_ed_as_dict, convert_dict_to_edncls
-from modules.plotting import linescatter, histogram, genes
+from modules.plotting import linescatter, histogram, genes, scalebar
 from modules.gff3 import GFF3
 
 def validate_args(args):
@@ -100,6 +101,18 @@ def validate_regions(args, lengthsDict):
     args.regions = regions
 
 def validate_p(args):
+    # Validate metadata file
+    if args.missingFilter != 0: # if missingFilter is 0, we don't need metadata
+        if args.metadataFile == None:
+            raise FileNotFoundError(f"Metadata file has not been initialised with psQTL_prep.py!")
+        elif not os.path.isfile(args.metadataFile):
+            raise FileNotFoundError(f"Metadata file '{args.metadataFile}' was initialised previously " + 
+                                    "but no longer exists!")
+        else:
+            args.metadataDict = parse_metadata(args.metadataFile)
+    else:
+        args.metadataDict = None
+    
     # Validate numeric arguments
     if args.wmaSize < 1:
         raise ValueError(f"--wma value '{args.wmaSize}' must be >= 1!")
@@ -113,6 +126,8 @@ def validate_p(args):
         raise ValueError(f"--bin value '{args.binSize}' must be >= 2!")
     if args.binThreshold < 0:
         raise ValueError(f"--threshold value '{args.binThreshold}' must be >= 0!")
+    if args.missingFilter < 0 or args.missingFilter > 1:
+        raise ValueError(f"--missing value '{args.missingFilter}' must be between 0 and 1!")
     
     # Validate plot types
     if len(set(args.plotTypes)) != len(args.plotTypes):
@@ -204,6 +219,13 @@ def main():
                          help="""Optionally, specify the location of the genome annotation
                          GFF3 file if you want to plot gene locations""")
     ## Data arguments
+    pparser.add_argument("--missing", dest="missingFilter",
+                         type=float,
+                         required=False,
+                         help="""Optionally, specify the proportion of missing data that is
+                         tolerated in both bulk populations before a variant is filtered out
+                         (recommended: 0.5)""",
+                         default=0.5)
     pparser.add_argument("--wma", dest="wmaSize",
                          type=int,
                          required=False,
@@ -268,12 +290,12 @@ def main():
     validate_regions(args, lengthsDict)
     
     # Parse input file into dictionary data structure or load pre-existing pickle
-    PICKLE_FILE = args.inputFile.replace(".tsv.gz", ".pkl")
+    PICKLE_FILE = args.inputFile.replace(".tsv.gz", f".{args.missingFilter}.pkl")
     if os.path.isfile(PICKLE_FILE):
         with open(PICKLE_FILE, "rb") as fileIn:
             edDict = pickle.load(fileIn)
     else:
-        edDict = parse_ed_as_dict(args.inputFile)
+        edDict = parse_ed_as_dict(args.inputFile, args.metadataDict, args.missingFilter)
         with open(PICKLE_FILE, "wb") as fileOut:
             pickle.dump(edDict, fileOut)
     
@@ -323,32 +345,38 @@ def main():
     print("Program completed successfully!")
 
 def pmain(args, edNCLS, lengthsDict):
+    STANDARD_DIMENSION = 5
     PLOT_DIR = os.path.join(args.workingDirectory, "plots")
     os.makedirs(PLOT_DIR, exist_ok=True)
     
     # Get our labels for the plots
     rowLabels = [
-        f"Euclidean distance\n(to power {power})" if "scatter" in args.plotTypes or "line" in args.plotTypes else None,
-        f"Number of variants with Euclidean distance\n(to power {power}) >= {binThreshold}" if "histogram" in args.plotTypes else None,
-        "Gene locations" if "genes" in args.plotTypes else None
+        f"$ED^{args.power}$" if "scatter" in args.plotTypes or "line" in args.plotTypes else None,
+        f"Num. variants with $ED^{args.power}$ ≥ {args.binThreshold}\n" + \
+            f"in {args.binSize} bp windows" if "histogram" in args.plotTypes else None,
+        "Representative models" if "genes" in args.plotTypes else None
     ]
     rowLabels = [label for label in rowLabels if label != None]
     colLabels = [f"{region[0]}:{region[1]}-{region[2]}" for region in args.regions]
     
-    # Set up the overall figure object
-    STANDARD_DIMENSION = 5
+    # Derive plot dimensions
     if args.width == None:
         args.width = STANDARD_DIMENSION * len(colLabels)
+        print(f"# Calculated width as num. regions ({len(colLabels)}) multiplied by 5 = {args.width}")
     if args.height == None:
         args.height = STANDARD_DIMENSION * len(rowLabels)
+        print(f"# Calculated height as num. plot types ({len(rowLabels)-1}) multiplied by 5 = {args.height}")
+    
+    # Set up the overall figure object
     fig, axs = plt.subplots(nrows=len(rowLabels), ncols=len(colLabels),
                             figsize=(args.width, args.height))
+    fig.tight_layout()
     
     # Set titles and labels
     for ax, label in zip(axs[0], colLabels):
         ax.set_title(label, fontweight="bold")
     for ax, label in zip(axs[:,0], rowLabels):
-        ax.set_ylabel(label, fontweight="bold")
+        ax.set_ylabel(label)
     for ax in axs[-1]:
         ax.set_xlabel(f"Chromosomal position", fontweight="bold")
     
@@ -358,22 +386,23 @@ def pmain(args, edNCLS, lengthsDict):
         linescatter(axs, rowNum, edNCLS, args.regions, args.wmaSize,
                     True if "line" in args.plotTypes else False,
                     True if "scatter" in args.plotTypes else False,
-                    args.power, args.width, args.height, PLOT_DIR)
+                    args.power, PLOT_DIR, rowNum+1 == len(rowLabels))
         rowNum += 1
     
     # Plot a histogram
     if "histogram" in args.plotTypes:
         histogram(axs, rowNum, edNCLS, args.regions, args.binSize, args.binThreshold,
-                  args.power, args.width, args.height, PLOT_DIR)
+                  args.power, PLOT_DIR, rowNum+1 == len(rowLabels))
         rowNum += 1
     
     # Plot gene locations
     if "genes" in args.plotTypes:
         genes(fig, axs, rowNum, edNCLS, args.regions, args.gff3Obj,
-              args.power, args.width, args.height)
+              args.power, rowNum+1 == len(rowLabels))
+        rowNum += 1
     
     # Write plot to file
-    fig.savefig(args.outputFileName)
+    fig.savefig(args.outputFileName, bbox_inches="tight")
     
     print("Plotting complete!")
 

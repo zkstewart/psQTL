@@ -62,7 +62,7 @@ def bin_values(values, start, end, binSize, binThreshold):
     return histo
 
 def linescatter(axs, rowNum, edNCLS, regions, wmaSize, line, scatter, 
-                power, width, height, outputDirectory,
+                power, outputDirectory, plotScalebar,
                 linewidth=1, dotsize=3):
     '''
     Parameters:
@@ -75,9 +75,8 @@ def linescatter(axs, rowNum, edNCLS, regions, wmaSize, line, scatter,
         line -- a boolean value indicating whether to plot a line
         scatter -- a boolean value indicating whether to plot scatter points
         power -- an integer value indicating what power statistical values were raised to
-        width -- an integer value indicating the width of the output plot
-        height -- an integer value indicating the height of the output plot
         outputDirectory -- a string indicating the directory to save the output TSV data
+        plotScalebar -- a boolean value indicating whether to plot a scalebar on the X axis
         linewidth -- OPTIONAL; an integer value indicating the width of the line plot (default=1)
         dotsize -- OPTIONAL; an integer value indicating the size of the dots (default=3)
     '''
@@ -109,7 +108,8 @@ def linescatter(axs, rowNum, edNCLS, regions, wmaSize, line, scatter,
                 print(f"WARNING: '{contigID, start, end}' has too few data points to apply WMA smoothing")
                 smoothedY = y
         
-        # Set ylim
+        # Set limits
+        axs[rowNum, colNum].set_xlim(start, end)
         axs[rowNum, colNum].set_ylim(0, maxY + 0.1)
         
         # Turn off ytick labels if not the first column
@@ -118,11 +118,21 @@ def linescatter(axs, rowNum, edNCLS, regions, wmaSize, line, scatter,
         
         # Plot scatter (if applicable)
         if scatter == True:
-            axs[rowNum, colNum].scatter(x, y, color="red", s=dotsize, alpha=0.5, zorder=0)
+            axs[rowNum, colNum].scatter(x, y, color="red", s=dotsize, alpha=0.5,
+                                        zorder=0)
         
         # Plot line (if applicable)
         if line == True:
-            axs[rowNum, colNum].plot(x, smoothedY, zorder=1, linewidth=linewidth)
+            axs[rowNum, colNum].plot(x, smoothedY, linewidth=linewidth,
+                                     zorder=1)
+        
+        # Set up scale bar if this is the last row
+        if plotScalebar == True:
+            scalebar(axs, rowNum, colNum, start, end)
+        # Otherwise, turn off x labels
+        else:
+            axs[rowNum, colNum].set_xticklabels([])
+            axs[rowNum, colNum].locator_params(axis='x', nbins=4) # use less ticks; avoid clutter
         
         # Derive our output file name for TSV data
         fileOut = os.path.join(outputDirectory, f"{contigID}.{start}-{end}.line.tsv")
@@ -140,7 +150,7 @@ def linescatter(axs, rowNum, edNCLS, regions, wmaSize, line, scatter,
                     for xVal, yVal in zip(x*1000000, y):
                         fileOutTSV.write(f"{contigID}\t{xVal}\t{yVal}\n")
 
-def histogram(axs, rowNum, edNCLS, regions, binSize, binThreshold, power, width, height, outputDirectory):
+def histogram(axs, rowNum, edNCLS, regions, binSize, binThreshold, power, outputDirectory, plotScalebar):
     '''
     Parameters:
         axs -- a list of matplotlib.pyplot Axes objects to plot to
@@ -151,9 +161,8 @@ def histogram(axs, rowNum, edNCLS, regions, binSize, binThreshold, power, width,
         binThreshold -- an integer value indicating the threshold for counting a variant
                         within a bin/window
         power -- an integer value indicating what power statistical values were raised to
-        width -- an integer value indicating the width of the output plot
-        height -- an integer value indicating the height of the output plot
         outputDirectory -- a string indicating the directory to save the output TSV data
+        plotScalebar -- a boolean value indicating whether to plot a scalebar on the X axis
     '''
     # Get the maximum Y value across all regions
     maxY = 0
@@ -166,10 +175,10 @@ def histogram(axs, rowNum, edNCLS, regions, binSize, binThreshold, power, width,
     for colNum, (contigID, start, end) in enumerate(regions):
         y = bin_values(edNCLS.find_overlap(contigID, start, end),
                        start, end, binSize, binThreshold)
-        x = np.arange(len(y))
+        x = np.array([ (i * binSize) + start for i in range(len(y)) ])
         
         # Set limits
-        axs[rowNum, colNum].set_xlim(0, len(y))
+        axs[rowNum, colNum].set_xlim(start, end)
         axs[rowNum, colNum].set_ylim(0, maxY + 5)
         
         # Turn off ytick labels if not the first column
@@ -177,8 +186,15 @@ def histogram(axs, rowNum, edNCLS, regions, binSize, binThreshold, power, width,
             axs[rowNum, colNum].set_yticklabels([])
         
         # Plot bars
-        axs[rowNum, colNum].bar(x, y, align="edge", width=1,
-                                zorder=0)
+        axs[rowNum, colNum].bar(x, y, align="edge", width=binSize)
+        
+        # Set up scale bar if this is the last row
+        if plotScalebar == True:
+            scalebar(axs, rowNum, colNum, start, end)
+        # Otherwise, turn off x labels
+        else:
+            axs[rowNum, colNum].set_xticklabels([])
+            axs[rowNum, colNum].locator_params(axis='x', nbins=4) # use less ticks; avoid clutter
         
         # Derive our output file name for TSV data
         fileOut = os.path.join(outputDirectory, f"{contigID}.{start}-{end}.histo.tsv")
@@ -191,7 +207,7 @@ def histogram(axs, rowNum, edNCLS, regions, binSize, binThreshold, power, width,
                 for xVal, yVal in zip(x, y):
                     fileOutTSV.write(f"{contigID}\t{xVal}\t{(xVal * binSize) + start}\t{yVal}\n")
 
-def genes(fig, axs, rowNum, edNCLS, regions, gff3Obj, power, width, height):
+def genes(fig, axs, rowNum, edNCLS, regions, gff3Obj, power, plotScalebar):
     '''
     Parameters:
         fig -- the matplotlib.pyplot Figure object that axes correspond to
@@ -201,8 +217,7 @@ def genes(fig, axs, rowNum, edNCLS, regions, gff3Obj, power, width, height):
         regions -- a list of lists containing three values: [contigID, start, end]
         gff3Obj -- a GFF3 class object from gff3.py in this repository
         power -- an integer value indicating what power statistical values were raised to
-        width -- an integer value indicating the width of the output plot
-        height -- an integer value indicating the height of the output plot
+        plotScalebar -- a boolean value indicating whether to plot a scalebar on the X axis
     Returns:
         genePltList -- a list of matplotlib.pyplot objects containing the genes plot data
                        per region
@@ -330,6 +345,36 @@ def genes(fig, axs, rowNum, edNCLS, regions, gff3Obj, power, width, height):
             
             # Store the rightmost x value for this lane
             lane.append(bb_datacoords.x1)
-
+        
+        # Set up scale bar if this is the last row
+        if plotScalebar == True:
+            scalebar(axs, rowNum, colNum, start, end)
+        # Otherwise, turn off x labels
+        else:
+            axs[rowNum, colNum].set_xticklabels([])
+            axs[rowNum, colNum].locator_params(axis='x', nbins=4) # use less ticks; avoid clutter
+    
     # Set ylim to the maximum number of lanes
     axs[rowNum, colNum].set_ylim(0, len(lanes)+SPACING)
+
+def scalebar(axs, rowNum, colNum, start, end):
+    '''
+    Parameters:
+        axs -- a list of matplotlib.pyplot Axes objects to plot to
+        rowNum -- an integer value indicating the row index to plot to
+        regions -- a list of lists containing three values: [contigID, start, end]
+    '''
+    # Identify scale
+    if end / 1e6 >= 1:
+        #scale = 1e6
+        scaleLabel = "Mbp"
+    elif end / 1e3 >= 1:
+        #scale = 1e3
+        scaleLabel = "Kbp"
+    else:
+        #scale = 1
+        scaleLabel = "bp"
+    
+    # Set up x axis
+    axs[rowNum, colNum].locator_params(axis='x', nbins=4) # use less ticks; avoid clutter
+    axs[rowNum, colNum].set_xlabel(f"Chromosome position ({scaleLabel})")

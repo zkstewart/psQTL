@@ -16,7 +16,6 @@ class ParameterCache:
         self._bamFiles = None
         self._windowSize = None
         self._qualFilter = None
-        self._missingFilter = None
     
     def merge(self, args):
         '''
@@ -60,7 +59,6 @@ class ParameterCache:
         self.bamFiles = args.bamFiles if hasattr(args, "bamFiles") else None
         self.windowSize = args.windowSize if hasattr(args, "windowSize") else None
         self.qualFilter = args.qualFilter if hasattr(args, "qualFilter") else None
-        self.missingFilter = args.missingFilter if hasattr(args, "missingFilter") else None
         self.save()
     
     def load(self):
@@ -77,7 +75,6 @@ class ParameterCache:
             self._bamFiles = data["bamFiles"]
             self._windowSize = data["windowSize"]
             self._qualFilter = data["qualFilter"]
-            self._missingFilter = data["missingFilter"]
             # Now set values using the setter
             "This is necessary to ensure that the values are validated without the comparison being to None"
             self.metadataFile = data["metadataFile"]
@@ -88,7 +85,6 @@ class ParameterCache:
             self.bamFiles = data["bamFiles"]
             self.windowSize = data["windowSize"]
             self.qualFilter = data["qualFilter"]
-            self.missingFilter = data["missingFilter"]
         else:
             raise FileNotFoundError(f"Working directory '{self.workingDirectory}' has not been initialised.")
     
@@ -101,8 +97,7 @@ class ParameterCache:
             "bamSuffix": self.bamSuffix,
             "bamFiles": self.bamFiles,
             "windowSize": self.windowSize,
-            "qualFilter": self.qualFilter,
-            "missingFilter": self.missingFilter
+            "qualFilter": self.qualFilter
         }
         with open(self.cacheFile, "w") as fileOut:
             json.dump(data, fileOut)
@@ -346,31 +341,6 @@ class ParameterCache:
         # Store and save
         updateMsg = f"# Parameter cache: 'qualFilter' changed from '{self._qualFilter}' to '{value}'"
         self._qualFilter = value
-        self.save()
-        print(updateMsg)
-    
-    @property
-    def missingFilter(self):
-        return self._missingFilter
-    
-    @missingFilter.setter
-    def missingFilter(self, value):
-        # Ignore unchanged values
-        if value == self.missingFilter:
-            return
-        # Validate value format and sensibility
-        if value != None:
-            try:
-                value = float(value)
-            except ValueError:
-                raise ValueError("--missing must be a float or integer number.")
-            if value < 0:
-                raise ValueError("--missing must be at least 0.")
-            if value > 1:
-                raise ValueError("--missing must be at most 1.")
-        # Store and save
-        updateMsg = f"# Parameter cache: 'missingFilter' changed from '{self._missingFilter}' to '{value}'"
-        self._missingFilter = value
         self.save()
         print(updateMsg)
 
