@@ -110,6 +110,35 @@ def run_bcftools_concat(genomeFasta, workingDirectory, outputFileName):
                          f"have a look at the stderr '{errorMsg}' " +
                          "to make sense of this."))
 
+def run_bcftools_filter(vcfFile, outputFileName, qualThreshold=30.0):
+    '''
+    Filters a VCF file based on QUAL score using bcftools view.
+    
+    Parameters:
+        vcfFile -- a string pointing to the VCF or VCF-like file to parse
+        outputFileName -- a string indicating the output file name to write to.
+        qualThreshold -- OPTIONAL; a float indicating the minimum QUAL score
+                         to keep a variant (default == 30.0).
+    '''
+    # Format command
+    cmd = ["bcftools", "view", "-i", f"'QUAL>={qualThreshold}'" "-Oz", "-o", outputFileName, vcfFile]
+    
+    # Run bcftools view (filter)
+    run_filter = subprocess.Popen(" ".join(cmd), shell=True,
+                                  stdout = subprocess.DEVNULL,
+                                  stderr = subprocess.PIPE)
+    filterout, filtererr = run_filter.communicate()
+    
+    # Check for errors
+    if run_filter.returncode == 0:
+        open(outputFileName + ".ok", "w").close() # touch a .ok file to indicate success
+        return None
+    else:
+        errorMsg = filtererr.decode("utf-8").rstrip("\r\n ")
+        raise Exception(("run_bcftools_filter encountered an unhandled situation; " + 
+                         f"have a look at the stderr '{errorMsg}' " +
+                         "to make sense of this."))
+
 def run_bgzip(vcfFile):
     '''
     Compresses a VCF file using bgzip.

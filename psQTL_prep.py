@@ -11,12 +11,11 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from modules.parameters import ParameterCache, VcfCache, DeletionCache, MetadataCache
 from modules.samtools_handling import validate_samtools_exists, run_samtools_depth, run_samtools_faidx, \
                                       bin_samtools_depth
-from modules.bcftools_handling import validate_bcftools_exists, validate_bgzip_exists, validate_vt_exists, \
+from modules.bcftools_handling import validate_bcftools_exists, validate_vt_exists, \
                                       run_bcftools_call, run_bcftools_index, run_normalisation, \
-                                      run_bcftools_concat, run_bgzip
+                                      run_bcftools_concat, run_bcftools_filter
 from modules.depth import call_deletions_from_depth
 from modules.parsing import parse_metadata
-from modules.filter import filter_vcf
 
 def validate_args(args):
     # Validate working directory
@@ -135,12 +134,6 @@ def main():
                          required=False,
                          help="""Optionally, specify the QUAL value that variants must equal or
                          exceed to be included in the final VCF file (recommended: 30.0)""")
-    iparser.add_argument("--missing", dest="missingFilter",
-                         type=float,
-                         required=False,
-                         help="""Optionally, specify the proportion of missing data that is
-                         tolerated in both bulk populations before a variant is filtered out
-                         (recommended: 0.25)""")
     
     # Depth-subparser arguments
     dparser.add_argument("-f", dest="genomeFasta",
@@ -178,12 +171,6 @@ def main():
                          required=False,
                          help="""Optionally, specify the QUAL value that variants must equal or
                          exceed to be included in the final VCF file (recommended: 30.0)""")
-    cparser.add_argument("--missing", dest="missingFilter",
-                         type=float,
-                         required=False,
-                         help="""Optionally, specify the proportion of missing data that is
-                         tolerated in both bulk populations before a variant is filtered out
-                         (recommended: 0.25)""")
     cparser.add_argument("--bam", dest="bamFiles",
                          required=False,
                          nargs="+",
@@ -336,7 +323,6 @@ def cmain(args):
     # Validate that necessary programs exist
     validate_samtools_exists()
     validate_bcftools_exists()
-    validate_bgzip_exists()
     validate_vt_exists()
     
     # Merge params and args
@@ -348,8 +334,6 @@ def cmain(args):
         raise ValueError("--bam files not yet provided for variant calling!")
     if args.qualFilter == None:
         raise ValueError("--qual not yet provided for variant calling!")
-    if args.missingFilter == None:
-        raise ValueError("--missing not yet provided for variant calling!")
     
     # Index the reference genome (if necessary)
     if not os.path.isfile(args.genomeFasta + ".fai"):
@@ -396,40 +380,20 @@ def cmain(args):
     
     # Filter the VCF file
     FILTERED_FILE = os.path.join(CALL_DIR, "psQTL_variants.filtered.vcf")
-    FINAL_FILTERED_FILE = FILTERED_FILE + ".gz"
-    if (not os.path.isfile(FINAL_FILTERED_FILE)) or (not os.path.isfile(FINAL_FILTERED_FILE + ".ok")):        
-        # Skip filtering if metadata is not initialised
-        if args.metadataFile == None:
-            print("# Metadata file not initialised; skipping final VCF filtering...")
-            print("# Run 'psQTL_prep.py initialise' to set the metadata file and you can filter the VCF later.")
+    if (not os.path.isfile(FILTERED_FILE)) or (not os.path.isfile(FILTERED_FILE + ".ok")):        
+        # Filter the VCF file
+        print("# Filtering VCF file...")
+        run_bcftools_filter(CONCAT_VCF_FILE, FILTERED_FILE, args.qualFilter)
         
-        # Raise error if metadata is initialised, but file is now missing
-        elif not os.path.isfile(args.metadataFile):
-            raise FileNotFoundError(f"Metadata file '{args.metadataFile}' can no longer be found!")
-        
-        # Otherwise, proceed with filtering
-        else:
-            # Parse the metadata file
-            metadataDict = parse_metadata(args.metadataFile)
-            
-            # Filter the VCF file
-            print("# Filtering VCF file...")
-            filter_vcf(CONCAT_VCF_FILE, FILTERED_FILE, metadataDict, args.missingFilter, args.qualFilter)
-            
-            # bgzip the filtered VCF file
-            print("# bgzipping filtered VCF file...")
-            run_bgzip(FILTERED_FILE)
-            
-            # Index the concatenated VCF file
-            run_bcftools_index(FINAL_FILTERED_FILE)
-            open(FINAL_FILTERED_FILE + ".ok", "w").close() # touch a .ok file to indicate success
+        # Index the filtered VCF file
+        run_bcftools_index(FILTERED_FILE)
     else:
-        print(f"# Filtered VCF file '{FINAL_FILTERED_FILE}' exists; skipping ...")
+        print(f"# Filtered VCF file '{FILTERED_FILE}' exists; skipping ...")
     
-    # Update param cache with (potentially) newly produced filtered VCF file
+    # Update param cache with newly produced filtered VCF file
     paramsCache = ParameterCache(args.workingDirectory)
     paramsCache.load() # reload in case we're running depth simultaneously
-    paramsCache.filteredVcfFile = FINAL_FILTERED_FILE
+    paramsCache.filteredVcfFile = FILTERED_FILE
     
     print("Variant calling complete!")
 
@@ -493,10 +457,6 @@ def vmain(args):
             print(f"Quality filter: unknown")
         else:
             print(f"Quality filter: {paramsCache.qualFilter}")
-        if paramsCache.missingFilter == None:
-            print(f"Missing filter: unknown")
-        else:
-            print(f"Missing filter: {paramsCache.missingFilter}")
         print(f"Num. filtered variants: {vcfCache.filteredVariants}")
         print(f"Filtered samples (n={len(vcfCache.filteredSamples)}): {vcfCache.filteredSamples}")
         print(f"Filtered contigs (n={len(vcfCache.filteredContigs)}): {vcfCache.filteredContigs}")
