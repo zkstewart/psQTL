@@ -168,7 +168,8 @@ def histogram(axs, rowNum, edNCLS, regions, binSize, binThreshold, power, width,
                        start, end, binSize, binThreshold)
         x = np.arange(len(y))
         
-        # Set ylim
+        # Set limits
+        axs[rowNum, colNum].set_xlim(0, len(y))
         axs[rowNum, colNum].set_ylim(0, maxY + 5)
         
         # Turn off ytick labels if not the first column
@@ -176,7 +177,8 @@ def histogram(axs, rowNum, edNCLS, regions, binSize, binThreshold, power, width,
             axs[rowNum, colNum].set_yticklabels([])
         
         # Plot bars
-        axs[rowNum, colNum].bar(x, y, zorder=0)
+        axs[rowNum, colNum].bar(x, y, align="edge", width=1,
+                                zorder=0)
         
         # Derive our output file name for TSV data
         fileOut = os.path.join(outputDirectory, f"{contigID}.{start}-{end}.histo.tsv")
@@ -189,9 +191,10 @@ def histogram(axs, rowNum, edNCLS, regions, binSize, binThreshold, power, width,
                 for xVal, yVal in zip(x, y):
                     fileOutTSV.write(f"{contigID}\t{xVal}\t{(xVal * binSize) + start}\t{yVal}\n")
 
-def genes(axs, rowNum, edNCLS, regions, gff3Obj, power, width, height):
+def genes(fig, axs, rowNum, edNCLS, regions, gff3Obj, power, width, height):
     '''
     Parameters:
+        fig -- the matplotlib.pyplot Figure object that axes correspond to
         axs -- a list of matplotlib.pyplot Axes objects to plot to
         rowNum -- an integer value indicating the row index to plot to
         edNCLS -- an EDNCLS object
@@ -204,6 +207,7 @@ def genes(axs, rowNum, edNCLS, regions, gff3Obj, power, width, height):
         genePltList -- a list of matplotlib.pyplot objects containing the genes plot data
                        per region
     '''
+    fig.canvas.draw() # need to draw the figure to get the renderer
     SPACING = 0.1
     ARROW_PROPORTION = 0.005 # proportion of subplot width to use for arrow size
     
@@ -218,99 +222,114 @@ def genes(axs, rowNum, edNCLS, regions, gff3Obj, power, width, height):
             if hasattr(geneFeature, "mRNA")
         ]
         
-        # Resolve overlaps into separate lanes
-        lanes = []
-        for thisMrnaFeature in mrnaFeatures:
-            if lanes == []:
-                lanes.append([thisMrnaFeature])
-                continue
-            
-            placed = False
-            for lane in lanes:
-                if (thisMrnaFeature.start - ARROW_SIZE) > lane[-1].end + ARROW_SIZE: # check for possible overlaps either side
-                    lane.append(thisMrnaFeature)
-                    placed = True
-                    break
-            if not placed:
-                lanes.append([thisMrnaFeature])
-        
-        # Set limits
-        axs[rowNum, colNum].set_xlim(start, end)
-        axs[rowNum, colNum].set_ylim(0, len(lanes)+SPACING)
-        
         # Turn off y labels
         axs[rowNum, colNum].set_yticklabels([])
         axs[rowNum, colNum].set_yticks([])
         
-        # Plot each lane
-        for laneNum, lane in enumerate(lanes):
-            for mrnaFeature in lane:
-                # Plot intron line
-                "Intron line, when at the bottommost layer, can just be the length of the gene"
-                axs[rowNum, colNum].plot([max(mrnaFeature.start, start), min(mrnaFeature.end, end)], # truncated to region
-                                         [laneNum + SPACING + (1-SPACING)/2]*2, # y values for start and end
-                                         color="black", linewidth=1,
-                                         zorder=0)
-                
-                # Plot gene directionality
-                if mrnaFeature.strand in ["+", "-"]:
-                    if mrnaFeature.strand == "+":
-                        lastExon = max(mrnaFeature.exon, key=lambda x: x.end)
-                        
-                        arrowVertices = [
-                            (lastExon.end, laneNum + SPACING), # bottom
-                            (lastExon.end, laneNum + 1), # top
-                            (lastExon.end + ARROW_SIZE, laneNum + SPACING + (1-SPACING)/2) # tip
-                        ]
-                    else:
-                        lastExon = min(mrnaFeature.exon, key=lambda x: x.start)
-                        
-                        arrowVertices = [
-                            (lastExon.start, laneNum + SPACING), # bottom
-                            (lastExon.start, laneNum + 1), # top
-                            (lastExon.start - ARROW_SIZE, laneNum + SPACING + (1-SPACING)/2) # tip
-                        ]
-                    axs[rowNum, colNum].add_patch(
-                        plt.Polygon(arrowVertices, closed=True, fill=True,
-                                    edgecolor="black",
-                                    facecolor="black",
-                                    zorder=1) # above exon boxes
-                    )
-                
-                # Plot exon boxes
-                exonCoords = [
-                    (
-                        max(exonFeature.start, start),
-                        min(exonFeature.end, end)
-                    )
-                    for exonFeature in mrnaFeature.exon
-                ]
-                axs[rowNum, colNum].broken_barh(
-                    [
-                        (exonStart, exonEnd - exonStart)
-                        for exonStart, exonEnd in exonCoords
-                        if exonStart < exonEnd # this occurs if the exon exists outside of the specified region
-                    ],
-                    (laneNum+SPACING, 1-SPACING),
-                    facecolors="dodgerblue", edgecolor="black",
-                    zorder=2 # above gene directionality
+        # Set xlim to allow renderer to calculate text box positions correctly
+        axs[rowNum, colNum].set_xlim(start, end)
+        
+        # Plot each gene in non-overlapping lanes
+        lanes = []
+        for mrnaFeature in mrnaFeatures:
+            # Resolve overlaps
+            placed = False
+            laneNum = 0
+            for lane in lanes:
+                if (mrnaFeature.start - ARROW_SIZE) > lane[-1]:
+                    placed = True
+                    break
+                laneNum += 1
+            if not placed:
+                lane = [] # start a new lane
+                lanes.append(lane)
+            
+            # Plot intron line
+            "Intron line, when at the bottommost layer, can just be the length of the gene"
+            axs[rowNum, colNum].plot([max(mrnaFeature.start, start), min(mrnaFeature.end, end)], # truncated to region
+                                        [laneNum + SPACING + (1-SPACING)/2]*2, # y values for start and end
+                                        color="black", linewidth=1,
+                                        zorder=0)
+            
+            # Plot gene directionality
+            if mrnaFeature.strand in ["+", "-"]:
+                if mrnaFeature.strand == "+":
+                    lastExon = max(mrnaFeature.exon, key=lambda x: x.end)
+                    
+                    arrowVertices = [
+                        (lastExon.end, laneNum + SPACING), # bottom
+                        (lastExon.end, laneNum + 1), # top
+                        (lastExon.end + ARROW_SIZE, laneNum + SPACING + (1-SPACING)/2) # tip
+                    ]
+                else:
+                    lastExon = min(mrnaFeature.exon, key=lambda x: x.start)
+                    
+                    arrowVertices = [
+                        (lastExon.start, laneNum + SPACING), # bottom
+                        (lastExon.start, laneNum + 1), # top
+                        (lastExon.start - ARROW_SIZE, laneNum + SPACING + (1-SPACING)/2) # tip
+                    ]
+                axs[rowNum, colNum].add_patch(
+                    plt.Polygon(arrowVertices, closed=True, fill=True,
+                                edgecolor="black",
+                                facecolor="black",
+                                zorder=1) # above exon boxes
                 )
-                
-                # Plot CDS boxes
-                cdsCoords = [
-                    (
-                        max(cdsFeature.start, start),
-                        min(cdsFeature.end, end)
-                    )
-                    for cdsFeature in mrnaFeature.CDS
-                ]
-                axs[rowNum, colNum].broken_barh(
-                    [
-                        (cdsStart, cdsEnd - cdsStart)
-                        for cdsStart, cdsEnd  in cdsCoords
-                        if cdsStart < cdsEnd # this occurs if the exon exists outside of the specified region
-                    ],
-                    (laneNum+SPACING, 1-SPACING),
-                    facecolors="coral", edgecolor="black",
-                    zorder=3 # above exon boxes and gene directionality
+            
+            # Plot exon boxes
+            exonCoords = [
+                (
+                    max(exonFeature.start, start),
+                    min(exonFeature.end, end)
                 )
+                for exonFeature in mrnaFeature.exon
+            ]
+            axs[rowNum, colNum].broken_barh(
+                [
+                    (exonStart, exonEnd - exonStart)
+                    for exonStart, exonEnd in exonCoords
+                    if exonStart < exonEnd # this occurs if the exon exists outside of the specified region
+                ],
+                (laneNum+SPACING, 1-SPACING),
+                facecolors="dodgerblue", edgecolor="black",
+                zorder=2 # above gene directionality
+            )
+            
+            # Plot CDS boxes
+            cdsCoords = [
+                (
+                    max(cdsFeature.start, start),
+                    min(cdsFeature.end, end)
+                )
+                for cdsFeature in mrnaFeature.CDS
+            ]
+            axs[rowNum, colNum].broken_barh(
+                [
+                    (cdsStart, cdsEnd - cdsStart)
+                    for cdsStart, cdsEnd  in cdsCoords
+                    if cdsStart < cdsEnd # this occurs if the exon exists outside of the specified region
+                ],
+                (laneNum+SPACING, 1-SPACING),
+                facecolors="coral", edgecolor="black",
+                zorder=3 # above exon boxes and gene directionality
+            )
+            
+            # Plot gene name
+            geneName = mrnaFeature.ID
+            textBox = axs[rowNum, colNum].text(
+                mrnaFeature.end + ARROW_SIZE, # x position
+                laneNum + SPACING + (1-SPACING)/2, # y position
+                geneName, # text
+                horizontalalignment="left", verticalalignment="center", # alignment
+                fontsize=8,
+                zorder=4 # above everything else
+            )
+            transf = axs[rowNum, colNum].transData.inverted()
+            bb = textBox.get_window_extent(renderer = fig.canvas.renderer)
+            bb_datacoords = bb.transformed(transf)
+            
+            # Store the rightmost x value for this lane
+            lane.append(bb_datacoords.x1)
+
+    # Set ylim to the maximum number of lanes
+    axs[rowNum, colNum].set_ylim(0, len(lanes)+SPACING)

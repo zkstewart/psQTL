@@ -369,7 +369,7 @@ def pmain(args, edNCLS, lengthsDict):
     
     # Plot gene locations
     if "genes" in args.plotTypes:
-        genes(axs, rowNum, edNCLS, args.regions, args.gff3Obj,
+        genes(fig, axs, rowNum, edNCLS, args.regions, args.gff3Obj,
               args.power, args.width, args.height)
     
     # Write plot to file
