@@ -13,7 +13,8 @@ from Bio import SeqIO
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from modules.parameters import ParameterCache
 from modules.parsing import parse_metadata
-from modules.ed import parse_ed_as_dict, convert_dict_to_edncls
+from modules.depth import parse_bins_as_dict, convert_dict_to_depthncls
+from modules.ed import parse_ed_as_dict, normalise_coverage_dict, convert_dict_to_edncls
 from modules.plotting import linescatter, histogram, genes, scalebar
 from modules.gff3 import GFF3
 
@@ -102,7 +103,7 @@ def validate_regions(args, lengthsDict):
 
 def validate_p(args):
     # Validate metadata file
-    if args.missingFilter != 0: # if missingFilter is 0, we don't need metadata
+    if args.missingFilter != 0 or "coverage" in args.plotTypes: # if missingFilter is 0, we don't need metadata
         if args.metadataFile == None:
             raise FileNotFoundError(f"Metadata file has not been initialised with psQTL_prep.py!")
         elif not os.path.isfile(args.metadataFile):
@@ -211,7 +212,7 @@ def main():
     pparser.add_argument("-p", dest="plotTypes",
                          required=True,
                          nargs="+",
-                         choices=["line", "scatter", "histogram", "genes"],
+                         choices=["line", "scatter", "histogram", "coverage", "genes"],
                          help="Specify one or more plot types to generate")
     ## Optional file arguments
     pparser.add_argument("--annotation", dest="annotationGFF3",
@@ -299,23 +300,26 @@ def main():
         with open(PICKLE_FILE, "wb") as fileOut:
             pickle.dump(edDict, fileOut)
     
-    # Derive window size from dictionary
+    # Obtain window size
+    "Need to know if handling depth data or if plotting coverage"
+    windowSize = None
     if args.inputType == "depth":
-        windowSize = None
+        # Derive window size from dictionary
         for key, posEDpairs in edDict.items():
             if len(posEDpairs[0]) > 1:
                 windowSize = posEDpairs[0][1] - posEDpairs[0][0]
                 break
         if windowSize != None:
             print(f"# Window size detected as {windowSize} bp from parsing of Euclidean distance file")
+    if windowSize == None and "coverage" in args.plotTypes:
+        if args.windowSize != None:
+            print(f"# Window size specified as {args.windowSize} in cached parameters")
+            windowSize = args.windowSize
         else:
-            if args.windowSize != None:
-                print(f"# Window size specified as {args.windowSize} in cached parameters")
-                windowSize = args.windowSize
-            else:
-                raise ValueError("Could not determine window size from Euclidean distance file or cached parameters!")
+            raise ValueError("Could not determine window size from Euclidean distance file or cached parameters!")
     else:
         windowSize = 0
+    args.windowSize = windowSize
     
     # Raise Euclidean distances to the power specified by the user
     "Raising to power after pickling lets us reuse the pickled data with different power values"
@@ -326,7 +330,7 @@ def main():
     
     # Convert dictionary to Euclidean distance NCLS data structure
     "EDNCLS cannot be pickled so we need to do it like file->dict->EDNCLS"
-    edNCLS = convert_dict_to_edncls(edDict, windowSize)
+    edNCLS = convert_dict_to_edncls(edDict, args.windowSize)
     
     # Make sure all contigs in Euclidean distance data are in genome FASTA
     for contigID in edNCLS.contigs:
@@ -349,11 +353,34 @@ def pmain(args, edNCLS, lengthsDict):
     PLOT_DIR = os.path.join(args.workingDirectory, "plots")
     os.makedirs(PLOT_DIR, exist_ok=True)
     
+    # Locate depth files if necessary
+    if "coverage" in args.plotTypes:
+        # Validate depth directory
+        DEPTH_DIR = os.path.join(args.workingDirectory, "depth")
+        if not os.path.exists(DEPTH_DIR):
+            raise FileNotFoundError(f"Depth directory '{DEPTH_DIR}' does not exist!")
+        
+        # Locate and validate depth files
+        notFound = []
+        depthFileDict = {"bulk1": [], "bulk2": []}
+        for bulk, sampleList in args.metadataDict.items():
+            for sample in sampleList:
+                depthFile = os.path.join(DEPTH_DIR, f"{sample}.binned.{args.windowSize}.tsv")
+                if not os.path.isfile(depthFile):
+                    notFound.append(sample)
+                else:
+                    depthFileDict[bulk].append([sample, depthFile])
+        #if notFound != []: # for testing and development
+        #    raise FileNotFoundError(f"Could not find depth files for samples: {', '.join(notFound)}")
+    else:
+        depthFileDict = None
+    
     # Get our labels for the plots
     rowLabels = [
         f"$ED^{args.power}$" if "scatter" in args.plotTypes or "line" in args.plotTypes else None,
         f"Num. variants with $ED^{args.power}$ ≥ {args.binThreshold}\n" + \
             f"in {args.binSize} bp windows" if "histogram" in args.plotTypes else None,
+        "Coverage" if "coverage" in args.plotTypes else None,
         "Representative models" if "genes" in args.plotTypes else None
     ]
     rowLabels = [label for label in rowLabels if label != None]
@@ -395,9 +422,21 @@ def pmain(args, edNCLS, lengthsDict):
                   args.power, PLOT_DIR, rowNum+1 == len(rowLabels))
         rowNum += 1
     
+    # Plot coverage data
+    if "coverage" in args.plotTypes:
+        # Parse coverage data
+        coverageDict = parse_bins_as_dict(depthFileDict, args.windowSize, args.regions)
+        normalise_coverage_dict(coverageDict)
+        depthNCLSDict = convert_dict_to_depthncls(coverageDict, args.windowSize)
+        
+        # Plot the parsed data
+        coverage(axs, rowNum, depthNCLSDict, args.regions,
+                 rowNum+1 == len(rowLabels))
+        rowNum += 1
+    
     # Plot gene locations
     if "genes" in args.plotTypes:
-        genes(fig, axs, rowNum, edNCLS, args.regions, args.gff3Obj,
+        genes(fig, axs, rowNum, args.gff3Obj, args.regions,
               args.power, rowNum+1 == len(rowLabels))
         rowNum += 1
     

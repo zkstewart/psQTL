@@ -207,15 +207,15 @@ def histogram(axs, rowNum, edNCLS, regions, binSize, binThreshold, power, output
                 for xVal, yVal in zip(x, y):
                     fileOutTSV.write(f"{contigID}\t{xVal}\t{(xVal * binSize) + start}\t{yVal}\n")
 
-def genes(fig, axs, rowNum, edNCLS, regions, gff3Obj, power, plotScalebar):
+def genes(fig, axs, rowNum, gff3Obj, regions, power, plotScalebar):
     '''
     Parameters:
         fig -- the matplotlib.pyplot Figure object that axes correspond to
         axs -- a list of matplotlib.pyplot Axes objects to plot to
         rowNum -- an integer value indicating the row index to plot to
-        edNCLS -- an EDNCLS object
-        regions -- a list of lists containing three values: [contigID, start, end]
         gff3Obj -- a GFF3 class object from gff3.py in this repository
+        regions -- a list of lists containing three values: [contigID, start, end]
+        
         power -- an integer value indicating what power statistical values were raised to
         plotScalebar -- a boolean value indicating whether to plot a scalebar on the X axis
     Returns:
@@ -356,6 +356,25 @@ def genes(fig, axs, rowNum, edNCLS, regions, gff3Obj, power, plotScalebar):
     
     # Set ylim to the maximum number of lanes
     axs[rowNum, colNum].set_ylim(0, len(lanes)+SPACING)
+
+def coverage(axs, rowNum, depthNCLSDict, regions, plotScalebar):
+    '''
+    Parameters:
+        axs -- a list of matplotlib.pyplot Axes objects to plot to
+        rowNum -- an integer value indicating the row index to plot to
+        depthNCLSDict -- a dictionary with structure like:
+                         {
+                             "bulk1": {
+                                 "sample1": EDNCLS,
+                                 "sample2": EDNCLS,
+                                 ...
+                            },
+                             "bulk2": { ... }
+                         }
+        regions -- a list of lists containing three values: [contigID, start, end]
+        plotScalebar -- a boolean value indicating whether to plot a scalebar on the X axis
+    '''
+    raise NotImplementedError("Coverage plot not yet implemented")
 
 def scalebar(axs, rowNum, colNum, start, end):
     '''

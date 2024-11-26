@@ -2,6 +2,7 @@ import os
 import pandas as pd
 import numpy as np
 from .parsing import parse_binned_tsv
+from .ed import EDNCLS
 
 def predict_deletions(binDict):
     '''
@@ -115,3 +116,134 @@ def call_deletions_from_depth(samplePairs, outputFileName, windowSize):
         fileOut.write("##1/1=homozygousdeletion\n")
         fileOut.write("##psQTL_prepDeletionPrediction\n")
         exploded_df.to_csv(fileOut, sep="\t", index=False)
+
+def parse_bins_as_dict(depthFileDict, windowSize, regions=None):
+    '''
+    Parameters:
+        depthFileDict -- a dictionary with structure like:
+                         {
+                             "bulk1": [
+                                 ["sample1", "depthFile1"],
+                                 ["sample2", "depthFile2"],
+                                 ...
+                            ],
+                             "bulk2": [ ... ]
+                         }
+        windowSize -- an integer indicating the size of the windows used for binning
+        regions -- OPTIONAL; a list of lists containing three values:
+                   [contigID, start, end] OR None for no filtering.
+    Returns:
+        coverageDict -- a dictionary with structure like:
+                  {
+                      "bulk1": {
+                          "sample1": {
+                              "chr1": [[pos1, pos2, ...], [coverage1, coverage2, ...]],
+                              "chr2": [[pos1, pos2, ...], [coverage1, coverage2, ...]],
+                              ...,
+                            },
+                            "sample2": { ... },
+                            ...
+                      },
+                      "bulk2": { ... }
+                  }
+    '''
+    coverageDict = {}
+    for bulk, depthFiles in depthFileDict.items():
+        coverageDict[bulk] = {}
+        # Iterate through bulk files
+        for sampleID, depthFile in depthFiles:
+            coverageDict[bulk][sampleID] = {}
+            # Parse binned depth file
+            with open(depthFile, "r") as fileIn:
+                for line in fileIn:
+                    # Extract relevant details
+                    contigID, pos, coverage = line.strip().split("\t")
+                    try:
+                        pos = int(pos)
+                    except:
+                        raise ValueError(f"Position '{pos}' is not an integer in file '{depthFile}'")
+                    try:
+                        coverage = int(coverage)
+                    except:
+                        raise ValueError(f"Coverage '{coverage}' is not an integer in file '{depthFile}'")
+                    
+                    # # Skip regions that aren't in the regions list
+                    # "This is done for memory efficiency"
+                    # if regions != None:
+                    #     if not any(
+                    #         [
+                    #             contigID == region[0]
+                    #             and pos >= region[1] - windowSize # get anything that might overlap
+                    #             and pos <= region[2] + windowSize
+                    #             for region in regions
+                    #         ]
+                    #     ):
+                    #         continue
+                    
+                    # Store the coverage
+                    if not contigID in coverageDict[bulk][sampleID]:
+                        coverageDict[bulk][sampleID][contigID] = [[], []]
+                    coverageDict[bulk][sampleID][contigID][0].append(pos)
+                    coverageDict[bulk][sampleID][contigID][1].append(coverage)
+    return coverageDict
+
+def normalise_coverage_dict(coverageDict):
+    '''
+    Modifies the coverage dictionary to contain median-normalised coverage values.
+    
+    Parameters:
+        coverageDict -- a dictionary with structure like:
+                  {
+                      "bulk1": {
+                          "sample1": {
+                              "chr1": [[pos1, pos2, ...], [coverage1, coverage2, ...]],
+                              "chr2": [[pos1, pos2, ...], [coverage1, coverage2, ...]],
+                              ...,
+                            },
+                            "sample2": { ... },
+                            ...
+                      },
+                      "bulk2": { ... }
+                  }
+    '''
+    raise NotImplementedError("This function is not yet implemented")
+
+def convert_dict_to_depthncls(coverageDict, windowSize):
+    '''
+    Parameters:
+        coverageDict -- a dictionary with structure like:
+                  {
+                      "bulk1": {
+                          "sample1": {
+                              "chr1": [[pos1, pos2, ...], [coverage1, coverage2, ...]],
+                              "chr2": [[pos1, pos2, ...], [coverage1, coverage2, ...]],
+                              ...,
+                            },
+                            "sample2": { ... },
+                            ...
+                      },
+                      "bulk2": { ... }
+                  }
+        windowSize -- an integer indicating the size of the windows used for binning
+    Returns:
+        depthNCLSDict -- a dictionary with structure like:
+                         {
+                             "bulk1": {
+                                 "sample1": EDNCLS,
+                                 "sample2": EDNCLS,
+                                 ...
+                            },
+                             "bulk2": { ... }
+                         }
+    '''
+    depthNCLSDict = {}
+    for bulk, sampleDict in coverageDict.items():
+        depthNCLSDict[bulk] = {}
+        for sampleID, depthDict in sampleDict.items():
+            edNCLS = EDNCLS(windowSize)
+            for chrom, value in depthDict.items():
+                positions = np.array(value[0])
+                edValues = np.array(value[1])
+                edNCLS.add(chrom, positions, edValues)
+                depthNCLSDict[bulk][sampleID] = edNCLS
+    return depthNCLSDict
