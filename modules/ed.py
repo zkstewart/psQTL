@@ -1,5 +1,5 @@
 import numpy as np
-from math import sqrt
+from math import sqrt, ceil
 from ncls import NCLS
 
 from .parsing import read_gz_file, vcf_header_to_metadata_validation, parse_vcf_genotypes
@@ -7,6 +7,7 @@ from .parsing import read_gz_file, vcf_header_to_metadata_validation, parse_vcf_
 class EDNCLS:
     def __init__(self, windowSize=0):
         self.ncls = {}
+        self.values = {}
         self.windowSize = windowSize
         
         self.numPositions = 0
@@ -27,7 +28,9 @@ class EDNCLS:
             raise ValueError(f"Chromosome '{chrom}' already exists in this EDNCLS object")
         
         ends = positions + 1 + self.windowSize
-        self.ncls[chrom] = NCLS(positions, ends, edValues)
+        self.values[chrom] = edValues
+        
+        self.ncls[chrom] = NCLS(positions, ends, np.arange(len(edValues)))
         self.numPositions += len(positions)
         self.longestContig = max(self.longestContig, ends[-1])
     
@@ -42,8 +45,10 @@ class EDNCLS:
         '''
         if not chrom in self.ncls:
             raise ValueError(f"Chromosome '{chrom}' does not exist in this EDNCLS object")
-        
-        return self.ncls[chrom].find_overlap(start, end)
+        return (
+            (windowStart, windowEnd, self.values[chrom][valueIndex])
+            for windowStart, windowEnd, valueIndex in self.ncls[chrom].find_overlap(start, end)
+        )
     
     def find_all(self, chrom):
         '''
@@ -54,8 +59,10 @@ class EDNCLS:
         '''
         if not chrom in self.ncls:
             raise ValueError(f"Chromosome '{chrom}' does not exist in this EDNCLS object")
-        
-        return self.find_overlap(chrom, 0, self.longestContig+1)
+        return (
+            (windowStart, windowEnd, self.values[chrom][valueIndex])
+            for windowStart, windowEnd, valueIndex in self.find_overlap(chrom, 0, self.longestContig+1)
+        )
     
     def __contains__(self, value):
         return value in self.ncls
@@ -170,6 +177,8 @@ def parse_vcf_for_ed(vcfFile, metadataDict, ignoreIdentical=False):
             # Figure out what type of variant this is
             if any([ x == "." for x in ref_alt ]):
                 variant = "indel"
+            elif all([ x == "N" for x in ref_alt ]):
+                variant = "indel"
             elif any([ len(ref_alt[0]) != len(ref_alt[x]) for x in range(1, len(ref_alt))]):
                 variant = "indel"
             else:
@@ -194,10 +203,17 @@ def parse_vcf_for_ed(vcfFile, metadataDict, ignoreIdentical=False):
             # Yield results
             yield contig, pos, variant, numAllelesB1, numAllelesB2, euclideanDist
 
-def parse_ed_as_dict(edFile, windowSize=0):
+def parse_ed_as_dict(edFile, metadataDict, missingFilter=0.5):
     '''
     Parameters:
         edFile -- a string indicating the path to an ED file
+        metadataDict -- a dictionary with structure like:
+                        {
+                            "bulk1": set([ "sample1", "sample2", ... ]),
+                            "bulk2": set([ "sample3", "sample4", ... ])
+                        }
+        missingFilter -- OPTIONAL; a float indicating the maximum allowed missing data
+                         calculated for each bulk
     Returns:
         edDict -- a dictionary with structure like:
                   {
@@ -208,6 +224,16 @@ def parse_ed_as_dict(edFile, windowSize=0):
     '''
     HEADER = ["CHROM", "POSI", "variant", "bulk1_alleles", "bulk2_alleles", "euclideanDist"]
     
+    # Calculate how many alleles in each bulk
+    BULK1_ALLELES = len(metadataDict["bulk1"]) * 2
+    BULK2_ALLELES = len(metadataDict["bulk2"]) * 2
+    
+    # Alert user to number of samples needed to pass filtration in each bulk
+    print(f"# Filtering for missing data: up to {missingFilter*100}% missing data allowed in each bulk")
+    print(f"# For bulk 1: {BULK1_ALLELES} alleles are possible; {ceil(BULK1_ALLELES * missingFilter)} needed to pass")
+    print(f"# For bulk 2: {BULK2_ALLELES} alleles are possible; {ceil(BULK2_ALLELES * missingFilter)} needed to pass")
+    
+    # Parse the ED file
     edDict = {}
     starts, ends = [], []
     with read_gz_file(edFile) as fileIn:
@@ -230,6 +256,16 @@ def parse_ed_as_dict(edFile, windowSize=0):
                     euclideanDistance = float(euclideanDistance)
                 except:
                     raise ValueError(f"Euclidean distance '{euclideanDistance}' is not a float; offending line is '{line}'")
+                try:
+                    bulk1_alleles = int(bulk1_alleles)
+                    bulk2_alleles = int(bulk2_alleles)
+                except:
+                    raise ValueError(f"Bulk allele counts '{bulk1_alleles}' or '{bulk2_alleles}' are not integers; " + 
+                                     f"offending line is '{line}'")
+                
+                # Skip if missing data exceeds threshold
+                if (bulk1_alleles / BULK1_ALLELES) < missingFilter or (bulk2_alleles / BULK2_ALLELES) < missingFilter:
+                    continue
                 
                 # Store in dictionary
                 edDict.setdefault(chrom, [[], []])

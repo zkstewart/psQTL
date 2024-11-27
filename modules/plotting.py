@@ -262,9 +262,9 @@ def genes(fig, axs, rowNum, gff3Obj, regions, power, plotScalebar):
             # Plot intron line
             "Intron line, when at the bottommost layer, can just be the length of the gene"
             axs[rowNum, colNum].plot([max(mrnaFeature.start, start), min(mrnaFeature.end, end)], # truncated to region
-                                        [laneNum + SPACING + (1-SPACING)/2]*2, # y values for start and end
-                                        color="black", linewidth=1,
-                                        zorder=0)
+                                     [laneNum + SPACING + (1-SPACING)/2]*2, # y values for start and end
+                                     color="black", linewidth=1,
+                                     zorder=0)
             
             # Plot gene directionality
             if mrnaFeature.strand in ["+", "-"]:
@@ -357,7 +357,7 @@ def genes(fig, axs, rowNum, gff3Obj, regions, power, plotScalebar):
     # Set ylim to the maximum number of lanes
     axs[rowNum, colNum].set_ylim(0, len(lanes)+SPACING)
 
-def coverage(axs, rowNum, depthNCLSDict, regions, plotScalebar):
+def coverage(axs, rowNum, depthNCLSDict, regions, plotScalebar, linewidth=1):
     '''
     Parameters:
         axs -- a list of matplotlib.pyplot Axes objects to plot to
@@ -373,8 +373,51 @@ def coverage(axs, rowNum, depthNCLSDict, regions, plotScalebar):
                          }
         regions -- a list of lists containing three values: [contigID, start, end]
         plotScalebar -- a boolean value indicating whether to plot a scalebar on the X axis
+        linewidth -- OPTIONAL; an integer value indicating the width of the line plot (default=1)
     '''
-    raise NotImplementedError("Coverage plot not yet implemented")
+    MAX_Y = 3 # no need to show duplicated regions, just want to emphasise any deleted regions
+    # Plot each region
+    for colNum, (contigID, start, end) in enumerate(regions):
+        # Plot each bulk
+        for bulk, sampleDict in depthNCLSDict.items():
+            # Get the average and upper/lower quantiles of each bulk's coverage values
+            bulkValues = []
+            for sample, edNCLS in sampleDict.items():
+                # Get values within this region
+                overlappingBins = list(edNCLS.find_overlap(contigID, start, end))
+                y = [ stat for _, _, stat in overlappingBins ]
+                bulkValues.append(y)
+            
+            # Get the median and Q1/Q3 quantiles
+            bulkValues = np.array(bulkValues)
+            q1, median, q3 = np.percentile(bulkValues, [25, 50, 75], axis=0)
+            
+            # Figure out the x values
+            x = []
+            for index, (windowStart, windowEnd, _) in enumerate(overlappingBins):
+                x.append(windowStart + (windowEnd - windowStart+1)/2)
+            
+            # Plot median and Q1/Q3 lines
+            axs[rowNum, colNum].plot(x, median, linewidth=linewidth,
+                                     color="palevioletred" if bulk == "bulk1" else "mediumseagreen")
+            axs[rowNum, colNum].fill_between(x, q1, q3, alpha = 0.5,
+                                     color="palevioletred" if bulk == "bulk1" else "mediumseagreen")
+        
+        # Set limits
+        axs[rowNum, colNum].set_xlim(start, end)
+        axs[rowNum, colNum].set_ylim(0, MAX_Y)
+        
+        # Turn off ytick labels if not the first column
+        if colNum > 0:
+            axs[rowNum, colNum].set_yticklabels([])
+        
+        # Set up scale bar if this is the last row
+        if plotScalebar == True:
+            scalebar(axs, rowNum, colNum, start, end)
+        # Otherwise, turn off x labels
+        else:
+            axs[rowNum, colNum].set_xticklabels([])
+            axs[rowNum, colNum].locator_params(axis='x', nbins=4) # use less ticks; avoid clutter
 
 def scalebar(axs, rowNum, colNum, start, end):
     '''

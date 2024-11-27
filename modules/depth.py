@@ -117,7 +117,7 @@ def call_deletions_from_depth(samplePairs, outputFileName, windowSize):
         fileOut.write("##psQTL_prepDeletionPrediction\n")
         exploded_df.to_csv(fileOut, sep="\t", index=False)
 
-def parse_bins_as_dict(depthFileDict, windowSize, regions=None):
+def parse_bins_as_dict(depthFileDict, windowSize):
     '''
     Parameters:
         depthFileDict -- a dictionary with structure like:
@@ -130,8 +130,6 @@ def parse_bins_as_dict(depthFileDict, windowSize, regions=None):
                              "bulk2": [ ... ]
                          }
         windowSize -- an integer indicating the size of the windows used for binning
-        regions -- OPTIONAL; a list of lists containing three values:
-                   [contigID, start, end] OR None for no filtering.
     Returns:
         coverageDict -- a dictionary with structure like:
                   {
@@ -167,19 +165,6 @@ def parse_bins_as_dict(depthFileDict, windowSize, regions=None):
                     except:
                         raise ValueError(f"Coverage '{coverage}' is not an integer in file '{depthFile}'")
                     
-                    # # Skip regions that aren't in the regions list
-                    # "This is done for memory efficiency"
-                    # if regions != None:
-                    #     if not any(
-                    #         [
-                    #             contigID == region[0]
-                    #             and pos >= region[1] - windowSize # get anything that might overlap
-                    #             and pos <= region[2] + windowSize
-                    #             for region in regions
-                    #         ]
-                    #     ):
-                    #         continue
-                    
                     # Store the coverage
                     if not contigID in coverageDict[bulk][sampleID]:
                         coverageDict[bulk][sampleID][contigID] = [[], []]
@@ -206,7 +191,24 @@ def normalise_coverage_dict(coverageDict):
                       "bulk2": { ... }
                   }
     '''
-    raise NotImplementedError("This function is not yet implemented")
+    for bulk, sampleDict in coverageDict.items():
+        for sampleID, depthDict in sampleDict.items():
+            for chrom, value in depthDict.items():
+                positions = np.array(value[0])
+                coverages = np.array(value[1])
+                
+                # Figure out what our median value is
+                medianCoverage = np.median(coverages)
+                if medianCoverage == 0:
+                    nonZeroCoverages = coverages[coverages != 0]
+                    if len(nonZeroCoverages) == 0:
+                        medianCoverage = 1
+                    else:
+                        medianCoverage = np.median(nonZeroCoverages)
+                
+                # Normalise the coverage values and store them
+                coverages = coverages / medianCoverage
+                coverageDict[bulk][sampleID][chrom][1] = coverages
 
 def convert_dict_to_depthncls(coverageDict, windowSize):
     '''

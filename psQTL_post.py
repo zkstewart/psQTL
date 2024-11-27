@@ -13,9 +13,9 @@ from Bio import SeqIO
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from modules.parameters import ParameterCache
 from modules.parsing import parse_metadata
-from modules.depth import parse_bins_as_dict, convert_dict_to_depthncls
-from modules.ed import parse_ed_as_dict, normalise_coverage_dict, convert_dict_to_edncls
-from modules.plotting import linescatter, histogram, genes, scalebar
+from modules.depth import parse_bins_as_dict, normalise_coverage_dict, convert_dict_to_depthncls
+from modules.ed import parse_ed_as_dict, convert_dict_to_edncls
+from modules.plotting import linescatter, histogram, genes, coverage, scalebar
 from modules.gff3 import GFF3
 
 def validate_args(args):
@@ -370,8 +370,8 @@ def pmain(args, edNCLS, lengthsDict):
                     notFound.append(sample)
                 else:
                     depthFileDict[bulk].append([sample, depthFile])
-        #if notFound != []: # for testing and development
-        #    raise FileNotFoundError(f"Could not find depth files for samples: {', '.join(notFound)}")
+        if notFound != []: # for testing and development
+            raise FileNotFoundError(f"Could not find depth files for samples: {', '.join(notFound)}")
     else:
         depthFileDict = None
     
@@ -425,7 +425,7 @@ def pmain(args, edNCLS, lengthsDict):
     # Plot coverage data
     if "coverage" in args.plotTypes:
         # Parse coverage data
-        coverageDict = parse_bins_as_dict(depthFileDict, args.windowSize, args.regions)
+        coverageDict = parse_bins_as_dict(depthFileDict, args.windowSize)
         normalise_coverage_dict(coverageDict)
         depthNCLSDict = convert_dict_to_depthncls(coverageDict, args.windowSize)
         
