@@ -43,6 +43,14 @@ def parse_metadata(metadataFile):
     foundSamples = set()
     with read_gz_file(metadataFile) as fileIn:
         for line in fileIn:
+            # Skip blank lines
+            if line.rstrip("\r\n ") == "":
+                continue
+            
+            # Skip comment lines
+            if line.startswith("#"):
+                continue
+            
             # Split line based on delimiter
             if "\t" in line:
                 sl = line.rstrip("\r\n ").split("\t")
@@ -50,14 +58,6 @@ def parse_metadata(metadataFile):
                 sl = line.rstrip("\r\n ").split(",")
             else:
                 raise ValueError(f"Metadata file is not tab or comma-delimited; offending line is '{line}'")
-            
-            # Skip comment lines
-            if line.startswith("#"):
-                continue
-            
-            # Skip blank lines
-            if sl == []:
-                continue
             
             # Parse out relevant information
             try:

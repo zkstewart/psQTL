@@ -15,7 +15,6 @@ from modules.bcftools_handling import validate_bcftools_exists, validate_vt_exis
                                       run_bcftools_call, run_bcftools_index, run_normalisation, \
                                       run_bcftools_concat, run_bcftools_filter
 from modules.depth import call_deletions_from_depth
-from modules.parsing import parse_metadata
 
 def validate_args(args):
     # Validate working directory
@@ -128,7 +127,7 @@ def main():
                          type=int,
                          required=False,
                          help="""Optionally, specify the window size that reads will be
-                         binned into for deletion calling""")
+                         binned into for deletion calling (recommended: 1000)""")
     iparser.add_argument("--qual", dest="qualFilter",
                          type=float,
                          required=False,
@@ -364,7 +363,6 @@ def cmain(args):
     # Concatenate all VCF files
     CONCAT_VCF_FILE = os.path.join(CALL_DIR, "psQTL_variants.vcf.gz")
     if (not os.path.isfile(CONCAT_VCF_FILE)) or (not os.path.isfile(CONCAT_VCF_FILE + ".ok")):
-        print("# Concatenating VCF files...")
         run_bcftools_concat(args.genomeFasta, CALL_DIR, CONCAT_VCF_FILE)
     else:
         print(f"# Concatenated VCF file '{CONCAT_VCF_FILE}' exists; skipping ...")

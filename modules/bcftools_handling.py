@@ -121,7 +121,7 @@ def run_bcftools_filter(vcfFile, outputFileName, qualThreshold=30.0):
                          to keep a variant (default == 30.0).
     '''
     # Format command
-    cmd = ["bcftools", "view", "-i", f"'QUAL>={qualThreshold}'" "-Oz", "-o", outputFileName, vcfFile]
+    cmd = ["bcftools", "view", "-i", f"'QUAL>={qualThreshold}'", "-Oz", "-o", outputFileName, vcfFile]
     
     # Run bcftools view (filter)
     run_filter = subprocess.Popen(" ".join(cmd), shell=True,

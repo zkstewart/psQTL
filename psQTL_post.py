@@ -279,8 +279,10 @@ def main():
     # Perform mode-specific validation
     "Validate upfront before we get into time-consuming parsing to frontload the error checking"
     if args.mode == "plot":
+        print("## psQTL_post.py - Plot Euclidean Statistics ##")
         validate_p(args)
     elif args.mode == "report":
+        print("## psQTL_post.py - Report Gene Proximity ##")
         validate_r(args)
     
     # Get contig lengths from genome FASTA
@@ -340,10 +342,8 @@ def main():
     
     # Split into mode-specific functions
     if args.mode == "plot":
-        print("## psQTL_post.py - Plot Euclidean Statistics ##")
         pmain(args, edNCLS, lengthsDict)
     elif args.mode == "report":
-        print("## psQTL_post.py - Report Gene Proximity ##")
         rmain(args, edNCLS)
     
     # Print completion flag if we reach this point
