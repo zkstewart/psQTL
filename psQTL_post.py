@@ -29,14 +29,14 @@ def validate_args(args):
     
     # Validate input file
     if args.inputType == "call":
-        FINAL_ED_FILE = os.path.join(args.workingDirectory, "psQTL_variants.ed.tsv.gz")
+        args.inputFile = os.path.join(args.workingDirectory, "psQTL_variants.ed.tsv.gz")
     else:
-        FINAL_ED_FILE = os.path.join(args.workingDirectory, "psQTL_depth.ed.tsv.gz")
-    if not os.path.isfile(FINAL_ED_FILE):
+        args.inputFile = os.path.join(args.workingDirectory, "psQTL_depth.ed.tsv.gz")
+    
+    if not os.path.isfile(args.inputFile):
         raise FileNotFoundError(f"Euclidean distance file'{args.inputFile}' does not exist!")
-    elif not os.path.isfile(FINAL_ED_FILE + ".ok"):
+    elif not os.path.isfile(args.inputFile + ".ok"):
         raise FileNotFoundError(f"Euclidean distance file'{args.inputFile}' does not have a '.ok' flag!")
-    args.inputFile = FINAL_ED_FILE
     
     # Validate genome FASTA file
     if not os.path.isfile(args.genomeFasta):
@@ -252,13 +252,13 @@ def main():
                          type=int,
                          required=False,
                          help="""Optionally, specify the total output plot width
-                         (default: calculated internally)""",
+                         (default: calculated internally with 5 per region)""",
                          default=None)
     pparser.add_argument("--height", dest="height",
                          type=int,
                          required=False,
                          help="""Optionally, specify the output plot height
-                         (default: calculated internally)""",
+                         (default: calculated internally with 5 per plot type)""",
                          default=None)
     
     # Report-subparser arguments
@@ -311,14 +311,15 @@ def main():
                 break
         if windowSize != None:
             print(f"# Window size detected as {windowSize} bp from parsing of Euclidean distance file")
-    if windowSize == None and "coverage" in args.plotTypes:
-        if args.windowSize != None:
-            print(f"# Window size specified as {args.windowSize} in cached parameters")
-            windowSize = args.windowSize
+    if windowSize == None:
+        if "coverage" in args.plotTypes:
+            if args.windowSize != None:
+                print(f"# Window size specified as {args.windowSize} in cached parameters")
+                windowSize = args.windowSize
+            else:
+                raise ValueError("Could not determine window size from Euclidean distance file or cached parameters!")
         else:
-            raise ValueError("Could not determine window size from Euclidean distance file or cached parameters!")
-    else:
-        windowSize = 0
+            windowSize = 0
     args.windowSize = windowSize
     
     # Raise Euclidean distances to the power specified by the user
@@ -371,7 +372,8 @@ def pmain(args, edNCLS, lengthsDict):
                 else:
                     depthFileDict[bulk].append([sample, depthFile])
         if notFound != []: # for testing and development
-            raise FileNotFoundError(f"Could not find depth files for samples: {', '.join(notFound)}")
+            raise FileNotFoundError(f"Could not find depth files with bin size of {args.windowSize} " +
+                                    f"for samples: {', '.join(notFound)}")
     else:
         depthFileDict = None
     
@@ -380,7 +382,7 @@ def pmain(args, edNCLS, lengthsDict):
         f"$ED^{args.power}$" if "scatter" in args.plotTypes or "line" in args.plotTypes else None,
         f"Num. variants with $ED^{args.power}$ ≥ {args.binThreshold}\n" + \
             f"in {args.binSize} bp windows" if "histogram" in args.plotTypes else None,
-        "Coverage" if "coverage" in args.plotTypes else None,
+        "Median-normalised coverage" if "coverage" in args.plotTypes else None,
         "Representative models" if "genes" in args.plotTypes else None
     ]
     rowLabels = [label for label in rowLabels if label != None]
@@ -392,11 +394,12 @@ def pmain(args, edNCLS, lengthsDict):
         print(f"# Calculated width as num. regions ({len(colLabels)}) multiplied by 5 = {args.width}")
     if args.height == None:
         args.height = STANDARD_DIMENSION * len(rowLabels)
-        print(f"# Calculated height as num. plot types ({len(rowLabels)-1}) multiplied by 5 = {args.height}")
+        print(f"# Calculated height as num. plot types ({len(rowLabels)}) multiplied by 5 = {args.height}")
     
     # Set up the overall figure object
     fig, axs = plt.subplots(nrows=len(rowLabels), ncols=len(colLabels),
                             figsize=(args.width, args.height))
+    axs = np.reshape(axs, (len(rowLabels), len(colLabels))) # ensure shape is as expected
     fig.tight_layout()
     
     # Set titles and labels

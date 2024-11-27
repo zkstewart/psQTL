@@ -4,6 +4,16 @@ import numpy as np
 from .parsing import parse_binned_tsv
 from .ed import EDNCLS
 
+def get_median_value(values):
+    medianValue = np.median(values)
+    if medianValue == 0:
+        nonZeroValues = values[values != 0]
+        if len(nonZeroValues) == 0:
+            medianValue = 1
+        else:
+            medianValue = np.median(nonZeroValues)
+    return medianValue
+
 def predict_deletions(binDict):
     '''
     Receives a histogram dictionary and predicts regions of homozygous deletion,
@@ -22,18 +32,19 @@ def predict_deletions(binDict):
                    where 0 indicates homozygous deletion, 1 indicates hemizygous
                    deletion, and 2 indicates homozygous presence
     '''
-    HEMI_CUTOFF = 2.5
-    HOMO_CUTOFF = 8
-    
-    # Get breakpoints for deletions and presence
     depths = np.array(list(binDict.values()))
-    medianDepth = np.median(depths)
-    heteroDepth = medianDepth / HEMI_CUTOFF
-    homoDepth = medianDepth / HOMO_CUTOFF
+    
+    # Median-normalise the coverage
+    medianDepth = get_median_value(depths)
+    depths = depths / medianDepth
+    
+    # Round to nearest 0.5
+    "If ploidy changes, this will need to be adjusted"
+    depths = np.round(depths * 2) / 2
     
     # Predict deletions and presence
-    hetero = np.where((depths > homoDepth) & (depths <= heteroDepth), 1, 0)
-    homoPresent = np.where(depths > heteroDepth, 2, 0)
+    hetero = np.where(depths == 0.5, 1, 0)
+    homoPresent = np.where(depths >= 1, 2, 0)
     alleles = hetero + homoPresent
     
     # Return the results
@@ -198,13 +209,7 @@ def normalise_coverage_dict(coverageDict):
                 coverages = np.array(value[1])
                 
                 # Figure out what our median value is
-                medianCoverage = np.median(coverages)
-                if medianCoverage == 0:
-                    nonZeroCoverages = coverages[coverages != 0]
-                    if len(nonZeroCoverages) == 0:
-                        medianCoverage = 1
-                    else:
-                        medianCoverage = np.median(nonZeroCoverages)
+                medianCoverage = get_median_value(coverages)
                 
                 # Normalise the coverage values and store them
                 coverages = coverages / medianCoverage

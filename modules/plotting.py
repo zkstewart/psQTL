@@ -83,14 +83,8 @@ def linescatter(axs, rowNum, edNCLS, regions, wmaSize, line, scatter,
     if line == False and scatter == False:
         raise ValueError("At least one of 'line' or 'scatter' must be True")
     
-    # Get the maximum Y value across all regions
-    maxY = 0
-    for contigID, start, end in regions:
-        regionValues = edNCLS.find_overlap(contigID, start, end)
-        y = [stat for _, _, stat in regionValues]
-        maxY = max(maxY, max(y))
-    
     # Plot each region
+    maxY = 0 # to set y limits at end
     for colNum, (contigID, start, end) in enumerate(regions):
         # Get values within this region
         regionValues = edNCLS.find_overlap(contigID, start, end)
@@ -108,9 +102,14 @@ def linescatter(axs, rowNum, edNCLS, regions, wmaSize, line, scatter,
                 print(f"WARNING: '{contigID, start, end}' has too few data points to apply WMA smoothing")
                 smoothedY = y
         
-        # Set limits
+        # Get the maximum Y value for this region
+        if scatter == True:
+            maxY = max(maxY, max(y))
+        else:
+            maxY = max(maxY, max(smoothedY))
+        
+        # Set xlim
         axs[rowNum, colNum].set_xlim(start, end)
-        axs[rowNum, colNum].set_ylim(0, maxY + 0.1)
         
         # Turn off ytick labels if not the first column
         if colNum > 0:
@@ -149,6 +148,10 @@ def linescatter(axs, rowNum, edNCLS, regions, wmaSize, line, scatter,
                     fileOutTSV.write("contigID\tposition\ted\n")
                     for xVal, yVal in zip(x*1000000, y):
                         fileOutTSV.write(f"{contigID}\t{xVal}\t{yVal}\n")
+    
+    # Set y limits
+    for colNum in range(len(regions)):
+        axs[rowNum, colNum].set_ylim(0, maxY + 0.1)
 
 def histogram(axs, rowNum, edNCLS, regions, binSize, binThreshold, power, outputDirectory, plotScalebar):
     '''
@@ -375,7 +378,7 @@ def coverage(axs, rowNum, depthNCLSDict, regions, plotScalebar, linewidth=1):
         plotScalebar -- a boolean value indicating whether to plot a scalebar on the X axis
         linewidth -- OPTIONAL; an integer value indicating the width of the line plot (default=1)
     '''
-    MAX_Y = 3 # no need to show duplicated regions, just want to emphasise any deleted regions
+    MAX_Y = 2 # no need to show duplicated regions, just want to emphasise any deleted regions
     # Plot each region
     for colNum, (contigID, start, end) in enumerate(regions):
         # Plot each bulk
@@ -421,22 +424,27 @@ def coverage(axs, rowNum, depthNCLSDict, regions, plotScalebar, linewidth=1):
 
 def scalebar(axs, rowNum, colNum, start, end):
     '''
+    Start and end values are unused now but may be used in the future
+    again.
+    
     Parameters:
         axs -- a list of matplotlib.pyplot Axes objects to plot to
         rowNum -- an integer value indicating the row index to plot to
-        regions -- a list of lists containing three values: [contigID, start, end]
+        colNum -- an integer value indicating the column index to plot to
+        start -- [UNUSED]; an integer value indicating the start of the region
+        end -- [UNUSED]; an integer value indicating the end of the region
     '''
     # Identify scale
-    if end / 1e6 >= 1:
-        #scale = 1e6
-        scaleLabel = "Mbp"
-    elif end / 1e3 >= 1:
-        #scale = 1e3
-        scaleLabel = "Kbp"
-    else:
-        #scale = 1
-        scaleLabel = "bp"
+    # if end / 1e6 >= 1:
+    #     #scale = 1e6
+    #     scaleLabel = "Mbp"
+    # elif end / 1e3 >= 1:
+    #     #scale = 1e3
+    #     scaleLabel = "Kbp"
+    # else:
+    #     #scale = 1
+    #     scaleLabel = "bp"
     
     # Set up x axis
     axs[rowNum, colNum].locator_params(axis='x', nbins=4) # use less ticks; avoid clutter
-    axs[rowNum, colNum].set_xlabel(f"Chromosome position ({scaleLabel})")
+    axs[rowNum, colNum].set_xlabel("Chromosome position")
