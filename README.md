@@ -16,8 +16,11 @@
 
 # Getting started
 ```
-# Download this repository [making sure you have prerequisite Python packages]
+# Download this repository
 git clone https://github.com/zkstewart/psQTL.git
+
+# Make sure you have all prerequisite Python packages and external programs available
+## Refer to the websites indicated in the 'Installation' section below.
 
 # 'Prep'are for your analysis using psQTL_prep.py
 python psQTL/psQTL_prep.py initialise -d /location/of/your/working/directory \
@@ -26,13 +29,13 @@ python psQTL/psQTL_prep.py initialise -d /location/of/your/working/directory \
     --bamSuffix .sorted.bam
 python psQTL/psQTL_prep.py call -d /location/of/your/working/directory \
     -f /location/of/genome.fasta \
-    --qual 30 --missing 0.25 --threads 12
+    --qual 30 --threads 12
 python psQTL/psQTL_prep.py depth -d /location/of/your/working/directory \
     -f /location/of/genome.fasta \
     --windowSize 1000 --threads 12
 
 # 'Proc'ess your variant and deletion predictions and calculate segregation statistics
-python /location/of/psQTL_proc.py call -d /location/of/your/working/directory
+python /location/of/psQTL_proc.py call -d /location/of/your/working/directory --ignoreIdentical
 python /location/of/psQTL_proc.py depth -d /location/of/your/working/directory
 
 # 'Post'-processing steps including data plotting and report tabulation
@@ -130,9 +133,6 @@ The options you'll need to specify to allow this to occur are:
   - Directories provided to `--bam` will be checked for files ending with this suffix, and will be included in the analysis.
 - A variant quality score to filter on through `--qual`.
   - The recommended value is `30` but you may increase this to make it more strict, or decrease it to reduce the amount of filtration.
-- The proportion of variants which are allowed to be ungenotyped in the population bulks with `--missing`.
-  - This value can range from `0` (0% are allowed to be missing; **strict**) to `1` (100% are allowed to be missing; **relaxed**) with the default recommendation being `0.25`.
-  - If you specify a value of `0.25`, then we will filter out a variant if it's missing (i.e., hasn't been genotyped) in more than 25% of the samples of **both bulks**, noting that the missing percentage is calculated **per bulk**. Hence, if you have a bulk where no samples are genotyped (100% missing) and another bulk where all samples are genotyped (0% missing), we wouldn't filter the variant.
 
 Variant calling will produce a raw and filtered VCF file with standard formatting for downstream analysis.
 
@@ -178,6 +178,10 @@ Plotting can be done on all chromosomes, on a selection of one or more specified
 - If you omit the `--regions` option, **all** chromosomes will be plotted.
 - If you just provide one or more values e.g. `--regions chr1 chr2`, then you will plot only the specified chromosomes.
 - You can provide ranges e.g., `--regions chr1:100000-250000 chr2:2000000-3000000` to only plot within the specified regions of those chromosomes.
+
+Variants can be filtered at this stage to allow for exploration of important trends. Specifically, the proportion of variants which are allowed to be ungenotyped in the population bulks is controlled by `--missing`.
+- This value can range from `0` (0% are allowed to be missing; **strict**) to `1` (100% are allowed to be missing; **relaxed**) with the default recommendation being `0.5`.
+- If you specify a value of `0.5`, then we will filter out a variant if it's missing (i.e., hasn't been genotyped) in more than 50% of the samples in **either bulk**. Hence, if a variant has no samples genotyped (100% missing) in bulk 1, regardless of what we see in bulk 2, we will omit the variant from results plotting.
 
 Lastly, it allows one to flexibly produce various plot types including:
 
@@ -230,9 +234,9 @@ Now you're ready to use `psQTL_prep.py` to **initialise** your working directory
 
 The program will tell you that some values have been stored in various *caches* - these *caches* are what psQTL uses to remember where your file are located and what options you've specified.
 
-With the initialisation done, we're ready to **call** variants now. The program will remember where your metadata and BAM files are located, but you will also need to let psQTL know where the genome FASTA file is located; this should be the exact same file as you used when mapping reads. Lastly, we need to provide some information on how we want to filter our variants in terms of their **qual**ity scores and in terms of how many samples within a bulk are **missing** genotype calls. Our genome file will be called `/location/of/genome.fasta`. We'll use the recommended values of `30` and `0.25` for quality scores and missing data, respectively, and we'll also use `12` **threads** to speed things along.
+With the initialisation done, we're ready to **call** variants now. The program will remember where your metadata and BAM files are located, but you will also need to let psQTL know where the genome FASTA file is located; this should be the exact same file as you used when mapping reads. Lastly, we need to provide some information on how we want to filter our variants in terms of their **qual**ity scores. Our genome file will be called `/location/of/genome.fasta`. We'll use the recommended value of `30` for quality scores and we'll also use `12` **threads** to speed things along.
 
-`python /location/of/psQTL_prep.py call -d psqtl_analysis -f /location/of/genome.fasta --qual 30 --missing 0.25 --threads 12`
+`python /location/of/psQTL_prep.py call -d psqtl_analysis -f /location/of/genome.fasta --qual 30 --threads 12`
 
 We should expect this process to take a while. If we're interested in predicting genomic deletions to see if they appear to be QTLs as well, we can use the **depth** functionality of psQTL to do that. We'll indicate the same genome FASTA file as before, and let psQTL know what window size we want to predict deletions in.
 
