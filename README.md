@@ -7,7 +7,10 @@
 - [Installation](#installation)
 - [How to use](#how-to-use)
   - [Formatting a metadata file](#formatting-a-metadata-file)
-  - [Interpreting results](#interpreting-results)
+  - [Calling variants](#calling-variants)
+  - [Predicting deletions](#predicting-deletions)
+  - [Plotting results](#plotting-results)
+  - [Reporting gene proximity](#reporting-gene-proximity)
 - [A typical analysis pipeline](#a-typical-analysis-pipeline)
 - [How to cite](#how-to-cite)
 
@@ -33,7 +36,17 @@ python /location/of/psQTL_proc.py call -d /location/of/your/working/directory
 python /location/of/psQTL_proc.py depth -d /location/of/your/working/directory
 
 # 'Post'-processing steps including data plotting and report tabulation
-TBD
+python /mnt/c/git/psQTL/psQTL_post.py plot -d /location/of/your/working/directory \
+    -f /location/of/genome.fasta \
+    -i call \ # or depth
+    -o /location/to/write/output.pdf \
+    -p line scatter histogram coverage genes \
+    --annotation location/of/genome.gff3
+python /mnt/c/git/psQTL/psQTL_post.py report -d /location/of/your/working/directory \
+    -f /location/of/genome.fasta \
+    -i call \ # or depth
+    -o /location/to/write/output.tsv \
+    -a location/of/genome.gff3
 ```
 
 # Introduction
@@ -134,8 +147,54 @@ The options you'll need to specify to allow this to occur are:
 
 The deletion prediction will produce a VCF-*like* file. It does not contain the normal information fields that a true VCF has, but it conforms to VCF styling from the `#CHROM` line onwards albeit with dummy values used for the `REF` and `ALT` fields. Genotypes are encoded as `0/0` for homozygous non-deletion, `0/1` for hemizygous deletion, and `1/1` for homozygous deletion.
 
+## Calculating Euclidean Distance for QTL segregation
+The variant calls or deletion predictions are **proc**essed with the `psQTL_proc.py` script. It calculates the Euclidean distance (ED) between genotypes across populations; deletion predictions are encoded as genotypes as noted above. The result provides an indication of how much the two bulks differ at each variant or deletion region, with large values indicating more segregation and values of 0 indicating an identical allele frequency between the two bulks.
+
+When handling deletion predictions, no additional options are necessary.
+
+When handling variant calls, you may specify the following:
+- The `--ignoreIdentical` argument will specify whether you would like to ignore variant calls if all samples have an identical genotype e.g., they all have the `1/1` genotype. These variants can end up in your VCF file if all of your samples differ to the reference genome. Hence, since these *variants* are not actually *varying* across your samples, it may be best to ignore them.
+
+The output file is in TSV format, with six columns denoted by a header row. These columns include:
+- CHROM
+  - The contig identifier from your genome FASTA file.
+- POSI
+  - The position (in bp) of your variant OR the starting position of the window that depth values were summarised into.
+- variant
+  - A simple description of what type of variant is being described: 'snp' or 'indel'
+- bulk1_alleles
+  - The number of diploid alleles which were genotyped at this position for the samples belonging to bulk 1. Since this program assumes diploidy, this is equivalent to `number of genotyped individuals * 2`
+- bulk2_alleles
+  - As above, but for bulk 2.
+- euclideanDistance
+  - The ED calculated at this position for the bulk genotype segregation.
+
 ## Plotting results
-TBD
+**Proc**essed results can be plotted using the `psQTL_post.py` script. It can plot variant calls using the `-i call` option, or deletion predictions using the `-i depth` option.
+
+Importantly, you can raise ED values to a power using `--power`. By default the power value is `4` which helps to minimise noise and amplify signal, which is important when plotting smoothed ED values.
+
+Plotting can be done on all chromosomes, on a selection of one or more specified chromosomes, or in bounded regions within specified chromosomes using the `--regions` option. For example:
+- If you omit the `--regions` option, **all** chromosomes will be plotted.
+- If you just provide one or more values e.g. `--regions chr1 chr2`, then you will plot only the specified chromosomes.
+- You can provide ranges e.g., `--regions chr1:100000-250000 chr2:2000000-3000000` to only plot within the specified regions of those chromosomes.
+
+Lastly, it allows one to flexibly produce various plot types including:
+
+- Line plot
+  - The line plot shows the smoothed ED values across the genome, which can help to visualise peaks or troughs in segregation statistics.
+  - The `--wma` option controls how much smoothing is applied using a Weighted Moving Average of the segregation statistic.
+- Scatter plot
+  - Plots the same underlying data as the line plot, but without smoothing. The line plot can be overlayed on top of the scatter plot for combined visualisation.
+- Histogram plot
+  - The histogram plot helps to reveal where highly segregating variants or deletion regions are most common by counting their occurrence within window/bin regions. It provides an additional check against the line plot to see if a peak is occurring because of only a small number of highly segregating variants, or if there is a large number of variants.
+  - The `--bin` option controls how large the bin region is for counting the occurrence of highly segregating variants or deletion regions.
+  - The `--threshold` option controls what ED value is considered to be *highly segregating* for counting in bin regions.
+- Coverage plot
+  - The coverage plot helps to reveal how each bulk's read depth varies across the genome. Specifically, it might show where deletions occur in one bulk but not the other.
+- Gene plot
+  - The gene plot shows the location of gene models within plotted regions. It may help to identify which genes occur in regions where segregation statistics peak or trough.
+  - The `--annotation` option lets you input a GFF3 file containing annotations which will be parsed and presented.
 
 ## Reporting gene proximity
 TBD
@@ -197,7 +256,41 @@ Alternatively, to look at the segregation at genomic window regions using the de
 This will produce the `psQTL_depth.ed.tsv.gz` file with the raw Euclidean distance data for segregation at each genomic window region.
 
 ## Post-processing
-This is still to be implemented. It should let you plot results in a variety of ways, and let you tabulate reports to let you interrogate the data in the context of gene proximity to variants or deletions.
+### Plotting
+After running the above processing step, you are now ready to plot the results. psQTL relies upon the visual inspection of results, with a usual process involving you plotting ED statistics across the entire genome, then manually looking for regions that have elevated segregation. You can then plot just those regions to give you a "zoomed in" look at the statistics, and iterate upon this process until you are happy with what you've found. This can involve changes in how you count variants with the histogram plot such as changes to the bin size or threshold for counting variants.
+
+To begin, you might plot all the chromosomes for variant calls like:
+
+```
+python /location/of/psQTL_post.py plot -d psqtl_analysis -i call \
+    -f /location/of/genome.fasta -o plot.pdf \
+    -p line histogram
+```
+
+This will give you a plot from which you can look for peaks in the ED statistic on your line plot, or for peaks where larger numbers of variants occur in your histogram. Let's say you find that `chr2` is of interest, but that you have a lot of variants with large ED values. Let's plot just that chromosome, increase the threshold for counting a variant as being *highly segregating*, and produce a larger plot size for us to look at in more detail:
+
+```
+python /location/of/psQTL_post.py plot -d psqtl_analysis -i call \
+    -f /location/of/genome.fasta -o plot_chr2.pdf \
+    -p line histogram \
+    --threshold 1.2 \
+    --regions chr2 --width 15
+```
+
+Using this plot we can now (hypothetically) identify that the peak occurs specifically in the region from 3.8 Mbp to 4.2 Mbp. And we can see that our threshold value of `1.2` was overshooting the mark a little; let's adjust that down. Because we've zoomed in so much, we might also reduce the histogram `--bin` size down from the default of 100Kbp to 10Kbp. We will plot just the region we're interested in, and include all plot types relevant to the variant calls since this is our final product:
+
+```
+python /location/of/psQTL_post.py plot -d psqtl_analysis -i call \
+    -f /location/of/genome.fasta -o plot_chr2_region.pdf \
+    -p line scatter histogram gene \
+    --threshold 1 --bin 10000 \
+    --regions chr2:3800000-4200000
+```
+
+If we were looking at the `-i depth` data, maybe we'd want to include `-p coverage` as a visual indication of the sequencing depth within the region, too.
+
+### Reporting
+This is still to be implemented. It should let you tabulate reports to interrogate the data in the context of gene proximity to variants or deletions.
 
 # How to cite
 A publication is hopefully forthcoming which can be referred to when using this program. Until then, you can link to this repository.
