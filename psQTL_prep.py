@@ -377,7 +377,7 @@ def cmain(args):
     paramsCache.vcfFile = CONCAT_VCF_FILE
     
     # Filter the VCF file
-    FILTERED_FILE = os.path.join(CALL_DIR, "psQTL_variants.filtered.vcf")
+    FILTERED_FILE = os.path.join(CALL_DIR, "psQTL_variants.filtered.vcf.gz")
     if (not os.path.isfile(FILTERED_FILE)) or (not os.path.isfile(FILTERED_FILE + ".ok")):        
         # Filter the VCF file
         print("# Filtering VCF file...")
