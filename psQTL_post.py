@@ -34,9 +34,9 @@ def validate_args(args):
         args.inputFile = os.path.join(args.workingDirectory, "psQTL_depth.ed.tsv.gz")
     
     if not os.path.isfile(args.inputFile):
-        raise FileNotFoundError(f"Euclidean distance file'{args.inputFile}' does not exist!")
+        raise FileNotFoundError(f"Euclidean distance file '{args.inputFile}' does not exist!")
     elif not os.path.isfile(args.inputFile + ".ok"):
-        raise FileNotFoundError(f"Euclidean distance file'{args.inputFile}' does not have a '.ok' flag!")
+        raise FileNotFoundError(f"Euclidean distance file '{args.inputFile}' does not have a '.ok' flag!")
     
     # Validate genome FASTA file
     if not os.path.isfile(args.genomeFasta):

@@ -7,6 +7,8 @@ from matplotlib.patches import Rectangle
 
 from .gff3 import GFF3
 
+YLIM_HEADSPACE = 0.1 # proportion of ylim to add to the top of the plot
+
 def WMA(s, period):
     """
     See https://stackoverflow.com/questions/74518386/improving-weighted-moving-average-performance
@@ -151,7 +153,7 @@ def linescatter(axs, rowNum, edNCLS, regions, wmaSize, line, scatter,
     
     # Set y limits
     for colNum in range(len(regions)):
-        axs[rowNum, colNum].set_ylim(0, maxY + 0.1)
+        axs[rowNum, colNum].set_ylim(0, maxY + (maxY * YLIM_HEADSPACE))
 
 def histogram(axs, rowNum, edNCLS, regions, binSize, binThreshold, power, outputDirectory, plotScalebar):
     '''
@@ -174,6 +176,9 @@ def histogram(axs, rowNum, edNCLS, regions, binSize, binThreshold, power, output
                        start, end, binSize, binThreshold)
         maxY = max(maxY, max(y))
     
+    # Figure out where we want to set the y limit with a bit of head room
+    
+    
     # Plot each region
     for colNum, (contigID, start, end) in enumerate(regions):
         y = bin_values(edNCLS.find_overlap(contigID, start, end),
@@ -182,7 +187,7 @@ def histogram(axs, rowNum, edNCLS, regions, binSize, binThreshold, power, output
         
         # Set limits
         axs[rowNum, colNum].set_xlim(start, end)
-        axs[rowNum, colNum].set_ylim(0, maxY + 5)
+        axs[rowNum, colNum].set_ylim(0, maxY + (maxY * YLIM_HEADSPACE))
         
         # Turn off ytick labels if not the first column
         if colNum > 0:
