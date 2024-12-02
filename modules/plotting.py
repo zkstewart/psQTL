@@ -64,7 +64,7 @@ def bin_values(values, start, end, binSize, binThreshold):
     return histo
 
 def linescatter(axs, rowNum, edNCLS, regions, wmaSize, line, scatter, 
-                power, outputDirectory, plotScalebar,
+                power, outputDirectory, plotScalebar, fileSuffix,
                 linewidth=1, dotsize=3):
     '''
     Parameters:
@@ -79,6 +79,7 @@ def linescatter(axs, rowNum, edNCLS, regions, wmaSize, line, scatter,
         power -- an integer value indicating what power statistical values were raised to
         outputDirectory -- a string indicating the directory to save the output TSV data
         plotScalebar -- a boolean value indicating whether to plot a scalebar on the X axis
+        fileSuffix -- a string to append to the output file name
         linewidth -- OPTIONAL; an integer value indicating the width of the line plot (default=1)
         dotsize -- OPTIONAL; an integer value indicating the size of the dots (default=3)
     '''
@@ -136,7 +137,7 @@ def linescatter(axs, rowNum, edNCLS, regions, wmaSize, line, scatter,
             axs[rowNum, colNum].locator_params(axis='x', nbins=4) # use less ticks; avoid clutter
         
         # Derive our output file name for TSV data
-        fileOut = os.path.join(outputDirectory, f"{contigID}.{start}-{end}.line.tsv")
+        fileOut = os.path.join(outputDirectory, f"{contigID}.{start}-{end}.{fileSuffix}_line.tsv")
         if os.path.isfile(fileOut):
             print(f"WARNING: Line/scatter plot data for '{contigID, start, end}' already exists as '{fileOut}'; won't overwrite")
             continue

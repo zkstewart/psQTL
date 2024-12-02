@@ -416,7 +416,8 @@ def pmain(args, edNCLS, lengthsDict):
         linescatter(axs, rowNum, edNCLS, args.regions, args.wmaSize,
                     True if "line" in args.plotTypes else False,
                     True if "scatter" in args.plotTypes else False,
-                    args.power, PLOT_DIR, rowNum+1 == len(rowLabels))
+                    args.power, PLOT_DIR, rowNum+1 == len(rowLabels),
+                    args.inputType)
         rowNum += 1
     
     # Plot a histogram
