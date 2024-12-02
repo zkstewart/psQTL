@@ -29,8 +29,11 @@ def predict_deletions(binDict):
                     }
     Returns:
         alleles -- a numpy array with the same length as the input dictionary,
-                   where 0 indicates homozygous deletion, 1 indicates hemizygous
-                   deletion, and 2 indicates homozygous presence
+                   where the integer value indicates the number of allele copies
+                   present (assuming diploidy). For example, 0 indicates
+                   homozygous deletion, 1 indicates hemizygous deletion, and 2
+                   indicates homozygous presence. Increasing values correspond to
+                   increasing copy number.
     '''
     depths = np.array(list(binDict.values()))
     
@@ -38,14 +41,8 @@ def predict_deletions(binDict):
     medianDepth = get_median_value(depths)
     depths = depths / medianDepth
     
-    # Round to nearest 0.5
-    "If ploidy changes, this will need to be adjusted"
-    depths = np.round(depths * 2) / 2
-    
-    # Predict deletions and presence
-    hetero = np.where(depths == 0.5, 1, 0)
-    homoPresent = np.where(depths >= 1, 2, 0)
-    alleles = hetero + homoPresent
+    # Round to nearest number of alleles
+    alleles = np.round(depths * 2)
     
     # Return the results
     return alleles
@@ -57,19 +54,21 @@ def convert_alleles_to_gt(alleles):
     homozygous presence.
     
     Parameters:
-        alleles -- a numpy array where 0 indicates homozygous deletion,
-                   1 indicates heterozygous deletion, and 2 indicates
-                   homozygous presence
+        alleles -- a numpy array where the integer value indicates the number of
+                   allele copies present (assuming diploidy). For example, 0
+                   indicates homozygous deletion, 1 indicates hemizygous deletion,
+                   2 indicates homozygous presence, and increasing values correspond
+                   to increasing copy number.
     Returns:
         genotypes -- a list of strings with the same length as the input array,
-                     where each string is a VCF-encoded genotype where '0/0'
-                     indicates homozygous presence, '0/1' indicates heterozygous
-                     deletion, and '1/1' indicates homozygous deletion
+                     where each string is a VCF-encoded genotype where the
+                     summed value corresponds to the number of allele copies
+                     present (assuming diploidy). For example, "0/0" indicates
+                     0 copies, "0/1" indicates 1 copy, "1/1" indicates 2 copies,
+                     and so on.
     '''
     genotypes = [
-        "1/1" if allele == 0 # homozygous deletion
-        else "0/1" if allele == 1 # heterozygous deletion
-        else "0/0" # homozygous presence
+        f"{int(np.floor(allele/2))}/{int(np.ceil(allele/2))}"
         for allele in alleles
     ]
     return genotypes

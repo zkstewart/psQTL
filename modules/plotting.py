@@ -176,9 +176,6 @@ def histogram(axs, rowNum, edNCLS, regions, binSize, binThreshold, power, output
                        start, end, binSize, binThreshold)
         maxY = max(maxY, max(y))
     
-    # Figure out where we want to set the y limit with a bit of head room
-    
-    
     # Plot each region
     for colNum, (contigID, start, end) in enumerate(regions):
         y = bin_values(edNCLS.find_overlap(contigID, start, end),
@@ -383,8 +380,9 @@ def coverage(axs, rowNum, depthNCLSDict, regions, plotScalebar, linewidth=1):
         plotScalebar -- a boolean value indicating whether to plot a scalebar on the X axis
         linewidth -- OPTIONAL; an integer value indicating the width of the line plot (default=1)
     '''
-    MAX_Y = 2 # no need to show duplicated regions, just want to emphasise any deleted regions
     # Plot each region
+    minY = 0 # to set y limits at end
+    maxY = 0
     for colNum, (contigID, start, end) in enumerate(regions):
         # Plot each bulk
         for bulk, sampleDict in depthNCLSDict.items():
@@ -395,6 +393,8 @@ def coverage(axs, rowNum, depthNCLSDict, regions, plotScalebar, linewidth=1):
                 overlappingBins = list(edNCLS.find_overlap(contigID, start, end))
                 y = [ stat for _, _, stat in overlappingBins ]
                 bulkValues.append(y)
+                # Get the minimum Y value for this region
+                minY = min(minY, min(y))
             
             # Get the median and Q1/Q3 quantiles
             bulkValues = np.array(bulkValues)
@@ -410,10 +410,12 @@ def coverage(axs, rowNum, depthNCLSDict, regions, plotScalebar, linewidth=1):
                                      color="palevioletred" if bulk == "bulk1" else "mediumseagreen")
             axs[rowNum, colNum].fill_between(x, q1, q3, alpha = 0.5,
                                      color="palevioletred" if bulk == "bulk1" else "mediumseagreen")
+            
+            # Get the maximum Y value for this region
+            maxY = max(maxY, np.percentile(median, 90)) # 90th percentile to trim outliers
         
-        # Set limits
+        # Set xlim
         axs[rowNum, colNum].set_xlim(start, end)
-        axs[rowNum, colNum].set_ylim(0, MAX_Y)
         
         # Turn off ytick labels if not the first column
         if colNum > 0:
@@ -426,6 +428,10 @@ def coverage(axs, rowNum, depthNCLSDict, regions, plotScalebar, linewidth=1):
         else:
             axs[rowNum, colNum].set_xticklabels([])
             axs[rowNum, colNum].locator_params(axis='x', nbins=4) # use less ticks; avoid clutter
+    
+    # Set y limits
+    for colNum in range(len(regions)):
+        axs[rowNum, colNum].set_ylim(np.floor(minY), np.ceil(maxY))
 
 def scalebar(axs, rowNum, colNum, start, end):
     '''
