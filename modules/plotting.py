@@ -61,13 +61,13 @@ def bin_values(values, start, end, binSize, binThreshold):
         0 for _ in range(math.ceil((end - start + 1) / binSize))
     ])
     for pos, _, stat in values:
-        if stat >= binThreshold:
+        if abs(stat) >= binThreshold:
             binIndex = (pos-start) // binSize
             histo[binIndex] += 1
     return histo
 
 def linescatter(axs, rowNum, edNCLS, regions, wmaSize, line, scatter, 
-                power, outputDirectory, plotScalebar, fileSuffix,
+                outputDirectory, plotScalebar, fileSuffix,
                 linewidth=1, dotsize=3):
     '''
     Parameters:
@@ -79,8 +79,8 @@ def linescatter(axs, rowNum, edNCLS, regions, wmaSize, line, scatter,
                    during weighted moving average calculation
         line -- a boolean value indicating whether to plot a line
         scatter -- a boolean value indicating whether to plot scatter points
-        power -- an integer value indicating what power statistical values were raised to
-        outputDirectory -- a string indicating the directory to save the output TSV data
+        outputDirectory -- a string indicating the directory to save the output TSV data OR
+                           None if no output is desired
         plotScalebar -- a boolean value indicating whether to plot a scalebar on the X axis
         fileSuffix -- a string to append to the output file name
         linewidth -- OPTIONAL; an integer value indicating the width of the line plot (default=1)
@@ -140,26 +140,27 @@ def linescatter(axs, rowNum, edNCLS, regions, wmaSize, line, scatter,
             axs[rowNum, colNum].locator_params(axis='x', nbins=4) # use less ticks; avoid clutter
         
         # Derive our output file name for TSV data
-        fileOut = os.path.join(outputDirectory, f"{contigID}.{start}-{end}.{fileSuffix}_line.tsv")
-        if os.path.isfile(fileOut):
-            print(f"WARNING: Line/scatter plot data for '{contigID, start, end}' already exists as '{fileOut}'; won't overwrite")
-            continue
-        else:
-            with open(fileOut, "w") as fileOutTSV:
-                if line == True:
-                    fileOutTSV.write("contigID\tposition\ted\tsmoothed_ed\n")
-                    for xVal, yVal, smoothedYVal in zip(x, y, smoothedY):
-                        fileOutTSV.write(f"{contigID}\t{xVal}\t{yVal}\t{smoothedYVal}\n")
-                else:
-                    fileOutTSV.write("contigID\tposition\ted\n")
-                    for xVal, yVal in zip(x*1000000, y):
-                        fileOutTSV.write(f"{contigID}\t{xVal}\t{yVal}\n")
+        if outputDirectory != None:
+            fileOut = os.path.join(outputDirectory, f"{contigID}.{start}-{end}.{fileSuffix}_line.tsv")
+            if os.path.isfile(fileOut):
+                print(f"WARNING: Line/scatter plot data for '{contigID, start, end}' already exists as '{fileOut}'; won't overwrite")
+                continue
+            else:
+                with open(fileOut, "w") as fileOutTSV:
+                    if line == True:
+                        fileOutTSV.write("contigID\tposition\ted\tsmoothed_ed\n")
+                        for xVal, yVal, smoothedYVal in zip(x, y, smoothedY):
+                            fileOutTSV.write(f"{contigID}\t{xVal}\t{yVal}\t{smoothedYVal}\n")
+                    else:
+                        fileOutTSV.write("contigID\tposition\ted\n")
+                        for xVal, yVal in zip(x*1000000, y):
+                            fileOutTSV.write(f"{contigID}\t{xVal}\t{yVal}\n")
     
     # Set y limits
     for colNum in range(len(regions)):
         axs[rowNum, colNum].set_ylim(0, maxY + (maxY * YLIM_HEADSPACE))
 
-def histogram(axs, rowNum, edNCLS, regions, binSize, binThreshold, power, outputDirectory, plotScalebar):
+def histogram(axs, rowNum, edNCLS, regions, binSize, binThreshold, outputDirectory, plotScalebar):
     '''
     Parameters:
         axs -- a list of matplotlib.pyplot Axes objects to plot to
@@ -169,8 +170,8 @@ def histogram(axs, rowNum, edNCLS, regions, binSize, binThreshold, power, output
         binSize -- an integer value indicating the size of the bins/windows
         binThreshold -- an integer value indicating the threshold for counting a variant
                         within a bin/window
-        power -- an integer value indicating what power statistical values were raised to
-        outputDirectory -- a string indicating the directory to save the output TSV data
+        outputDirectory -- a string indicating the directory to save the output TSV data OR
+                           None if no output is desired
         plotScalebar -- a boolean value indicating whether to plot a scalebar on the X axis
     '''
     # Get the maximum Y value across all regions
@@ -206,17 +207,18 @@ def histogram(axs, rowNum, edNCLS, regions, binSize, binThreshold, power, output
             axs[rowNum, colNum].locator_params(axis='x', nbins=4) # use less ticks; avoid clutter
         
         # Derive our output file name for TSV data
-        fileOut = os.path.join(outputDirectory, f"{contigID}.{start}-{end}.histo.tsv")
-        if os.path.isfile(fileOut):
-            print(f"WARNING: Histogram plot data for '{contigID, start, end}' already exists as '{fileOut}'; won't overwrite")
-            continue
-        else:
-            with open(fileOut, "w") as fileOutTSV:
-                fileOutTSV.write(f"contigID\twindow_num\twindow_start\tnum_variants >= {binThreshold}\n")
-                for xVal, yVal in zip(x, y):
-                    fileOutTSV.write(f"{contigID}\t{xVal}\t{(xVal * binSize) + start}\t{yVal}\n")
+        if outputDirectory != None:
+            fileOut = os.path.join(outputDirectory, f"{contigID}.{start}-{end}.histo.tsv")
+            if os.path.isfile(fileOut):
+                print(f"WARNING: Histogram plot data for '{contigID, start, end}' already exists as '{fileOut}'; won't overwrite")
+                continue
+            else:
+                with open(fileOut, "w") as fileOutTSV:
+                    fileOutTSV.write(f"contigID\twindow_num\twindow_start\tnum_variants >= {binThreshold}\n")
+                    for xVal, yVal in zip(x, y):
+                        fileOutTSV.write(f"{contigID}\t{xVal}\t{(xVal * binSize) + start}\t{yVal}\n")
 
-def genes(fig, axs, rowNum, gff3Obj, regions, power, plotScalebar):
+def genes(fig, axs, rowNum, gff3Obj, regions, plotScalebar):
     '''
     Parameters:
         fig -- the matplotlib.pyplot Figure object that axes correspond to
@@ -224,8 +226,6 @@ def genes(fig, axs, rowNum, gff3Obj, regions, power, plotScalebar):
         rowNum -- an integer value indicating the row index to plot to
         gff3Obj -- a GFF3 class object from gff3.py in this repository
         regions -- a list of lists containing three values: [contigID, start, end]
-        
-        power -- an integer value indicating what power statistical values were raised to
         plotScalebar -- a boolean value indicating whether to plot a scalebar on the X axis
     Returns:
         genePltList -- a list of matplotlib.pyplot objects containing the genes plot data

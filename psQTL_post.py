@@ -430,14 +430,14 @@ def pmain(args, edNCLS, lengthsDict):
         linescatter(axs, rowNum, edNCLS, args.regions, args.wmaSize,
                     True if "line" in args.plotTypes else False,
                     True if "scatter" in args.plotTypes else False,
-                    args.power, PLOT_DIR, rowNum+1 == len(rowLabels),
+                    PLOT_DIR, rowNum+1 == len(rowLabels),
                     args.inputType)
         rowNum += 1
     
     # Plot a histogram
     if "histogram" in args.plotTypes:
         histogram(axs, rowNum, edNCLS, args.regions, args.binSize, args.binThreshold,
-                  args.power, PLOT_DIR, rowNum+1 == len(rowLabels))
+                  PLOT_DIR, rowNum+1 == len(rowLabels))
         rowNum += 1
     
     # Plot coverage data
@@ -455,7 +455,7 @@ def pmain(args, edNCLS, lengthsDict):
     # Plot gene locations
     if "genes" in args.plotTypes:
         genes(fig, axs, rowNum, args.gff3Obj, args.regions,
-              args.power, rowNum+1 == len(rowLabels))
+              rowNum+1 == len(rowLabels))
         rowNum += 1
     
     # Write plot to file
