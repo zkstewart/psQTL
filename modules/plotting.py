@@ -4,10 +4,13 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 from matplotlib.patches import Rectangle
+from itertools import product
 
 from .gff3 import GFF3
 
 YLIM_HEADSPACE = 0.1 # proportion of ylim to add to the top of the plot
+SAMPLE_AESTHETICS = [["#000000", "dotted"], ["#002D7E", "dashed"], ["#ECE45A", "dashdot"]]
+NUM_SAMPLE_LINES = len(SAMPLE_AESTHETICS) # for validation
 
 def WMA(s, period):
     """
@@ -363,7 +366,7 @@ def genes(fig, axs, rowNum, gff3Obj, regions, power, plotScalebar):
     # Set ylim to the maximum number of lanes
     axs[rowNum, colNum].set_ylim(0, len(lanes)+SPACING)
 
-def coverage(axs, rowNum, depthNCLSDict, regions, plotScalebar, linewidth=1):
+def coverage(axs, rowNum, depthNCLSDict, regions, samples, plotScalebar, linewidth=1):
     '''
     Parameters:
         axs -- a list of matplotlib.pyplot Axes objects to plot to
@@ -378,6 +381,8 @@ def coverage(axs, rowNum, depthNCLSDict, regions, plotScalebar, linewidth=1):
                              "bulk2": { ... }
                          }
         regions -- a list of lists containing three values: [contigID, start, end]
+        samples -- a list of strings indicating the sample names to plot individual
+                   lines for
         plotScalebar -- a boolean value indicating whether to plot a scalebar on the X axis
         linewidth -- OPTIONAL; an integer value indicating the width of the line plot (default=1)
     '''
@@ -414,6 +419,23 @@ def coverage(axs, rowNum, depthNCLSDict, regions, plotScalebar, linewidth=1):
             
             # Get the maximum Y value for this region
             maxY = max(maxY, np.percentile(median, 90)) # 90th percentile to trim outliers
+        
+        # Plot individual samples
+        for sampleIndex, sample in enumerate(samples):
+            # Get values within this region
+            "x can be reused from the bulk plot"
+            sampleEdNCLS = depthNCLSDict["bulk1"][sample] \
+                           if sample in depthNCLSDict["bulk1"] \
+                           else depthNCLSDict["bulk2"][sample]
+            y = [ stat for _, _, stat in sampleEdNCLS.find_overlap(contigID, start, end) ]
+            
+            # Get the line colour and type
+            lineColour, lineType = SAMPLE_AESTHETICS[sampleIndex]
+            
+            # Plot the line
+            axs[rowNum, colNum].plot(x, y, color=lineColour,
+                                    linestyle=lineType,
+                                    linewidth=linewidth)
         
         # Set xlim
         axs[rowNum, colNum].set_xlim(start, end)

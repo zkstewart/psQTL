@@ -15,7 +15,7 @@ from modules.parameters import ParameterCache
 from modules.parsing import parse_metadata
 from modules.depth import parse_bins_as_dict, normalise_coverage_dict, convert_dict_to_depthncls
 from modules.ed import parse_ed_as_dict, convert_dict_to_edncls
-from modules.plotting import linescatter, histogram, genes, coverage, scalebar
+from modules.plotting import linescatter, histogram, genes, coverage, scalebar, NUM_SAMPLE_LINES
 from modules.gff3 import GFF3
 
 def validate_args(args):
@@ -138,6 +138,14 @@ def validate_p(args):
     if "histogram" in args.plotTypes and args.inputType == "depth":
         raise ValueError(f"Cannot plot histogram for -i depth data!")
     
+    # Validate samples for coverage plot
+    if "coverage" in args.plotTypes:
+        for sampleID in args.sampleCoverage:
+            if not sampleID in args.metadataDict["bulk1"] + args.metadataDict["bulk2"]:
+                raise ValueError(f"Sample '{sampleID}' specified in --sampleCoverage not found in metadata!")
+        if len(args.sampleCoverage) > NUM_SAMPLE_LINES:
+            raise ValueError(f"Cannot plot more than {NUM_SAMPLE_LINES} samples using --sampleCoverage for clarity")
+    
     # Validate output file suffix
     if not args.outputFileName.endswith(".pdf") and not args.outputFileName.endswith(".png"):
         raise ValueError(f"-o output file '{args.outputFileName}' must end with '.pdf' or '.png'!")
@@ -247,6 +255,12 @@ def main():
                          distance threshold for counting a variant within each bin
                          (default: 0.4)""",
                          default=0.4)
+    pparser.add_argument("--sampleCoverage", dest="sampleCoverage",
+                         required=False,
+                         nargs="+",
+                         help="""COVERAGE PLOT: Optionally, specify one or more samples
+                         to plot coverage data as individual lines""",
+                         default=[])
     ## Style arguments
     pparser.add_argument("--width", dest="width",
                          type=int,
@@ -435,7 +449,7 @@ def pmain(args, edNCLS, lengthsDict):
         
         # Plot the parsed data
         coverage(axs, rowNum, depthNCLSDict, args.regions,
-                 rowNum+1 == len(rowLabels))
+                 args.sampleCoverage, rowNum+1 == len(rowLabels))
         rowNum += 1
     
     # Plot gene locations

@@ -196,6 +196,7 @@ Lastly, it allows one to flexibly produce various plot types including:
   - The `--threshold` option controls what ED value is considered to be *highly segregating* for counting in bin regions.
 - Coverage plot
   - The coverage plot helps to reveal how each bulk's read depth varies across the genome. Specifically, it might show where deletions occur in one bulk but not the other.
+  - The `--sampleCoverage` option lets you plot one or more samples as individual lines in the coverage plot. This might help you to see what the parent(s) of your segregating phenotypes look like when it comes to copy number variants or deletions.
 - Gene plot
   - The gene plot shows the location of gene models within plotted regions. It may help to identify which genes occur in regions where segregation statistics peak or trough.
   - The `--annotation` option lets you input a GFF3 file containing annotations which will be parsed and presented.
