@@ -391,7 +391,8 @@ def coverage(axs, rowNum, depthNCLSDict, regions, samples, plotScalebar, linewid
     maxY = 0
     for colNum, (contigID, start, end) in enumerate(regions):
         # Plot each bulk
-        for bulk, sampleDict in depthNCLSDict.items():
+        for bulk in ["bulk1", "bulk2"]:
+            sampleDict = depthNCLSDict[bulk]
             # Get the average and upper/lower quantiles of each bulk's coverage values
             bulkValues = []
             for sample, edNCLS in sampleDict.items():
@@ -415,7 +416,8 @@ def coverage(axs, rowNum, depthNCLSDict, regions, samples, plotScalebar, linewid
             axs[rowNum, colNum].plot(x, median, linewidth=linewidth,
                                      color="palevioletred" if bulk == "bulk1" else "mediumseagreen")
             axs[rowNum, colNum].fill_between(x, q1, q3, alpha = 0.5,
-                                     color="palevioletred" if bulk == "bulk1" else "mediumseagreen")
+                                     color="palevioletred" if bulk == "bulk1" else "mediumseagreen",
+                                     label="_nolegend_")
             
             # Get the maximum Y value for this region
             maxY = max(maxY, np.percentile(median, 90)) # 90th percentile to trim outliers
@@ -455,6 +457,13 @@ def coverage(axs, rowNum, depthNCLSDict, regions, samples, plotScalebar, linewid
     # Set y limits
     for colNum in range(len(regions)):
         axs[rowNum, colNum].set_ylim(np.floor(minY), np.ceil(maxY))
+    
+    # Set legend
+    legendLabels = ["bulk1", "bulk2"] + samples # samples can be []
+    axs[rowNum, colNum].legend(legendLabels, # colNum is the last column
+                          loc="center left",
+                          bbox_to_anchor=(1, 0.5),
+                          ncol=1)
 
 def scalebar(axs, rowNum, colNum, start, end):
     '''
