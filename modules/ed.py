@@ -38,7 +38,8 @@ class EDNCLS:
         '''
         Parameters:
             chrom -- a string indicating the chromosome name
-            start -- an integer indicating the start position of the query
+            start -- an integer indicating the start position of the query; if negative, will
+                     be set to 0 to prevent weird NCLS bug(?)
             end -- an integer indicating the end position of the query
         Returns:
             results -- an iterator of tuples containing the start position, end position, and ED value
@@ -47,7 +48,7 @@ class EDNCLS:
             raise ValueError(f"Chromosome '{chrom}' does not exist in this EDNCLS object")
         return (
             (windowStart, windowEnd, self.values[chrom][valueIndex])
-            for windowStart, windowEnd, valueIndex in self.ncls[chrom].find_overlap(start, end)
+            for windowStart, windowEnd, valueIndex in self.ncls[chrom].find_overlap(start if start >= 0 else 0, end)
         )
     
     def find_all(self, chrom):

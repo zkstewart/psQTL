@@ -16,6 +16,7 @@ from modules.parsing import parse_metadata
 from modules.depth import parse_bins_as_dict, normalise_coverage_dict, convert_dict_to_depthncls
 from modules.ed import parse_ed_as_dict, convert_dict_to_edncls
 from modules.plotting import linescatter, histogram, genes, coverage, scalebar, NUM_SAMPLE_LINES
+from modules.reporting import report_genes, report_depth
 from modules.gff3 import GFF3
 
 def validate_args(args):
@@ -152,8 +153,59 @@ def validate_p(args):
 
 def validate_r(args):
     # Validate numeric arguments
-    if args.radiusSize < 1:
-        raise ValueError(f"--radius value '{args.radiusSize}' must be >= 1!")
+    if args.radiusSize < 0:
+        raise ValueError(f"--radius value '{args.radiusSize}' must be >= 0!")
+    
+    # Validate output file suffix
+    if not args.outputFileName.endswith(".tsv") and not args.outputFileName.endswith(".csv"):
+        raise ValueError(f"-o output file '{args.outputFileName}' must end with '.tsv' or '.csv'!")
+
+def derive_window_size(args, edDict):
+    windowSize = None
+    if args.inputType == "depth":
+        # Derive window size from dictionary
+        for key, posEDpairs in edDict.items():
+            if len(posEDpairs[0]) > 1:
+                windowSize = posEDpairs[0][1] - posEDpairs[0][0]
+                break
+        if windowSize != None:
+            print(f"# Window size detected as {windowSize} bp from parsing of Euclidean distance file")
+    if windowSize == None:
+        if "coverage" in args.plotTypes:
+            if args.windowSize != None:
+                print(f"# Window size specified as {args.windowSize} in cached parameters")
+                windowSize = args.windowSize
+            else:
+                raise ValueError("Could not determine window size from Euclidean distance file or cached parameters!")
+        else:
+            windowSize = 0
+    args.windowSize = windowSize
+
+def raise_to_power(edDict, power):
+    if power > 1:
+        for key, posEDpairs in edDict.items():
+            for i in range(len(posEDpairs[1])):
+                posEDpairs[1][i] = posEDpairs[1][i] ** power
+
+def locate_depth_files(args):
+    DEPTH_DIR = os.path.join(args.workingDirectory, "depth")
+    if not os.path.exists(DEPTH_DIR):
+        raise FileNotFoundError(f"Depth directory '{DEPTH_DIR}' does not exist!")
+    
+    # Locate and validate depth files
+    notFound = []
+    depthFileDict = {"bulk1": [], "bulk2": []}
+    for bulk, sampleList in args.metadataDict.items():
+        for sample in sampleList:
+            depthFile = os.path.join(DEPTH_DIR, f"{sample}.binned.{args.windowSize}.tsv")
+            if not os.path.isfile(depthFile):
+                notFound.append(sample)
+            else:
+                depthFileDict[bulk].append([sample, depthFile])
+    if notFound != []: # for testing and development
+        raise FileNotFoundError(f"Could not find depth files with bin size of {args.windowSize} " +
+                                f"for samples: {', '.join(notFound)}")
+    return depthFileDict
 
 def main():
     usage = """%(prog)s processes the output of psQTL_proc.py to either 1) plot segregation
@@ -180,7 +232,8 @@ def main():
                    from variant 'call's or 'depth' predictions of deleted regions""")
     p.add_argument("-o", dest="outputFileName",
                    required=True,
-                   help="Specify the location to write the output file")
+                   help="""Specify the location to write the output file; for 'plot', this must
+                   end with '.pdf' or '.png'; for 'report', this must end with '.tsv' or '.csv'""")
     p.add_argument("--power", dest="power",
                    required=False,
                    type=int,
@@ -317,33 +370,11 @@ def main():
             pickle.dump(edDict, fileOut)
     
     # Obtain window size
-    "Need to know if handling depth data or if plotting coverage"
-    windowSize = None
-    if args.inputType == "depth":
-        # Derive window size from dictionary
-        for key, posEDpairs in edDict.items():
-            if len(posEDpairs[0]) > 1:
-                windowSize = posEDpairs[0][1] - posEDpairs[0][0]
-                break
-        if windowSize != None:
-            print(f"# Window size detected as {windowSize} bp from parsing of Euclidean distance file")
-    if windowSize == None:
-        if "coverage" in args.plotTypes:
-            if args.windowSize != None:
-                print(f"# Window size specified as {args.windowSize} in cached parameters")
-                windowSize = args.windowSize
-            else:
-                raise ValueError("Could not determine window size from Euclidean distance file or cached parameters!")
-        else:
-            windowSize = 0
-    args.windowSize = windowSize
+    derive_window_size(args, edDict)
     
     # Raise Euclidean distances to the power specified by the user
     "Raising to power after pickling lets us reuse the pickled data with different power values"
-    if args.power > 1:
-        for key, posEDpairs in edDict.items():
-            for i in range(len(posEDpairs[1])):
-                posEDpairs[1][i] = posEDpairs[1][i] ** args.power
+    raise_to_power(edDict, args.power)
     
     # Convert dictionary to Euclidean distance NCLS data structure
     "EDNCLS cannot be pickled so we need to do it like file->dict->EDNCLS"
@@ -370,24 +401,7 @@ def pmain(args, edNCLS, lengthsDict):
     
     # Locate depth files if necessary
     if "coverage" in args.plotTypes:
-        # Validate depth directory
-        DEPTH_DIR = os.path.join(args.workingDirectory, "depth")
-        if not os.path.exists(DEPTH_DIR):
-            raise FileNotFoundError(f"Depth directory '{DEPTH_DIR}' does not exist!")
-        
-        # Locate and validate depth files
-        notFound = []
-        depthFileDict = {"bulk1": [], "bulk2": []}
-        for bulk, sampleList in args.metadataDict.items():
-            for sample in sampleList:
-                depthFile = os.path.join(DEPTH_DIR, f"{sample}.binned.{args.windowSize}.tsv")
-                if not os.path.isfile(depthFile):
-                    notFound.append(sample)
-                else:
-                    depthFileDict[bulk].append([sample, depthFile])
-        if notFound != []: # for testing and development
-            raise FileNotFoundError(f"Could not find depth files with bin size of {args.windowSize} " +
-                                    f"for samples: {', '.join(notFound)}")
+        depthFileDict = locate_depth_files(args)
     else:
         depthFileDict = None
     
@@ -464,8 +478,10 @@ def pmain(args, edNCLS, lengthsDict):
     print("Plotting complete!")
 
 def rmain(args, edNCLS):
-    REPORT_DIR = os.path.join(args.workingDirectory, "reports")
-    os.makedirs(REPORT_DIR, exist_ok=True)
+    if args.inputType == "depth":
+        report_depth(edNCLS, gff3Obj, args.regions, args.outputFileName, args.radiusSize)
+    else:
+        report_genes(edNCLS, args.gff3Obj, args.regions, args.outputFileName, args.radiusSize)
     
     print("Reporting complete!")
 
