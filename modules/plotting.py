@@ -158,7 +158,10 @@ def linescatter(axs, rowNum, edNCLS, regions, wmaSize, line, scatter,
     
     # Set y limits
     for colNum in range(len(regions)):
-        axs[rowNum, colNum].set_ylim(0, maxY + (maxY * YLIM_HEADSPACE))
+        if maxY == 0:
+            axs[rowNum, colNum].set_ylim(0, 1)
+        else:
+            axs[rowNum, colNum].set_ylim(0, maxY + (maxY * YLIM_HEADSPACE))
 
 def histogram(axs, rowNum, edNCLS, regions, binSize, binThreshold, outputDirectory, plotScalebar):
     '''
@@ -189,7 +192,10 @@ def histogram(axs, rowNum, edNCLS, regions, binSize, binThreshold, outputDirecto
         
         # Set limits
         axs[rowNum, colNum].set_xlim(start, end)
-        axs[rowNum, colNum].set_ylim(0, maxY + (maxY * YLIM_HEADSPACE))
+        if maxY == 0:
+            axs[rowNum, colNum].set_ylim(0, 1)
+        else:
+            axs[rowNum, colNum].set_ylim(0, maxY + (maxY * YLIM_HEADSPACE))
         
         # Turn off ytick labels if not the first column
         if colNum > 0:
@@ -341,7 +347,8 @@ def genes(fig, axs, rowNum, gff3Obj, regions, plotScalebar):
             # Plot gene name
             geneName = mrnaFeature.ID
             textBox = axs[rowNum, colNum].text(
-                mrnaFeature.end + ARROW_SIZE, # x position
+                mrnaFeature.end + ARROW_SIZE if mrnaFeature.end < end # x position
+                    else end + ARROW_SIZE, # prevent text from going off the plot
                 laneNum + SPACING + (1-SPACING)/2, # y position
                 geneName, # text
                 horizontalalignment="left", verticalalignment="center", # alignment
@@ -364,7 +371,10 @@ def genes(fig, axs, rowNum, gff3Obj, regions, plotScalebar):
             axs[rowNum, colNum].locator_params(axis='x', nbins=4) # use less ticks; avoid clutter
     
     # Set ylim to the maximum number of lanes
-    axs[rowNum, colNum].set_ylim(0, len(lanes)+SPACING)
+    if len(lanes) == 0:
+        axs[rowNum, colNum].set_ylim(0, 1)
+    else:
+        axs[rowNum, colNum].set_ylim(0, len(lanes)+SPACING)
 
 def coverage(axs, rowNum, depthNCLSDict, regions, samples, plotScalebar, linewidth=1):
     '''
@@ -456,7 +466,10 @@ def coverage(axs, rowNum, depthNCLSDict, regions, samples, plotScalebar, linewid
     
     # Set y limits
     for colNum in range(len(regions)):
-        axs[rowNum, colNum].set_ylim(np.floor(minY), np.ceil(maxY))
+        if np.floor(minY) == np.ceil(maxY):
+            axs[rowNum, colNum].set_ylim(0, 1)
+        else:
+            axs[rowNum, colNum].set_ylim(np.floor(minY), np.ceil(maxY))
     
     # Set legend
     legendLabels = ["bulk1", "bulk2"] + samples # samples can be []
