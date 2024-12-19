@@ -212,9 +212,9 @@ def pmain(args, deltaNCLS, lengthsDict):
     
     # Get our labels for the plots
     rowLabels = [
-        f"Delta SNP-index" if "scatter" in args.plotTypes or "line" in args.plotTypes else None,
-        f"Num. variants with absolute delta ≥ {args.binThreshold}\n" + \
-            f"in {args.binSize} bp windows" if "histogram" in args.plotTypes else None,
+        f"ΔSNP-index" if "scatter" in args.plotTypes or "line" in args.plotTypes else None,
+        f"Num. variants with abs. ΔSNP-index\n" + \
+            f"≥ {args.binThreshold} in {args.binSize} bp windows" if "histogram" in args.plotTypes else None,
         "Representative models" if "genes" in args.plotTypes else None
     ]
     rowLabels = [label for label in rowLabels if label != None]
