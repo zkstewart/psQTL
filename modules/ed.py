@@ -45,7 +45,7 @@ class EDNCLS:
             results -- an iterator of tuples containing the start position, end position, and ED value
         '''
         if not chrom in self.ncls:
-            raise ValueError(f"Chromosome '{chrom}' does not exist in this EDNCLS object")
+            raise KeyError(f"Chromosome '{chrom}' does not exist in this EDNCLS object")
         return (
             (windowStart, windowEnd, self.values[chrom][valueIndex])
             for windowStart, windowEnd, valueIndex in self.ncls[chrom].find_overlap(start if start >= 0 else 0, end)
@@ -59,7 +59,7 @@ class EDNCLS:
             results -- an iterator of tuples containing the start position, end position, and ED value
         '''
         if not chrom in self.ncls:
-            raise ValueError(f"Chromosome '{chrom}' does not exist in this EDNCLS object")
+            raise KeyError(f"Chromosome '{chrom}' does not exist in this EDNCLS object")
         return (
             (windowStart, windowEnd, self.values[chrom][valueIndex])
             for windowStart, windowEnd, valueIndex in self.find_overlap(chrom, 0, self.longestContig+1)
@@ -115,7 +115,7 @@ def calculate_snp_ed(b1Gt, b2Gt):
     
     # Calculate the Euclidean distance between the two bulks if possible
     if numAllelesB1 == 0 and numAllelesB2 == 0:
-        return numAllelesB1, numAllelesB2, "." # euclidean distance is null
+        return numAllelesB1, numAllelesB2, 0 # euclidean distance cannot be calculated
     elif numAllelesB1 == 0 or numAllelesB2 == 0:
         return numAllelesB1, numAllelesB2, 1 # euclidean distance is 1
     else:
@@ -148,16 +148,30 @@ def parse_vcf_for_ed(vcfFile, metadataDict, ignoreIdentical=False):
         numAllelesB2 -- the number of genotyped alleles in bulk 2
         euclideanDist -- the Euclidean distance between the two bulks
     '''
+    samples = None
     with read_gz_file(vcfFile) as fileIn:
         for line in fileIn:
-            sl = line.rstrip("\r\n").replace('"', '').split("\t") # remove quotations to help with files opened by Excel
+            l = line.strip('\r\n\t "') # remove quotations to help with files opened by Excel
+            sl = l.replace('"', '').split("\t") # remove any remaining quotations
+            
+            # Skip blank lines
+            if l == "":
+                continue
             
             # Handle header line
-            if line.startswith("#CHROM"):
+            if l.startswith("#CHROM"):
                 samples = sl[9:] # This gives us the ordered sample IDs
                 vcf_header_to_metadata_validation(samples, metadataDict, strict=False)
-            if line.startswith("#"):
+            if l.startswith("#"):
                 continue
+            
+            # Validate line length
+            if len(sl) < 11: # 9 fixed columns + minimum 2 genotype columns
+                raise ValueError(f"VCF file has too few columns; offending line is '{l}'")
+            
+            # Validate that we've seen the header line
+            if samples == None:
+                raise ValueError("VCF file does not contain a #CHROM header line; cannot parse!")
             
             # Extract relevant details from line
             contig = sl[0]
@@ -178,7 +192,7 @@ def parse_vcf_for_ed(vcfFile, metadataDict, ignoreIdentical=False):
             # Figure out what type of variant this is
             if any([ x == "." for x in ref_alt ]):
                 variant = "indel"
-            elif all([ x == "N" for x in ref_alt ]):
+            elif all([ x == "N" for x in ref_alt ]): # for parsing deletion VCF-like files
                 variant = "indel"
             elif any([ len(ref_alt[0]) != len(ref_alt[x]) for x in range(1, len(ref_alt))]):
                 variant = "indel"
@@ -212,7 +226,7 @@ def parse_ed_as_dict(edFile, metadataDict, missingFilter=0.5):
                         {
                             "bulk1": set([ "sample1", "sample2", ... ]),
                             "bulk2": set([ "sample3", "sample4", ... ])
-                        }
+                        } OR None if no filtering is desired
         missingFilter -- OPTIONAL; a float indicating the maximum allowed missing data
                          calculated for each bulk
     Returns:
@@ -225,14 +239,22 @@ def parse_ed_as_dict(edFile, metadataDict, missingFilter=0.5):
     '''
     HEADER = ["CHROM", "POSI", "variant", "bulk1_alleles", "bulk2_alleles", "euclideanDist"]
     
-    # Calculate how many alleles in each bulk
-    BULK1_ALLELES = len(metadataDict["bulk1"]) * 2
-    BULK2_ALLELES = len(metadataDict["bulk2"]) * 2
+    # Make sure the metadata is valid if missingFilter is > 0
+    if missingFilter > 0:
+        if metadataDict == None:
+            raise ValueError("Cannot filter for missing data without metadata")
+        if not all([ x in metadataDict for x in ["bulk1", "bulk2"] ]):
+            raise ValueError("Metadata dictionary must contain keys 'bulk1' and 'bulk2'")
     
-    # Alert user to number of samples needed to pass filtration in each bulk
-    print(f"# Filtering for missing data: up to {missingFilter*100}% missing data allowed in each bulk")
-    print(f"# For bulk 1: {BULK1_ALLELES} alleles are possible; {ceil(BULK1_ALLELES * missingFilter)} needed to pass")
-    print(f"# For bulk 2: {BULK2_ALLELES} alleles are possible; {ceil(BULK2_ALLELES * missingFilter)} needed to pass")
+    # Calculate how many alleles in each bulk
+    if metadataDict != None:
+        BULK1_ALLELES = len(metadataDict["bulk1"]) * 2
+        BULK2_ALLELES = len(metadataDict["bulk2"]) * 2
+        
+        # Alert user to number of samples needed to pass filtration in each bulk
+        print(f"# Filtering for missing data: up to {missingFilter*100}% missing data allowed in each bulk")
+        print(f"# For bulk 1: {BULK1_ALLELES} alleles are possible; {ceil(BULK1_ALLELES * missingFilter)} needed to pass")
+        print(f"# For bulk 2: {BULK2_ALLELES} alleles are possible; {ceil(BULK2_ALLELES * missingFilter)} needed to pass")
     
     # Parse the ED file
     edDict = {}
@@ -265,8 +287,9 @@ def parse_ed_as_dict(edFile, metadataDict, missingFilter=0.5):
                                      f"offending line is '{line}'")
                 
                 # Skip if missing data exceeds threshold
-                if (bulk1_alleles / BULK1_ALLELES) < missingFilter or (bulk2_alleles / BULK2_ALLELES) < missingFilter:
-                    continue
+                if metadataDict != None:
+                    if (bulk1_alleles / BULK1_ALLELES) < missingFilter or (bulk2_alleles / BULK2_ALLELES) < missingFilter:
+                        continue
                 
                 # Store in dictionary
                 edDict.setdefault(chrom, [[], []])

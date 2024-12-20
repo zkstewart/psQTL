@@ -105,14 +105,8 @@ def linescatter(axs, rowNum, edNCLS, regions, wmaSize, line, scatter,
         if line == True:
             smoothedY = WMA(y, wmaSize)
             if smoothedY is None:
-                print(f"WARNING: '{contigID, start, end}' has too few data points to apply WMA smoothing")
+                print(f"WARNING: region '{contigID, start, end}' has too few data points to apply WMA smoothing")
                 smoothedY = y
-        
-        # Get the maximum Y value for this region
-        if scatter == True:
-            maxY = max(maxY, max(y))
-        else:
-            maxY = max(maxY, max(smoothedY))
         
         # Set xlim
         axs[rowNum, colNum].set_xlim(start, end)
@@ -139,11 +133,19 @@ def linescatter(axs, rowNum, edNCLS, regions, wmaSize, line, scatter,
             axs[rowNum, colNum].set_xticklabels([])
             axs[rowNum, colNum].locator_params(axis='x', nbins=4) # use less ticks; avoid clutter
         
+        # Get the maximum Y value for this region
+        if scatter == True:
+            if y.size != 0:
+                maxY = max(maxY, max(y))
+        else:
+            if smoothedY.size != 0:
+                maxY = max(maxY, max(smoothedY))
+        
         # Derive our output file name for TSV data
         if outputDirectory != None:
             fileOut = os.path.join(outputDirectory, f"{contigID}.{start}-{end}.{fileSuffix}_line.tsv")
             if os.path.isfile(fileOut):
-                print(f"WARNING: Line/scatter plot data for '{contigID, start, end}' already exists as '{fileOut}'; won't overwrite")
+                print(f"WARNING: Line/scatter plot data for region '{contigID, start, end}' already exists as '{fileOut}'; won't overwrite")
                 continue
             else:
                 with open(fileOut, "w") as fileOutTSV:
@@ -182,7 +184,8 @@ def histogram(axs, rowNum, edNCLS, regions, binSize, binThreshold, outputDirecto
     for contigID, start, end in regions:
         y = bin_values(edNCLS.find_overlap(contigID, start, end),
                        start, end, binSize, binThreshold)
-        maxY = max(maxY, max(y))
+        if y.size != 0:
+            maxY = max(maxY, max(y))
     
     # Plot each region
     for colNum, (contigID, start, end) in enumerate(regions):
@@ -216,13 +219,14 @@ def histogram(axs, rowNum, edNCLS, regions, binSize, binThreshold, outputDirecto
         if outputDirectory != None:
             fileOut = os.path.join(outputDirectory, f"{contigID}.{start}-{end}.histo.tsv")
             if os.path.isfile(fileOut):
-                print(f"WARNING: Histogram plot data for '{contigID, start, end}' already exists as '{fileOut}'; won't overwrite")
+                print(f"WARNING: Histogram plot data for region '{contigID, start, end}' already exists as '{fileOut}'; won't overwrite")
                 continue
             else:
                 with open(fileOut, "w") as fileOutTSV:
-                    fileOutTSV.write(f"contigID\twindow_num\twindow_start\tnum_variants >= {binThreshold}\n")
+                    fileOutTSV.write(f"contigID\twindow_start\twindow_end\tnum_variants >= {binThreshold}\n")
                     for xVal, yVal in zip(x, y):
-                        fileOutTSV.write(f"{contigID}\t{xVal}\t{(xVal * binSize) + start}\t{yVal}\n")
+                        windowEnd = xVal + binSize if xVal + binSize < end else end
+                        fileOutTSV.write(f"{contigID}\t{xVal}\t{windowEnd-1}\t{yVal}\n")
 
 def genes(fig, axs, rowNum, gff3Obj, regions, plotScalebar):
     '''
@@ -403,6 +407,7 @@ def coverage(axs, rowNum, depthNCLSDict, regions, samples, plotScalebar, linewid
         # Plot each bulk
         for bulk in ["bulk1", "bulk2"]:
             sampleDict = depthNCLSDict[bulk]
+            
             # Get the average and upper/lower quantiles of each bulk's coverage values
             bulkValues = []
             for sample, edNCLS in sampleDict.items():
@@ -411,10 +416,16 @@ def coverage(axs, rowNum, depthNCLSDict, regions, samples, plotScalebar, linewid
                 y = [ stat for _, _, stat in overlappingBins ]
                 bulkValues.append(y)
                 # Get the minimum Y value for this region
-                minY = min(minY, min(y))
+                if len(y) > 0:
+                    minY = min(minY, min(y))
+            bulkValues = np.array(bulkValues)
+            
+            # Skip if there are no values
+            if bulkValues.size == 0:
+                print(f"WARNING: No coverage values found for region '{contigID, start, end}'")
+                continue
             
             # Get the median and Q1/Q3 quantiles
-            bulkValues = np.array(bulkValues)
             q1, median, q3 = np.percentile(bulkValues, [25, 50, 75], axis=0)
             
             # Figure out the x values
@@ -422,9 +433,16 @@ def coverage(axs, rowNum, depthNCLSDict, regions, samples, plotScalebar, linewid
             for index, (windowStart, windowEnd, _) in enumerate(overlappingBins):
                 x.append(windowStart + (windowEnd - windowStart+1)/2)
             
+            # Extend tails for better visualisation
+            x = np.concatenate(([start], x, [end]))
+            median = np.concatenate(([median[0]], median, [median[-1]]))
+            q1 = np.concatenate(([q1[0]], q1, [q1[-1]]))
+            q3 = np.concatenate(([q3[0]], q3, [q3[-1]]))
+            
             # Plot median and Q1/Q3 lines
             axs[rowNum, colNum].plot(x, median, linewidth=linewidth,
                                      color="palevioletred" if bulk == "bulk1" else "mediumseagreen")
+            
             axs[rowNum, colNum].fill_between(x, q1, q3, alpha = 0.5,
                                      color="palevioletred" if bulk == "bulk1" else "mediumseagreen",
                                      label="_nolegend_")

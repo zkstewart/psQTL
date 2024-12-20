@@ -56,11 +56,12 @@ def report_genes(edNCLS, gff3Obj, regions, outputFileName, radiusSize=50000):
                     ]
                     adjacent.sort(key=lambda x: x[1])
                     
-                    # Store SNP in nearest gene
+                    # Store SNP in nearest gene (allowing ties)
                     if adjacent != []:
-                        geneID, distance = adjacent[0]
-                        if distance <= radiusSize: # filter out SNPs that are too far away
-                            mrnaSnps[geneID].append((pos, ed))
+                        adjacent = [ (geneID, distance) for geneID, distance in adjacent if distance == adjacent[0][1] ]
+                        for geneID, distance in adjacent:
+                            if distance <= radiusSize: # filter out SNPs that are too far away
+                                mrnaSnps[geneID].append((pos, ed))
             
             # Iterate over each gene in this region
             for mrnaFeature in mrnaFeatures:

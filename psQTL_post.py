@@ -28,6 +28,15 @@ def validate_args(args):
     paramsCache = ParameterCache(args.workingDirectory)
     paramsCache.merge(args) # raises FileNotFoundError if cache does not exist
     
+    # Validate metadata file
+    if args.metadataFile == None:
+        raise FileNotFoundError(f"Metadata file has not been initialised with psQTL_prep.py!")
+    elif not os.path.isfile(args.metadataFile):
+        raise FileNotFoundError(f"Metadata file '{args.metadataFile}' was initialised previously " + 
+                                "but no longer exists!")
+    else:
+        args.metadataDict = parse_metadata(args.metadataFile)
+    
     # Validate input file
     if args.inputType == "call":
         args.inputFile = os.path.join(args.workingDirectory, "psQTL_variants.ed.tsv.gz")
@@ -46,6 +55,8 @@ def validate_args(args):
     # Validate numeric arguments
     if args.power < 1:
         raise ValueError(f"--power value '{args.power}' must be >= 1!")
+    if args.missingFilter < 0 or args.missingFilter > 1:
+        raise ValueError(f"--missing value '{args.missingFilter}' must be between 0 and 1!")
     
     # Validate annotation GFF3 file
     if args.annotationGFF3 != None:
@@ -103,18 +114,6 @@ def validate_regions(args, lengthsDict):
     args.regions = regions
 
 def validate_p(args):
-    # Validate metadata file
-    if args.missingFilter != 0 or "coverage" in args.plotTypes: # if missingFilter is 0, we don't need metadata
-        if args.metadataFile == None:
-            raise FileNotFoundError(f"Metadata file has not been initialised with psQTL_prep.py!")
-        elif not os.path.isfile(args.metadataFile):
-            raise FileNotFoundError(f"Metadata file '{args.metadataFile}' was initialised previously " + 
-                                    "but no longer exists!")
-        else:
-            args.metadataDict = parse_metadata(args.metadataFile)
-    else:
-        args.metadataDict = None
-    
     # Validate numeric arguments
     if args.wmaSize < 1:
         raise ValueError(f"--wma value '{args.wmaSize}' must be >= 1!")
@@ -128,8 +127,6 @@ def validate_p(args):
         raise ValueError(f"--bin value '{args.binSize}' must be >= 2!")
     if args.binThreshold < 0:
         raise ValueError(f"--threshold value '{args.binThreshold}' must be >= 0!")
-    if args.missingFilter < 0 or args.missingFilter > 1:
-        raise ValueError(f"--missing value '{args.missingFilter}' must be between 0 and 1!")
     
     # Validate plot types
     if len(set(args.plotTypes)) != len(args.plotTypes):
@@ -171,7 +168,7 @@ def derive_window_size(args, edDict):
         if windowSize != None:
             print(f"# Window size detected as {windowSize} bp from parsing of Euclidean distance file")
     if windowSize == None:
-        if "coverage" in args.plotTypes:
+        if hasattr(args, "plotTypes") and "coverage" in args.plotTypes:
             if args.windowSize != None:
                 print(f"# Window size specified as {args.windowSize} in cached parameters")
                 windowSize = args.windowSize
@@ -250,6 +247,13 @@ def main():
                    with chr:start-end format (e.g., 'chr1:1000000-2000000').
                    """,
                    default=[])
+    p.add_argument("--missing", dest="missingFilter",
+                   type=float,
+                   required=False,
+                   help="""Optionally, specify the proportion of missing data that is
+                   tolerated in both bulk populations before a variant is filtered out
+                   (recommended: 0.5)""",
+                   default=0.5)
     
     # Establish subparsers
     subParentParser = argparse.ArgumentParser(description=usage)
@@ -281,13 +285,6 @@ def main():
                          help="""Optionally, specify the location of the genome annotation
                          GFF3 file if you want to plot gene locations""")
     ## Data arguments
-    pparser.add_argument("--missing", dest="missingFilter",
-                         type=float,
-                         required=False,
-                         help="""Optionally, specify the proportion of missing data that is
-                         tolerated in both bulk populations before a variant is filtered out
-                         (recommended: 0.5)""",
-                         default=0.5)
     pparser.add_argument("--wma", dest="wmaSize",
                          type=int,
                          required=False,
@@ -356,8 +353,15 @@ def main():
     genomeRecords = SeqIO.parse(open(args.genomeFasta, 'r'), "fasta")
     lengthsDict = { record.id:len(record) for record in genomeRecords }
     
+    # Raise error if no contigs are found in genome FASTA
+    if lengthsDict == {}:
+        raise ValueError(f"No contigs found in genome FASTA '{args.genomeFasta}'; is it actually a FASTA file?")
+    
     # Validate and impute regions
     validate_regions(args, lengthsDict)
+    for contigID, start, end in args.regions:
+        if end > lengthsDict[contigID]:
+            raise ValueError(f"--region '{contigID, start, end}' end position is > contig length '{lengthsDict[contigID]}'!")
     
     # Parse input file into dictionary data structure or load pre-existing pickle
     PICKLE_FILE = args.inputFile.replace(".tsv.gz", f".{args.missingFilter}.pkl")
@@ -384,6 +388,20 @@ def main():
     for contigID in edNCLS.contigs:
         if contigID not in lengthsDict:
             raise ValueError(f"Contig ID '{contigID}' from Euclidean distance data not found in -f FASTA!")
+    
+    # Drop any regions that are not in the Euclidean distance data
+    passedRegions = []
+    for contigID, start, end in args.regions:
+        if contigID in edNCLS.contigs:
+            passedRegions.append([contigID, start, end])
+        else:
+            print(f"WARNING: {contigID} not found in Euclidean distance data; it will be skipped")
+    args.regions = passedRegions
+    
+    # Exit if no regions are left
+    if args.regions == []:
+        raise ValueError("No regions remain after filtering; set --regions to one or more valid regions " + 
+                         "and ensure your Euclidean distance data and genome FASTA are compatible!")
     
     # Split into mode-specific functions
     if args.mode == "plot":
