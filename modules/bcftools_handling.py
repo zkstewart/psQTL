@@ -37,6 +37,11 @@ def get_contig_ids(genomeFasta):
                     contigIDs.add(contigID)
                 else:
                     raise ValueError(f"Contig ID '{contigID}' is duplicated in the genome FASTA")
+    
+    # Raise an error if no contigs were found
+    if len(contigIDs) == 0:
+        raise ValueError(f"No contigs found in FASTA file '{genomeFasta}'; is it correctly formatted?")
+    
     return contigIDs
 
 # Single threaded operations
@@ -62,8 +67,7 @@ def run_bcftools_index(bamFile):
     else:
         errorMsg = indexerr.decode("utf-8").rstrip("\r\n ")
         raise Exception(("run_bcftools_index encountered an unhandled situation when processing " + 
-                         f"'{bamFile}'; have a look at the stderr '{errorMsg}' " +
-                         "to make sense of this."))
+                         f"'{bamFile}'; have a look at the stderr to make sense of this:\n'{errorMsg}'"))
 
 def run_bcftools_concat(genomeFasta, workingDirectory, outputFileName):
     '''
@@ -107,8 +111,7 @@ def run_bcftools_concat(genomeFasta, workingDirectory, outputFileName):
     else:
         errorMsg = concaterr.decode("utf-8").rstrip("\r\n ")
         raise Exception(("run_bcftools_concat encountered an unhandled situation; " + 
-                         f"have a look at the stderr '{errorMsg}' " +
-                         "to make sense of this."))
+                         f"have a look at the stderr to make sense of this:\n'{errorMsg}'"))
 
 def run_bcftools_filter(vcfFile, outputFileName, qualThreshold=30.0):
     '''
@@ -136,8 +139,7 @@ def run_bcftools_filter(vcfFile, outputFileName, qualThreshold=30.0):
     else:
         errorMsg = filtererr.decode("utf-8").rstrip("\r\n ")
         raise Exception(("run_bcftools_filter encountered an unhandled situation; " + 
-                         f"have a look at the stderr '{errorMsg}' " +
-                         "to make sense of this."))
+                         f"have a look at the stderr to make sense of this:\n'{errorMsg}'"))
 
 def run_bgzip(vcfFile):
     '''
@@ -161,8 +163,7 @@ def run_bgzip(vcfFile):
     else:
         errorMsg = bgziperr.decode("utf-8").rstrip("\r\n ")
         raise Exception(("run_bgzip encountered an unhandled situation when processing " + 
-                         f"'{vcfFile}'; have a look at the stderr '{errorMsg}' " +
-                         "to make sense of this."))
+                         f"'{vcfFile}'; have a look at the stderr to make sense of this:\n'{errorMsg}'"))
 
 # Threaded operations
 def call_task(bamListFile, genomeFasta, contigID, outputFileName):
@@ -196,8 +197,7 @@ def call_task(bamListFile, genomeFasta, contigID, outputFileName):
         return None
     else:
         errorMsg = callerr.decode("utf-8").rstrip("\r\n ")
-        raise Exception(("run_bcftools_call encountered an unhandled situation; have a " + 
-                         f"look at the stderr '{errorMsg}' to make sense of this."))
+        raise Exception(errorMsg)
 
 def run_bcftools_call(bamListFile, genomeFasta, outputDirectory, threads):
     '''
@@ -242,7 +242,7 @@ def run_bcftools_call(bamListFile, genomeFasta, outputDirectory, threads):
         try:
             result = f.result()
         except Exception as e:
-            raise Exception(f"run_bcftools_call encountered the following error: {e}")
+            raise Exception(f"run_bcftools_call encountered the following error:\n{e}")
 
 ##
 
@@ -277,8 +277,7 @@ def normalisation_task(inputFileName, outputFileName, genomeFasta):
         return None
     else:
         errorMsg = normerr.decode("utf-8").rstrip("\r\n ")
-        raise Exception(("run_normalisation encountered an unhandled situation; have a " + 
-                         f"look at the stderr '{errorMsg}' to make sense of this."))
+        raise Exception(errorMsg)
 
 def run_normalisation(genomeFasta, workingDirectory, threads):
     '''
@@ -326,4 +325,4 @@ def run_normalisation(genomeFasta, workingDirectory, threads):
         try:
             result = f.result()
         except Exception as e:
-            raise Exception(f"run_normalisation encountered the following error: {e}")
+            raise Exception(f"run_normalisation encountered the following error:\n{e}")

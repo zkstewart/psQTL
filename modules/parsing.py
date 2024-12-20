@@ -43,8 +43,9 @@ def parse_metadata(metadataFile):
     foundSamples = set()
     with read_gz_file(metadataFile) as fileIn:
         for line in fileIn:
+            l = line.rstrip("\r\n ")
             # Skip blank lines
-            if line.rstrip("\r\n ") == "":
+            if l == "":
                 continue
             
             # Skip comment lines
@@ -53,22 +54,22 @@ def parse_metadata(metadataFile):
             
             # Split line based on delimiter
             if "\t" in line:
-                sl = line.rstrip("\r\n ").split("\t")
+                sl = l.split("\t")
             elif "," in line:
-                sl = line.rstrip("\r\n ").split(",")
+                sl = l.split(",")
             else:
-                raise ValueError(f"Metadata file is not tab or comma-delimited; offending line is '{line}'")
+                raise ValueError(f"Metadata file is not tab or comma-delimited; offending line is '{l}'")
             
             # Parse out relevant information
             try:
                 sample, pop = sl
                 sample, pop = sample.strip(), pop.strip().lower() # make lowercase for easier comparison
             except ValueError:
-                raise ValueError(f"Metadata file does not have two columns; offending line is '{line}'")
+                raise ValueError(f"Metadata file does not have two columns; offending line is '{l}'")
             
             # Validate that the population is one of the expected values
             if not pop in ACCEPTED_BULK1 + ACCEPTED_BULK2:
-                raise ValueError(f"'{pop}' is not in the expected format for denoting bulks; offending line is '{line}'")
+                raise ValueError(f"'{pop}' is not in the expected format for denoting bulks; offending line is '{l}'")
             
             # Unify the population names
             if pop in ACCEPTED_BULK1:
@@ -154,20 +155,50 @@ def parse_vcf_stats(vcfFile):
         contigs -- a list of strings indicating the contig IDs in the VCF file
     '''
     variants = 0
+    samples = None
     contigs = {} # using as an ordered set
     with read_gz_file(vcfFile) as fileIn:
         for line in fileIn:
-            if line.startswith("#CHROM"):
-                samples = line.strip().split("\t")[9:]
-            elif line.startswith("#"):
+            l = line.strip('\r\n\t "') # remove quotations to help with files opened by Excel
+            
+            # Skip blank lines
+            if l == "":
                 continue
+            
+            # Handle header lines
+            if l.startswith("#CHROM"):
+                try:
+                    samples = l.split("\t")[9:]
+                except:
+                    raise ValueError(f"#CHROM header line is malformed; offending line is '{l}'")
+            elif l.startswith("#"):
+                continue
+            
+            # Handle variant lines
             else:
-                contig = line.split("\t")[0]
+                # Split line based on expected delimiter
+                try:
+                    sl = l.split("\t")
+                    contig = sl[0]
+                except:
+                    raise ValueError(f"VCF file lacks tab-delimited formatting; offending line is '{l}'")
+                
+                # Validate line length
+                if len(sl) < 11: # 9 fixed columns + 2 genotype columns
+                    raise ValueError(f"VCF file has too few columns; offending line is '{l}'")
+                
                 if contig not in contigs:
                     contigs[contig] = None
                 variants += 1
-    contigs = list(contigs.keys()) # convert to list
     
+    # Raise errors for faulty VCF files
+    if variants == 0 or contigs == {}:
+        raise ValueError("VCF file is empty or has no variants!")
+    if samples is None:
+        raise ValueError("VCF file has no #CHROM header line!")
+    
+    # Format and return results
+    contigs = list(contigs.keys()) # convert to list
     return variants, samples, contigs
 
 def parse_deletion_stats(deletionFile):
@@ -185,23 +216,53 @@ def parse_deletion_stats(deletionFile):
     '''
     bins = 0
     deletionBins = 0
+    samples = None
     contigs = {} # using as an ordered set
     with read_gz_file(deletionFile) as fileIn:
         for line in fileIn:
-            if line.startswith("#CHROM"):
-                samples = line.strip().split("\t")[9:]
-            elif line.startswith("#"):
+            l = line.strip('\r\n\t "') # remove quotations to help with files opened by Excel
+            
+            # Skip blank lines
+            if l == "":
                 continue
+            
+            # Handle header lines
+            if l.startswith("#CHROM"):
+                try:
+                    samples = l.split("\t")[9:]
+                except:
+                    raise ValueError(f"#CHROM header line is malformed; offending line is '{l}'")
+            elif l.startswith("#"):
+                continue
+            
+            # Handle variant lines
             else:
-                sl = line.split("\t")
-                if sl[0] not in contigs:
-                    contigs[sl[0]] = None
+                # Split line based on expected delimiter
+                try:
+                    sl = l.split("\t")
+                    contig = sl[0]
+                except:
+                    raise ValueError(f"Deletion file lacks tab-delimited formatting; offending line is '{l}'")
+                
+                # Validate line length
+                if len(sl) < 11: # 9 fixed columns + 2 genotype columns
+                    raise ValueError(f"Deletion file has too few columns; offending line is '{l}'")
+                
+                if contig not in contigs:
+                    contigs[contig] = None
                 
                 # Tally bins
                 deletionBins += 1 if any([ "1" in x for x in sl[9:]]) else 0
                 bins += 1
-    contigs = list(contigs.keys()) # convert to list
     
+    # Raise errors for faulty deletion files
+    if bins == 0 or contigs == {}:
+        raise ValueError("Deletion file is empty or has no variants!")
+    if samples is None:
+        raise ValueError("Deletion file has no #CHROM header line!")
+    
+    # Format and return results
+    contigs = list(contigs.keys()) # convert to list
     return bins, deletionBins, samples, contigs
 
 def vcf_header_to_metadata_validation(vcfSamples, metadataDict, strict=True):
@@ -267,31 +328,6 @@ def vcf_header_to_metadata_validation(vcfSamples, metadataDict, strict=True):
     # Notify user of samples that will be used
     print(f"# Samples used as part of bulk 1 (n={len(b1Samples)}) include: " + ", ".join(b1Samples))
     print(f"# Samples used as part of bulk 2 (n={len(b2Samples)}) include: " + ", ".join(b2Samples))
-
-def parse_vcf_line(sl):
-    '''
-    Parameters:
-        line -- a line from a VCF file
-    Returns:
-        chrom -- a string indicating the chromosome
-        pos -- an int indicating the position
-        ref -- a string indicating the reference allele
-        alt -- a list of strings indicating the alternate allele(s)
-        qual -- a float indicating the quality of the call
-    '''
-    sl = line.rstrip("\r\n").replace('"', '').split("\t") # remove quotations to help with files opened by Excel
-    
-    # Extract relevant details
-    chrom = sl[0]
-    pos = int(sl[1])
-    ref = sl[3]
-    alt = sl[4].split(",")
-    try:
-        qual = float(sl[5])
-    except:
-        qual = 0.0 # If the quality is missing, we'll just assume it's zero
-    
-    return chrom, pos, ref, alt, qual
 
 def parse_vcf_genotypes(formatField, sampleFields, samples):
     '''

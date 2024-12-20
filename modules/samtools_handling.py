@@ -36,8 +36,7 @@ def run_samtools_faidx(fastaFile):
     else:
         errorMsg = faidxerr.decode("utf-8").rstrip("\r\n ")
         raise Exception(("run_samtools_faidx encountered an unhandled situation when processing " + 
-                         f"'{fastaFile}'; have a look at the stderr '{errorMsg}' " +
-                         "to make sense of this."))
+                         f"'{fastaFile}'; have a look at the stderr to make sense of this:\n'{errorMsg}'"))
 
 # Threaded operations
 def depth_task(ioPair):
@@ -65,9 +64,7 @@ def depth_task(ioPair):
         return None
     else:
         errorMsg = deptherr.decode("utf-8").rstrip("\r\n ")
-        raise Exception(("run_samtools_depth encountered an unhandled situation when processing " + 
-                         f"'{inputBamFile}'; have a look at the stderr '{errorMsg}' " +
-                         "to make sense of this."))
+        raise Exception(errorMsg)
 
 def run_samtools_depth(ioList, threads):
     '''
@@ -92,7 +89,7 @@ def run_samtools_depth(ioList, threads):
         try:
             result = f.result()
         except Exception as e:
-            raise Exception(f"run_samtools_depth encountered the following error: {e}")
+            raise Exception(f"run_samtools_depth encountered the following error:\n{e}")
 
 ##
 
@@ -107,7 +104,7 @@ def bin_task(ioPair, lengthsDict, binSize):
     '''
     depthFile, outputFileName = ioPair
     if binSize < 1:
-        raise ValueError("bin_task failed: binSize must be a positive integer")
+        raise ValueError("binSize must be a positive integer")
     
     # Parse the input depth file
     histoDict = {}
@@ -151,4 +148,4 @@ def bin_samtools_depth(ioList, lengthsDict, threads, binSize):
         try:
             result = f.result()
         except Exception as e:
-            raise Exception(f"bin_samtools_depth encountered the following error: {e}")
+            raise Exception(f"bin_samtools_depth encountered the following error:\n{e}")

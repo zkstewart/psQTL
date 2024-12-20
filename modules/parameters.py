@@ -64,7 +64,15 @@ class ParameterCache:
     def load(self):
         if os.path.exists(self.cacheFile):
             with open(self.cacheFile, "r") as fileIn:
-                data = json.load(fileIn)
+                try:
+                    data = json.load(fileIn)
+                except json.JSONDecodeError as e:
+                    raise ValueError(f"Parameter cache file '{self.cacheFile}' is not a valid JSON file; see " +
+                                     f"error message: {e}")
+            # Validate data integrity
+            if not all([key in data for key in ["metadataFile", "vcfFile", "filteredVcfFile", "deletionFile",
+                                                "bamSuffix", "bamFiles", "windowSize", "qualFilter"]]):
+                raise ValueError(f"Parameter cache file '{self.cacheFile}' is missing values; have you been manually editing it?")
             # Load data while circumventing the setters
             "Circumvent the setters to avoid re-validation"
             self._metadataFile = data["metadataFile"]
@@ -382,7 +390,16 @@ class VcfCache:
     def load(self):
         if os.path.exists(self.cacheFile):
             with open(self.cacheFile, "r") as fileIn:
-                data = json.load(fileIn)
+                try:
+                    data = json.load(fileIn)
+                except json.JSONDecodeError as e:
+                    raise ValueError(f"VCF cache file '{self.cacheFile}' is not a valid JSON file; see " +
+                                     f"error message: {e}")
+            # Validate data integrity
+            if not all([key in data for key in ["vcfFile", "variants", "samples", "contigs",
+                                                "filteredVcfFile", "filteredVariants",
+                                                "filteredSamples", "filteredContigs"]]):
+                raise ValueError(f"VCF cache file '{self.cacheFile}' is missing values; have you been manually editing it?")
             # Load data while circumventing the setters
             "Circumvent the setters to avoid re-parsing the VCF file(s)"
             self._vcfFile = data["vcfFile"]
@@ -544,7 +561,14 @@ class DeletionCache:
     def load(self):
         if os.path.exists(self.cacheFile):
             with open(self.cacheFile, "r") as fileIn:
-                data = json.load(fileIn)
+                try:
+                    data = json.load(fileIn)
+                except json.JSONDecodeError as e:
+                    raise ValueError(f"Deletion cache file '{self.cacheFile}' is not a valid JSON file; see " +
+                                     f"error message: {e}")
+            # Validate data integrity
+            if not all([key in data for key in ["deletionFile", "bins", "deletionBins", "samples", "contigs"]]):
+                raise ValueError(f"Deletion cache file '{self.cacheFile}' is missing values; have you been manually editing it?")
             # Load data while circumventing the setters
             "Circumvent the setters to avoid re-parsing the VCF-like file"
             self._deletionFile = data["deletionFile"]
@@ -652,7 +676,14 @@ class MetadataCache:
     def load(self):
         if os.path.exists(self.cacheFile):
             with open(self.cacheFile, "r") as fileIn:
-                data = json.load(fileIn)
+                try:
+                    data = json.load(fileIn)
+                except json.JSONDecodeError as e:
+                    raise ValueError(f"Metadata cache file '{self.cacheFile}' is not a valid JSON file; see " +
+                                     f"error message: {e}")
+            # Validate data integrity
+            if "metadataFile" not in data or "bulk1" not in data or "bulk2" not in data:
+                raise ValueError(f"Metadata cache file '{self.cacheFile}' is missing values; have you been manually editing it?")
             # Load data while circumventing the setters
             "Circumventing is only necessary here because of how None values are handled later"
             self._metadataFile = data["metadataFile"]
