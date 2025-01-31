@@ -497,7 +497,7 @@ def pmain(args, edNCLS, lengthsDict):
 
 def rmain(args, edNCLS):
     if args.inputType == "depth":
-        report_depth(edNCLS, gff3Obj, args.regions, args.outputFileName, args.radiusSize)
+        report_depth(edNCLS, args.gff3Obj, args.regions, args.outputFileName, args.radiusSize)
     else:
         report_genes(edNCLS, args.gff3Obj, args.regions, args.outputFileName, args.radiusSize)
     
