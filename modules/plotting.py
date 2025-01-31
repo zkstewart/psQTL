@@ -459,6 +459,9 @@ def coverage(axs, rowNum, depthNCLSDict, regions, samples, plotScalebar, linewid
                            else depthNCLSDict["bulk2"][sample]
             y = [ stat for _, _, stat in sampleEdNCLS.find_overlap(contigID, start, end) ]
             
+            # Extend tails for better visualisation
+            y = np.concatenate(([y[0]], y, [y[-1]]))
+            
             # Get the line colour and type
             lineColour, lineType = SAMPLE_AESTHETICS[sampleIndex]
             
