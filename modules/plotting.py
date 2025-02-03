@@ -431,7 +431,7 @@ def coverage(axs, rowNum, depthNCLSDict, regions, samples, plotScalebar, linewid
             # Figure out the x values
             x = []
             for index, (windowStart, windowEnd, _) in enumerate(overlappingBins):
-                x.append(windowStart + (windowEnd - windowStart+1)/2)
+                x.append(windowStart + (windowEnd - windowStart)/2)
             
             # Extend tails for better visualisation
             x = np.concatenate(([start], x, [end]))
