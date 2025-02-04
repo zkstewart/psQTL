@@ -243,11 +243,8 @@ def genes(fig, axs, rowNum, gff3Obj, regions, plotScalebar):
     '''
     fig.canvas.draw() # need to draw the figure to get the renderer
     SPACING = 0.1
-    ARROW_PROPORTION = 0.005 # proportion of subplot width to use for arrow size
     
-    for colNum, (contigID, start, end) in enumerate(regions):
-        ARROW_SIZE = math.ceil(ARROW_PROPORTION * (end - start)) # arrow size is proportional to region width
-        
+    for colNum, (contigID, start, end) in enumerate(regions):        
         # Get longest isoform for each gene in this region
         geneFeatures = gff3Obj.ncls_finder(start, end, "contig", contigID)
         mrnaFeatures = [
@@ -270,7 +267,7 @@ def genes(fig, axs, rowNum, gff3Obj, regions, plotScalebar):
             placed = False
             laneNum = 0
             for lane in lanes:
-                if (mrnaFeature.start - ARROW_SIZE) > lane[-1]:
+                if (mrnaFeature.start - ARROW_SIZE) > lane[-1]: # ARROW_SIZE not used on first iter, gets set later
                     placed = True
                     break
                 laneNum += 1
@@ -289,26 +286,16 @@ def genes(fig, axs, rowNum, gff3Obj, regions, plotScalebar):
             if mrnaFeature.strand in ["+", "-"]:
                 if mrnaFeature.strand == "+":
                     lastExon = max(mrnaFeature.exon, key=lambda x: x.end)
-                    
-                    arrowVertices = [
-                        (lastExon.end, laneNum + SPACING), # bottom
-                        (lastExon.end, laneNum + 1), # top
-                        (lastExon.end + ARROW_SIZE, laneNum + SPACING + (1-SPACING)/2) # tip
-                    ]
+                    arrowAnnot = axs[rowNum, colNum].annotate("▷", xy=(lastExon.end, laneNum + SPACING + (1-SPACING)/2), xycoords="data",
+                                                 #xytext=(lastExon.end, laneNum + SPACING + (1-SPACING)/2), textcoords="data",
+                                                 fontsize=8, color="grey", zorder=1,
+                                                 ha="left", va="center")
                 else:
                     lastExon = min(mrnaFeature.exon, key=lambda x: x.start)
-                    
-                    arrowVertices = [
-                        (lastExon.start, laneNum + SPACING), # bottom
-                        (lastExon.start, laneNum + 1), # top
-                        (lastExon.start - ARROW_SIZE, laneNum + SPACING + (1-SPACING)/2) # tip
-                    ]
-                axs[rowNum, colNum].add_patch(
-                    plt.Polygon(arrowVertices, closed=True, fill=True,
-                                edgecolor="black",
-                                facecolor="black",
-                                zorder=1) # above exon boxes
-                )
+                    arrowAnnot = axs[rowNum, colNum].annotate("◁", xy=(lastExon.start, laneNum + SPACING + (1-SPACING)/2), xycoords="data",
+                                                 #xytext=(lastExon.start, laneNum + SPACING + (1-SPACING)/2), textcoords="data",
+                                                 fontsize=8, color="grey", zorder=1,
+                                                 ha="right", va="center")
             
             # Plot exon boxes
             exonCoords = [
@@ -348,10 +335,16 @@ def genes(fig, axs, rowNum, gff3Obj, regions, plotScalebar):
                 zorder=3 # above exon boxes and gene directionality
             )
             
+            # Get the size of the arrow
+            transf = axs[rowNum, colNum].transData.inverted()
+            arrowBbox = arrowAnnot.get_window_extent(renderer = fig.canvas.renderer)
+            arrowDataCoords = arrowBbox.transformed(transf)
+            ARROW_SIZE = arrowDataCoords.x1 - arrowDataCoords.x0
+            
             # Plot gene name
             geneName = mrnaFeature.ID
             textBox = axs[rowNum, colNum].text(
-                mrnaFeature.end + ARROW_SIZE if mrnaFeature.end < end # x position
+                mrnaFeature.end + ARROW_SIZE if (mrnaFeature.end + ARROW_SIZE) < end # x position
                     else end + ARROW_SIZE, # prevent text from going off the plot
                 laneNum + SPACING + (1-SPACING)/2, # y position
                 geneName, # text
@@ -359,7 +352,6 @@ def genes(fig, axs, rowNum, gff3Obj, regions, plotScalebar):
                 fontsize=8,
                 zorder=4 # above everything else
             )
-            transf = axs[rowNum, colNum].transData.inverted()
             bb = textBox.get_window_extent(renderer = fig.canvas.renderer)
             bb_datacoords = bb.transformed(transf)
             
