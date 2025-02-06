@@ -243,6 +243,7 @@ def genes(fig, axs, rowNum, gff3Obj, regions, plotScalebar):
     '''
     fig.canvas.draw() # need to draw the figure to get the renderer
     SPACING = 0.1
+    alreadyWarned = False
     
     for colNum, (contigID, start, end) in enumerate(regions):        
         # Get longest isoform for each gene in this region
@@ -263,6 +264,13 @@ def genes(fig, axs, rowNum, gff3Obj, regions, plotScalebar):
         # Plot each gene in non-overlapping lanes
         lanes = []
         for mrnaFeature in mrnaFeatures:
+            if not hasattr(mrnaFeature, "exon"):
+                if alreadyWarned == False:
+                    print(f"WARNING: Gene '{mrnaFeature.ID}' has no exons; skipping...")
+                    print("(This warning will only be shown once)")
+                    alreadyWarned = True
+                continue
+            
             # Resolve overlaps
             placed = False
             laneNum = 0
@@ -317,23 +325,24 @@ def genes(fig, axs, rowNum, gff3Obj, regions, plotScalebar):
             )
             
             # Plot CDS boxes
-            cdsCoords = [
-                (
-                    max(cdsFeature.start, start),
-                    min(cdsFeature.end, end)
+            if hasattr(mrnaFeature, "CDS"):
+                cdsCoords = [
+                    (
+                        max(cdsFeature.start, start),
+                        min(cdsFeature.end, end)
+                    )
+                    for cdsFeature in mrnaFeature.CDS
+                ]
+                axs[rowNum, colNum].broken_barh(
+                    [
+                        (cdsStart, cdsEnd - cdsStart)
+                        for cdsStart, cdsEnd  in cdsCoords
+                        if cdsStart < cdsEnd # this occurs if the exon exists outside of the specified region
+                    ],
+                    (laneNum+SPACING, 1-SPACING),
+                    facecolors="coral", edgecolor="black",
+                    zorder=3 # above exon boxes and gene directionality
                 )
-                for cdsFeature in mrnaFeature.CDS
-            ]
-            axs[rowNum, colNum].broken_barh(
-                [
-                    (cdsStart, cdsEnd - cdsStart)
-                    for cdsStart, cdsEnd  in cdsCoords
-                    if cdsStart < cdsEnd # this occurs if the exon exists outside of the specified region
-                ],
-                (laneNum+SPACING, 1-SPACING),
-                facecolors="coral", edgecolor="black",
-                zorder=3 # above exon boxes and gene directionality
-            )
             
             # Get the size of the arrow
             transf = axs[rowNum, colNum].transData.inverted()
