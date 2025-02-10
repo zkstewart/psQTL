@@ -145,8 +145,8 @@ def validate_p(args):
             raise ValueError(f"Cannot plot more than {NUM_SAMPLE_LINES} samples using --sampleCoverage for clarity")
     
     # Validate output file suffix
-    if not args.outputFileName.endswith(".pdf") and not args.outputFileName.endswith(".png"):
-        raise ValueError(f"-o output file '{args.outputFileName}' must end with '.pdf' or '.png'!")
+    if not (args.outputFileName.endswith(".pdf") or args.outputFileName.endswith(".png") or args.outputFileName.endswith(".svg")):
+        raise ValueError(f"-o output file '{args.outputFileName}' must end with '.pdf', '.png', or '.svg'!")
 
 def validate_r(args):
     # Validate numeric arguments
@@ -230,7 +230,8 @@ def main():
     p.add_argument("-o", dest="outputFileName",
                    required=True,
                    help="""Specify the location to write the output file; for 'plot', this must
-                   end with '.pdf' or '.png'; for 'report', this must end with '.tsv' or '.csv'""")
+                   end with '.pdf', '.png', or '.svg'; for 'report', this must end with
+                   '.tsv' or '.csv'""")
     p.add_argument("--power", dest="power",
                    required=False,
                    type=int,
