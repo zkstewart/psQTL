@@ -310,7 +310,8 @@ def main():
                          required=False,
                          nargs="+",
                          help="""COVERAGE PLOT: Optionally, specify one or more samples
-                         to plot coverage data as individual lines""",
+                         to plot coverage data as individual lines; these samples will
+                         be omitted from the bulk group values""",
                          default=[])
     ## Style arguments
     pparser.add_argument("--width", dest="width",

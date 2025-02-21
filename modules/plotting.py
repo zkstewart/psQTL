@@ -358,7 +358,7 @@ def genes(fig, axs, rowNum, gff3Obj, regions, plotScalebar):
                 laneNum + SPACING + (1-SPACING)/2, # y position
                 geneName, # text
                 horizontalalignment="left", verticalalignment="center", # alignment
-                fontsize=8,
+                fontsize=10,
                 zorder=4 # above everything else
             )
             bb = textBox.get_window_extent(renderer = fig.canvas.renderer)
@@ -412,6 +412,10 @@ def coverage(axs, rowNum, depthNCLSDict, regions, samples, plotScalebar, linewid
             # Get the average and upper/lower quantiles of each bulk's coverage values
             bulkValues = []
             for sample, edNCLS in sampleDict.items():
+                # Skip any samples being individually plotted
+                if sample in samples:
+                    continue
+                
                 # Get values within this region
                 overlappingBins = list(edNCLS.find_overlap(contigID, start, end))
                 y = [ stat for _, _, stat in overlappingBins ]
@@ -423,7 +427,7 @@ def coverage(axs, rowNum, depthNCLSDict, regions, samples, plotScalebar, linewid
             
             # Skip if there are no values
             if bulkValues.size == 0:
-                print(f"WARNING: No coverage values found for region '{contigID, start, end}'")
+                print(f"WARNING: No coverage values found for region '{contigID, start, end}' for '{bulk}'")
                 continue
             
             # Get the median and Q1/Q3 quantiles
