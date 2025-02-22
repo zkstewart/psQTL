@@ -93,10 +93,12 @@ def validate_regions(args, lengthsDict):
             # Validate start and end positions
             if start < 0:
                 raise ValueError(f"--region start position '{start}' is < 0!")
+            reverse = False
             if start >= end:
-                raise ValueError(f"--region start position '{start}' is >= end position '{end}'!")
+                start, end = end, start
+                reverse = True
             # Store region
-            regions.append([contigID, start, end])
+            regions.append([contigID, start, end, reverse])
         # Handle invalid format
         elif ":" in region:
             raise ValueError(f"Invalid region input '{region}'; you included a ':' but did " + 
@@ -361,7 +363,7 @@ def main():
     
     # Validate and impute regions
     validate_regions(args, lengthsDict)
-    for contigID, start, end in args.regions:
+    for contigID, start, end, reverse in args.regions:
         if end > lengthsDict[contigID]:
             raise ValueError(f"--region '{contigID, start, end}' end position is > contig length '{lengthsDict[contigID]}'!")
     
@@ -393,9 +395,9 @@ def main():
     
     # Drop any regions that are not in the Euclidean distance data
     passedRegions = []
-    for contigID, start, end in args.regions:
+    for contigID, start, end, reverse in args.regions:
         if contigID in edNCLS.contigs:
-            passedRegions.append([contigID, start, end])
+            passedRegions.append([contigID, start, end, reverse])
         else:
             print(f"WARNING: {contigID} not found in Euclidean distance data; it will be skipped")
     args.regions = passedRegions
@@ -434,7 +436,9 @@ def pmain(args, edNCLS, lengthsDict):
         "Representative models" if "genes" in args.plotTypes else None
     ]
     rowLabels = [label for label in rowLabels if label != None]
-    colLabels = [f"{region[0]}:{region[1]}-{region[2]}" for region in args.regions]
+    colLabels = [f"{region[0]}:{region[1]}-{region[2]}" if region[3] == False
+                 else f"{region[0]}:{region[2]}-{region[1]}" # if reversed
+                 for region in args.regions]
     
     # Derive plot dimensions
     if args.width == None:

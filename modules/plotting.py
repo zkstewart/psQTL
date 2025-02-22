@@ -74,7 +74,7 @@ def linescatter(axs, rowNum, edNCLS, regions, wmaSize, line, scatter,
         axs -- a list of matplotlib.pyplot Axes objects to plot to
         rowNum -- an integer value indicating the row index to plot to
         edNCLS -- an EDNCLS object
-        regions -- a list of lists containing three values: [contigID, start, end]
+        regions -- a list of lists containing four values: [contigID, start, end, reverse]
         wmaSize -- an integer value indicating the number of previous values to consider
                    during weighted moving average calculation
         line -- a boolean value indicating whether to plot a line
@@ -91,7 +91,7 @@ def linescatter(axs, rowNum, edNCLS, regions, wmaSize, line, scatter,
     
     # Plot each region
     maxY = 0 # to set y limits at end
-    for colNum, (contigID, start, end) in enumerate(regions):
+    for colNum, (contigID, start, end, reverse) in enumerate(regions):
         # Get values within this region
         regionValues = edNCLS.find_overlap(contigID, start, end)
         x, y = [], []
@@ -141,6 +141,10 @@ def linescatter(axs, rowNum, edNCLS, regions, wmaSize, line, scatter,
             if smoothedY.size != 0:
                 maxY = max(maxY, max(smoothedY))
         
+        # Reverse x axis if necessary
+        if reverse:
+            axs[rowNum, colNum].invert_xaxis()
+        
         # Derive our output file name for TSV data
         if outputDirectory != None:
             fileOut = os.path.join(outputDirectory, f"{contigID}.{start}-{end}.{fileSuffix}_line.tsv")
@@ -171,7 +175,7 @@ def histogram(axs, rowNum, edNCLS, regions, binSize, binThreshold, outputDirecto
         axs -- a list of matplotlib.pyplot Axes objects to plot to
         rowNum -- an integer value indicating the row index to plot to
         edNCLS -- an EDNCLS object
-        regions -- a list of lists containing three values: [contigID, start, end]
+        regions -- a list of lists containing four values: [contigID, start, end, reverse]
         binSize -- an integer value indicating the size of the bins/windows
         binThreshold -- an integer value indicating the threshold for counting a variant
                         within a bin/window
@@ -181,14 +185,14 @@ def histogram(axs, rowNum, edNCLS, regions, binSize, binThreshold, outputDirecto
     '''
     # Get the maximum Y value across all regions
     maxY = 0
-    for contigID, start, end in regions:
+    for contigID, start, end, reverse in regions:
         y = bin_values(edNCLS.find_overlap(contigID, start, end),
                        start, end, binSize, binThreshold)
         if y.size != 0:
             maxY = max(maxY, max(y))
     
     # Plot each region
-    for colNum, (contigID, start, end) in enumerate(regions):
+    for colNum, (contigID, start, end, reverse) in enumerate(regions):
         y = bin_values(edNCLS.find_overlap(contigID, start, end),
                        start, end, binSize, binThreshold)
         x = np.array([ (i * binSize) + start for i in range(len(y)) ])
@@ -215,6 +219,10 @@ def histogram(axs, rowNum, edNCLS, regions, binSize, binThreshold, outputDirecto
             axs[rowNum, colNum].set_xticklabels([])
             axs[rowNum, colNum].locator_params(axis='x', nbins=4) # use less ticks; avoid clutter
         
+        # Reverse x axis if necessary
+        if reverse:
+            axs[rowNum, colNum].invert_xaxis()
+        
         # Derive our output file name for TSV data
         if outputDirectory != None:
             fileOut = os.path.join(outputDirectory, f"{contigID}.{start}-{end}.histo.tsv")
@@ -235,7 +243,7 @@ def genes(fig, axs, rowNum, gff3Obj, regions, plotScalebar):
         axs -- a list of matplotlib.pyplot Axes objects to plot to
         rowNum -- an integer value indicating the row index to plot to
         gff3Obj -- a GFF3 class object from gff3.py in this repository
-        regions -- a list of lists containing three values: [contigID, start, end]
+        regions -- a list of lists containing four values: [contigID, start, end, reverse]
         plotScalebar -- a boolean value indicating whether to plot a scalebar on the X axis
     Returns:
         genePltList -- a list of matplotlib.pyplot objects containing the genes plot data
@@ -245,7 +253,7 @@ def genes(fig, axs, rowNum, gff3Obj, regions, plotScalebar):
     SPACING = 0.1
     alreadyWarned = False
     
-    for colNum, (contigID, start, end) in enumerate(regions):        
+    for colNum, (contigID, start, end, reverse) in enumerate(regions):        
         # Get longest isoform for each gene in this region
         geneFeatures = gff3Obj.ncls_finder(start, end, "contig", contigID)
         mrnaFeatures = [
@@ -352,13 +360,15 @@ def genes(fig, axs, rowNum, gff3Obj, regions, plotScalebar):
             
             # Plot gene name
             geneName = mrnaFeature.ID
+            namePosition = mrnaFeature.end + ARROW_SIZE if (mrnaFeature.end + ARROW_SIZE) < end \
+                else end + ARROW_SIZE # prevent text from going off the plot
+            
             textBox = axs[rowNum, colNum].text(
-                mrnaFeature.end + ARROW_SIZE if (mrnaFeature.end + ARROW_SIZE) < end # x position
-                    else end + ARROW_SIZE, # prevent text from going off the plot
+                namePosition, 
                 laneNum + SPACING + (1-SPACING)/2, # y position
                 geneName, # text
                 horizontalalignment="left", verticalalignment="center", # alignment
-                fontsize=10,
+                fontsize=8,
                 zorder=4 # above everything else
             )
             bb = textBox.get_window_extent(renderer = fig.canvas.renderer)
@@ -366,6 +376,37 @@ def genes(fig, axs, rowNum, gff3Obj, regions, plotScalebar):
             
             # Store the rightmost x value for this lane
             lane.append(bb_datacoords.x1)
+            
+            # Reposition gene name and arrow if necessary
+            if reverse:
+                # Reposition the name
+                textBox.remove()
+                
+                namePosition = mrnaFeature.start - ARROW_SIZE if (mrnaFeature.start - ARROW_SIZE) > start \
+                    else start - ARROW_SIZE # prevent text from going off the plot
+                textBox = axs[rowNum, colNum].text(
+                    namePosition,
+                    laneNum + SPACING + (1-SPACING)/2, # y position
+                    geneName, # text
+                    horizontalalignment="left", verticalalignment="center", # alignment
+                    fontsize=8,
+                    zorder=4 # above everything else
+                )
+                
+                # Reposition the arrow
+                arrowAnnot.remove()
+                if mrnaFeature.strand == "+":
+                    lastExon = max(mrnaFeature.exon, key=lambda x: x.end)
+                    arrowAnnot = axs[rowNum, colNum].annotate("◁", xy=(lastExon.end, laneNum + SPACING + (1-SPACING)/2), xycoords="data",
+                                                 #xytext=(lastExon.end, laneNum + SPACING + (1-SPACING)/2), textcoords="data",
+                                                 fontsize=8, color="grey", zorder=1,
+                                                 ha="right", va="center")
+                else:
+                    lastExon = min(mrnaFeature.exon, key=lambda x: x.start)
+                    arrowAnnot = axs[rowNum, colNum].annotate("▷", xy=(lastExon.start, laneNum + SPACING + (1-SPACING)/2), xycoords="data",
+                                                 #xytext=(lastExon.start, laneNum + SPACING + (1-SPACING)/2), textcoords="data",
+                                                 fontsize=8, color="grey", zorder=1,
+                                                 ha="left", va="center")
         
         # Set up scale bar if this is the last row
         if plotScalebar == True:
@@ -374,6 +415,10 @@ def genes(fig, axs, rowNum, gff3Obj, regions, plotScalebar):
         else:
             axs[rowNum, colNum].set_xticklabels([])
             axs[rowNum, colNum].locator_params(axis='x', nbins=4) # use less ticks; avoid clutter
+        
+        # Reverse x axis if necessary
+        if reverse:
+            axs[rowNum, colNum].invert_xaxis()
     
     # Set ylim to the maximum number of lanes
     if len(lanes) == 0:
@@ -395,7 +440,7 @@ def coverage(axs, rowNum, depthNCLSDict, regions, samples, plotScalebar, linewid
                             },
                              "bulk2": { ... }
                          }
-        regions -- a list of lists containing three values: [contigID, start, end]
+        regions -- a list of lists containing four values: [contigID, start, end, reverse]
         samples -- a list of strings indicating the sample names to plot individual
                    lines for
         plotScalebar -- a boolean value indicating whether to plot a scalebar on the X axis
@@ -404,7 +449,7 @@ def coverage(axs, rowNum, depthNCLSDict, regions, samples, plotScalebar, linewid
     # Plot each region
     minY = 0 # to set y limits at end
     maxY = 0
-    for colNum, (contigID, start, end) in enumerate(regions):
+    for colNum, (contigID, start, end, reverse) in enumerate(regions):
         # Plot each bulk
         for bulk in ["bulk1", "bulk2"]:
             sampleDict = depthNCLSDict[bulk]
@@ -489,6 +534,10 @@ def coverage(axs, rowNum, depthNCLSDict, regions, samples, plotScalebar, linewid
         else:
             axs[rowNum, colNum].set_xticklabels([])
             axs[rowNum, colNum].locator_params(axis='x', nbins=4) # use less ticks; avoid clutter
+        
+        # Reverse x axis if necessary
+        if reverse:
+            axs[rowNum, colNum].invert_xaxis()
     
     # Set y limits
     for colNum in range(len(regions)):
@@ -503,6 +552,7 @@ def coverage(axs, rowNum, depthNCLSDict, regions, samples, plotScalebar, linewid
                           loc="center left",
                           bbox_to_anchor=(1, 0.5),
                           ncol=1)
+    
 
 def scalebar(axs, rowNum, colNum, start, end):
     '''

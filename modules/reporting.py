@@ -10,7 +10,7 @@ def report_genes(edNCLS, gff3Obj, regions, outputFileName, radiusSize=50000):
     Parameters:
         edNCLS -- an EDNCLS object
         gff3Obj -- a GFF3 class object from gff3.py in this repository
-        regions -- a list of lists containing three values: [contigID, start, end]
+        regions -- a list of lists containing four values: [contigID, start, end, reverse]
         radiusSize -- OPTIONAL; an integer indicating the radius surrounding a gene that
                       you want to consider as being 'proximal' to a gene; default
                       == 50000 (bp).
@@ -24,7 +24,7 @@ def report_genes(edNCLS, gff3Obj, regions, outputFileName, radiusSize=50000):
                                       "cds_snps", "cds_mean", "right_snps", "right_mean"]) + "\n")
         
         # Iterate over each region
-        for contigID, start, end in regions:
+        for contigID, start, end, reverse in regions:
             # Get all SNPs that occur within this region
             posList, edList = [], []
             for pos, _, ed in edNCLS.find_overlap(contigID, start, end):
@@ -127,7 +127,7 @@ def report_depth(edNCLS, gff3Obj, regions, outputFileName, radiusSize=50000):
     Parameters:
         edNCLS -- an EDNCLS object
         gff3Obj -- a GFF3 class object from gff3.py in this repository
-        regions -- a list of lists containing three values: [contigID, start, end]
+        regions -- a list of lists containing four values: [contigID, start, end, reverse]
         radiusSize -- OPTIONAL; an integer indicating the radius surrounding a gene that
                       you want to consider as being 'proximal' to a gene; default
                       == 50000 (bp).
@@ -140,7 +140,7 @@ def report_depth(edNCLS, gff3Obj, regions, outputFileName, radiusSize=50000):
                                       "deletion_location", "deletion_ed"]) + "\n")
         
         # Iterate over each region
-        for contigID, start, end in regions:
+        for contigID, start, end, reverse in regions:
             # Get all deletions that occur within this region
             posList, edList = [], []
             for startPos, endPos, ed in edNCLS.find_overlap(contigID, start, end):
