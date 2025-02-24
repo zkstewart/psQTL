@@ -111,7 +111,7 @@ def validate_regions(args, lengthsDict):
     
     # Handle empty regions
     if regions == []:
-        regions = [[contigID, 0, lengthsDict[contigID]] for contigID in lengthsDict]
+        regions = [[contigID, 0, lengthsDict[contigID]] for contigID in lengthsDict, False]
     
     args.regions = regions
 
