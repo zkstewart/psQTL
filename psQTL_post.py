@@ -107,7 +107,7 @@ def validate_regions(args, lengthsDict):
         else:
             if not region in lengthsDict:
                 raise ValueError(f"--region contig ID '{region}' not found in the -f FASTA!")
-            regions.append([region, 0, lengthsDict[region]])
+            regions.append([region, 0, lengthsDict[region], False])
     
     # Handle empty regions
     if regions == []:
