@@ -159,7 +159,7 @@ def linescatter(axs, rowNum, edNCLS, regions, wmaSize, line, scatter,
                             fileOutTSV.write(f"{contigID}\t{xVal}\t{yVal}\t{smoothedYVal}\n")
                     else:
                         fileOutTSV.write("contigID\tposition\ted\n")
-                        for xVal, yVal in zip(x*1000000, y):
+                        for xVal, yVal in zip(x, y):
                             fileOutTSV.write(f"{contigID}\t{xVal}\t{yVal}\n")
     
     # Set y limits
