@@ -10,6 +10,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from modules.parameters import ParameterCache
 from modules.parsing import parse_metadata
 from modules.ed import parse_vcf_for_ed
+from _version import __version__
 
 def validate_args(args):
     # Validate working directory

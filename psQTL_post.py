@@ -18,6 +18,7 @@ from modules.ed import parse_ed_as_dict, convert_dict_to_edncls
 from modules.plotting import linescatter, histogram, genes, coverage, scalebar, NUM_SAMPLE_LINES
 from modules.reporting import report_genes, report_depth
 from modules.gff3 import GFF3
+from _version import __version__
 
 def validate_args(args):
     # Validate working directory

@@ -15,6 +15,7 @@ from modules.bcftools_handling import validate_bcftools_exists, validate_vt_exis
                                       run_bcftools_call, run_bcftools_index, run_normalisation, \
                                       run_bcftools_concat, run_bcftools_filter
 from modules.depth import call_deletions_from_depth
+from _version import __version__
 
 def validate_args(args):
     # Validate working directory
