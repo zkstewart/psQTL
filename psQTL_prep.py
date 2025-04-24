@@ -64,11 +64,18 @@ def main():
     
     # Set arguments shared by subparsers
     p.add_argument("-d", dest="workingDirectory",
-                    required=True,
-                    help="Specify the location where the analysis is being performed")
+                   required=True,
+                   help="Specify the location where the analysis is being performed")
+    p.add_argument("-v", "--version",
+                   action="version",
+                   version="psQTL_prep.py {version}".format(version=__version__))
     
     # Establish subparsers
     subParentParser = argparse.ArgumentParser(description=usage)
+    subParentParser.add_argument("-v", "--version",
+                                 action="version",
+                                 version="psQTL_prep.py {version}".format(version=__version__))
+    
     subparsers = subParentParser.add_subparsers(dest="mode",
                                                 required=True)
     

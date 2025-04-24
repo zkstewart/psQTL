@@ -91,9 +91,9 @@ It calls upon the HTSlib (http://www.htslib.org/) programs including:
 
 As well as vt (https://genome.sph.umich.edu/wiki/Vt).
 
-psQTL should work on any system which can run Python, HTSlib, and vt; this likely precludes its use on Windows except if you use Windows Subsystem for Linux (WSL) which is compatible with these softwares.
+psQTL should work on any system which can run Python, HTSlib, and vt; this likely precludes its use on Windows except if you use Windows Subsystem for Linux (WSL) which is compatible with these software.
 
-You should make sure the Python packages and external program dependencies are installed and locateable within your system PATH variable.
+You should make sure the Python packages and external program dependencies are installed and locatable within your system PATH variable.
 
 # How to use
 The psQTL pipeline is intended to proceed from **prep**aration, to **proc**essing, to **post**-processing as accomplished by the correspondingly named Python script files.
@@ -137,7 +137,7 @@ The options you'll need to specify to allow this to occur are:
 Variant calling will produce a raw and filtered VCF file with standard formatting for downstream analysis.
 
 ## Predicting deletions
-Deletion prediction is optionally assisted through the `psQTL_prep.py depth` function. It automates a process involving *samtools depth* from which position depth values are summed within non-overlapping window regions into a histogram. The median depth value of each chromosome within each sample is determined, and a simple heuristic employed to identify regions without deletions, as well as regions with hemizogous or homozygous deletion.
+Deletion prediction is optionally assisted through the `psQTL_prep.py depth` function. It automates a process involving *samtools depth* from which position depth values are summed within non-overlapping window regions into a histogram. The median depth value of each chromosome within each sample is determined, and a simple heuristic employed to identify regions without deletions, as well as regions with hemizygous or homozygous deletion.
 
 The options you'll need to specify to allow this to occur are:
 - The `--bam` and `--bamSuffix` arguments; see notes in [Calling variants](#calling-variants) above.

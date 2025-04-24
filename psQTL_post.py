@@ -258,9 +258,16 @@ def main():
                    tolerated in both bulk populations before a variant is filtered out
                    (recommended: 0.5)""",
                    default=0.5)
+    p.add_argument("-v", "--version",
+                   action="version",
+                   version="psQTL_post.py {version}".format(version=__version__))
     
     # Establish subparsers
     subParentParser = argparse.ArgumentParser(description=usage)
+    subParentParser.add_argument("-v", "--version",
+                                 action="version",
+                                 version="psQTL_post.py {version}".format(version=__version__))
+    
     subparsers = subParentParser.add_subparsers(dest="mode",
                                                 required=True)
     

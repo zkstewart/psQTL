@@ -95,9 +95,16 @@ def main():
     p.add_argument("-d", dest="workingDirectory",
                     required=True,
                     help="Specify the location where the analysis is being performed")
+    p.add_argument("-v", "--version",
+                   action="version",
+                   version="psQTL_proc.py {version}".format(version=__version__))
     
     # Establish subparsers
     subParentParser = argparse.ArgumentParser(description=usage)
+    subParentParser.add_argument("-v", "--version",
+                                 action="version",
+                                 version="psQTL_proc.py {version}".format(version=__version__))
+    
     subparsers = subParentParser.add_subparsers(dest="mode",
                                                 required=True)
     
@@ -114,6 +121,15 @@ def main():
     dparser.set_defaults(func=dmain)
     
     # Call-subparser arguments
+    cparser.add_argument("--parents", dest=" ",
+                         required=False,
+                         nargs=2,
+                         help="""Optionally, specify the names of the two parents (one from each phenotype
+                         group) from which the samples used here are derived. This is used to determine
+                         the bulk names in the metadata file. If not provided, psQTL will run
+                         agnostically and just look for segregation
+                         """,
+                         default=[])
     cparser.add_argument("--ignoreIdentical", dest="ignoreIdentical",
                          required=False,
                          action="store_true",
@@ -130,6 +146,22 @@ def main():
     
     # Parse metadata file
     metadataDict = parse_metadata(args.metadataFile)
+    
+    # Validate that parent samples are in the metadata file
+    if args.parents != []:
+        b1Found = False
+        b2Found = False
+        for parent in args.parents:
+            if parent in metadataDict["bulk1"]:
+                b1Found = True
+            elif parent in metadataDict["bulk2"]:
+                b2Found = True
+            else:
+                raise ValueError(f"Parent '{parent}' not found in metadata file!")
+        if not b1Found:
+            raise ValueError("Neither parent was found in bulk1!")
+        if not b2Found:
+            raise ValueError("Neither parent was found in bulk2!")
     
     # Split into mode-specific functions
     if args.mode == "call":
@@ -148,7 +180,7 @@ def cmain(args, metadataDict):
     
     # Generate Euclidean distance file if it doesn't exist
     if not os.path.isfile(FINAL_ED_FILE + ".ok"):
-        generate_ed_file(args.vcfFile, metadataDict, FINAL_ED_FILE, args.ignoreIdentical)
+        generate_ed_file(args.vcfFile, metadataDict, FINAL_ED_FILE, args.ignoreIdentical, args.parents)
     # If the .ok file exists, raise an error
     else:
         raise FileExistsError(f"Euclidean distance file '{FINAL_ED_FILE}' already has a .ok file; " +
