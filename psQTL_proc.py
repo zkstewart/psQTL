@@ -57,7 +57,7 @@ def validate_d(args):
             raise FileNotFoundError(f"Deletion file '{args.deletionFile}' was identified in " +
                                     "the parameters cache, but it doesn't exist or is not a file!")
 
-def generate_ed_file(vcfFile, metadataDict, outputFileName, ignoreIdentical):
+def generate_ed_file(vcfFile, metadataDict, outputFileName, ignoreIdentical, parents):
     '''
     Parameters:
         vcfFile -- a string indicating the path to the VCF file to be processed
@@ -121,7 +121,7 @@ def main():
     dparser.set_defaults(func=dmain)
     
     # Call-subparser arguments
-    cparser.add_argument("--parents", dest=" ",
+    cparser.add_argument("--parents", dest="parents",
                          required=False,
                          nargs=2,
                          help="""Optionally, specify the names of the two parents (one from each phenotype
@@ -192,7 +192,7 @@ def dmain(args, metadataDict):
     
     # Generate Euclidean distance file if it doesn't exist
     if not os.path.isfile(FINAL_ED_FILE + ".ok"):
-        generate_ed_file(args.deletionFile, metadataDict, FINAL_ED_FILE, False) # don't ignore identical
+        generate_ed_file(args.deletionFile, metadataDict, FINAL_ED_FILE, False, args.parents) # don't ignore identical
     # If the .ok file exists, raise an error
     else:
         raise FileExistsError(f"Euclidean distance file '{FINAL_ED_FILE}' already has a .ok file; " +
