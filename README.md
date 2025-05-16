@@ -83,6 +83,7 @@ psQTL is provided as a collection of Python 3.X scripts which make use of the fo
 - biopython (https://biopython.org/)
 - numpy (https://numpy.org/)
 - pandas (https://pandas.pydata.org/)
+- ncls (https://github.com/pyranges/ncls)
 
 It calls upon the HTSlib (http://www.htslib.org/) programs including:
 - samtools
