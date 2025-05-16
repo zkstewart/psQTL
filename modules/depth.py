@@ -1,4 +1,4 @@
-import os
+import os, gzip
 import pandas as pd
 import numpy as np
 from .parsing import parse_binned_tsv
@@ -119,7 +119,7 @@ def call_deletions_from_depth(samplePairs, outputFileName, windowSize):
     exploded_df = exploded_df[["#CHROM", "POS", "ID", "REF", "ALT", "QUAL", "FILTER", "INFO", "FORMAT", *samples]]
     
     # Write to output file
-    with open(outputFileName, "w") as fileOut:
+    with gzip.open(outputFileName, "wt") as fileOut:
         fileOut.write("##fileformat=VCF-like\n")
         fileOut.write("##0/0=nodeletion\n")
         fileOut.write("##0/1=hemizygousdeletion\n")

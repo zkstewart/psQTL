@@ -8,6 +8,7 @@ import os, argparse, sys
 from Bio import SeqIO
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+from modules.validation import validate_prep_args, validate_uncached
 from modules.parameters import ParameterCache, VcfCache, DeletionCache, MetadataCache
 from modules.samtools_handling import validate_samtools_exists, run_samtools_depth, run_samtools_faidx, \
                                       bin_samtools_depth
@@ -16,40 +17,6 @@ from modules.bcftools_handling import validate_bcftools_exists, validate_vt_exis
                                       run_bcftools_concat, run_bcftools_filter
 from modules.depth import call_deletions_from_depth
 from _version import __version__
-
-def validate_args(args):
-    # Validate working directory
-    args.workingDirectory = os.path.abspath(args.workingDirectory)
-    if not os.path.exists(args.workingDirectory):
-        # If we're initialising, we can create the directory
-        if args.mode in ["initialise", "init"]:
-            if not os.path.exists(os.path.dirname(args.workingDirectory)):
-                raise FileNotFoundError(f"Parent directory for proposed -w location " + 
-                                        f"'{os.path.dirname(args.workingDirectory)}' does not exist!")
-            os.mkdir(args.workingDirectory)
-            print(f"# Created working directory '{args.workingDirectory}'")
-        # Otherwise, we need to error out
-        else:
-            raise FileNotFoundError(f"-d working directory '{args.workingDirectory}' does not exist!")
-    
-    # Validate cache existence
-    if not args.mode in ["initialise", "init"]:
-        paramsCache = ParameterCache(args.workingDirectory)
-        paramsCache.load() # raises FileNotFoundError if cache does not exist
-
-def validate_uncached(args):
-    '''
-    This function just needs to validate any arguments that are not found within the
-    parameter cache.
-    '''
-    # Validate threads
-    if args.threads < 1:
-        raise ValueError("Number of threads must be at least 1!")
-    
-    # Validate genome FASTA file
-    args.genomeFasta = os.path.abspath(args.genomeFasta)
-    if not os.path.isfile(args.genomeFasta):
-        raise FileNotFoundError(f"Genome FASTA file '{args.genomeFasta}' does not exist!")
 
 def main():
     usage = """%(prog)s manages several steps in preparation for the psQTL pipeline.
@@ -199,29 +166,29 @@ def main():
     # N/A
     
     args = subParentParser.parse_args()
-    validate_args(args)
+    locations = validate_prep_args(args)
     
     # Split into mode-specific functions
     if args.mode in ["initialise", "init"]:
         print("## psQTL_prep.py - Initialisation ##")
-        imain(args)
+        imain(args, locations)
     elif args.mode == "depth":
         validate_uncached(args)
         print("## psQTL_prep.py - Depth Calculation ##")
-        dmain(args)
+        dmain(args, locations)
     elif args.mode == "call":
         validate_uncached(args)
         print("## psQTL_prep.py - Variant Calling ##")
-        cmain(args)
+        cmain(args, locations)
     elif args.mode == "view":
         print("## psQTL_prep.py - View Directory ##")
-        vmain(args)
+        vmain(args, locations)
     
     # Print completion flag if we reach this point
     print("Program completed successfully!")
 
-def imain(args):
-    paramsCache = ParameterCache(args.workingDirectory)
+def imain(args, locations):
+    paramsCache = ParameterCache(locations.workingDirectory)
     try:
         paramsCache.initialise(args)
     except FileExistsError:
@@ -229,16 +196,14 @@ def imain(args):
     
     print("Initialisation complete!")
 
-def dmain(args):
-    DEPTH_SUFFIX = ".depth.tsv"
-    DEPTH_DIR = os.path.join(args.workingDirectory, "depth")
-    os.makedirs(DEPTH_DIR, exist_ok=True)
+def dmain(args, locations):
+    os.makedirs(locations.depthDir, exist_ok=True)
     
     # Validate that necessary programs exist
     validate_samtools_exists()
     
     # Merge params and args
-    paramsCache = ParameterCache(args.workingDirectory)
+    paramsCache = ParameterCache(locations.workingDirectory)
     paramsCache.merge(args) # raises FileNotFoundError if cache does not exist
     
     # Validate that necessary arguments are provided
@@ -253,7 +218,7 @@ def dmain(args):
     # Determine which depth files need to be generated
     depthIO = []
     for bamFile, bamPrefix in zip(args.bamFiles, bamPrefixes):
-        depthFile = os.path.join(DEPTH_DIR, f"{bamPrefix}{DEPTH_SUFFIX}")
+        depthFile = os.path.join(locations.depthDir, f"{bamPrefix}{locations.depthSuffix}")
         
         # Skip if the file already exists
         if os.path.isfile(depthFile) and os.path.isfile(depthFile + ".ok"):
@@ -270,14 +235,14 @@ def dmain(args):
     # Determine which depth files need to be binned
     binIO = []
     for bamPrefix in bamPrefixes:
-        depthFile = os.path.join(DEPTH_DIR, f"{bamPrefix}{DEPTH_SUFFIX}")
+        depthFile = os.path.join(locations.depthDir, f"{bamPrefix}{locations.depthSuffix}")
         
         # Error out if depth file is missing
         if not os.path.isfile(depthFile):
             raise FileNotFoundError(f"Depth file '{depthFile}' not found!")
         
         # Format the binned file name for this depth file
-        binFile = os.path.join(DEPTH_DIR, f"{bamPrefix}.binned.{args.windowSize}.tsv")
+        binFile = os.path.join(locations.depthDir, f"{bamPrefix}.binned.{args.windowSize}.tsv")
         
         # Skip if the binned file already exists
         if os.path.isfile(binFile) and os.path.isfile(binFile + ".ok"):
@@ -290,7 +255,7 @@ def dmain(args):
     # Get all sample prefixes and their associated bin file
     samplePairs = []
     for bamPrefix in bamPrefixes:
-        binFile = os.path.join(DEPTH_DIR, f"{bamPrefix}.binned.{args.windowSize}.tsv")
+        binFile = os.path.join(locations.depthDir, f"{bamPrefix}.binned.{args.windowSize}.tsv")
         
         # Error out if bin file is missing
         if not os.path.isfile(binFile):
@@ -300,23 +265,22 @@ def dmain(args):
         samplePairs.append([bamPrefix, binFile])
     
     # Collate binned files into a VCF-like format of deletion calls
-    FINAL_DELETION_FILE = os.path.join(DEPTH_DIR, "psQTL_deletions.vcf")
-    if (not os.path.isfile(FINAL_DELETION_FILE)) or (not os.path.isfile(FINAL_DELETION_FILE + ".ok")):
+    if (not os.path.isfile(locations.deletionFile)) or (not os.path.isfile(locations.deletionFile + ".ok")):
         print("# Generating deletion file...")
-        call_deletions_from_depth(samplePairs, FINAL_DELETION_FILE, args.windowSize)
-        open(FINAL_DELETION_FILE + ".ok", "w").close() # touch a .ok file to indicate success
+        call_deletions_from_depth(samplePairs, locations.deletionFile, args.windowSize)
+        open(locations.deletionFile + ".ok", "w").close() # touch a .ok file to indicate success
     else:
-        print(f"# Deletion file '{FINAL_DELETION_FILE}' exists; skipping ...")
+        print(f"# Deletion file '{locations.deletionFile}' exists; skipping ...")
     
     # Update param cache with (potentially) newly produced deletion file
-    paramsCache = ParameterCache(args.workingDirectory)
+    paramsCache = ParameterCache(locations.workingDirectory)
     paramsCache.load() # reload in case we're running call simultaneously
     paramsCache.deletionFile = FINAL_DELETION_FILE
     paramsCache.windowSize = args.windowSize
     
     print("Depth file generation complete!")
 
-def cmain(args):
+def cmain(args, locations):
     '''
     One note of caution: this script uses '.ok' files to track files that we know have
     been successfully processed. However, we do not apply the same for VCF indices and
@@ -324,8 +288,7 @@ def cmain(args):
     an index that was partially created. It is expected that stderr values will provide
     this information but this hasn't been validated yet.
     '''
-    CALL_DIR = os.path.join(args.workingDirectory, "call")
-    os.makedirs(CALL_DIR, exist_ok=True)
+    os.makedirs(locations.callDir, exist_ok=True)
     
     # Validate that necessary programs exist
     validate_samtools_exists()
@@ -333,7 +296,7 @@ def cmain(args):
     validate_vt_exists()
     
     # Merge params and args
-    paramsCache = ParameterCache(args.workingDirectory)
+    paramsCache = ParameterCache(locations.workingDirectory)
     paramsCache.merge(args) # raises FileNotFoundError if cache does not exist
     
     # Validate that necessary parameters arguments are provided
@@ -347,69 +310,66 @@ def cmain(args):
         run_samtools_faidx(args.genomeFasta)
     
     # Create a bamlist file
-    BAMLIST_FILE = os.path.join(CALL_DIR, "bamlist.txt")
-    with open(BAMLIST_FILE, "w") as bamlistFile: # allowed to overwrite existing files
+    with open(locations.bamListFile, "w") as bamlistFile: # allowed to overwrite existing files
         for bamFile in args.bamFiles:
             bamlistFile.write(f"{bamFile}\n")
     
     # Run bcftools mpileup->call on each contig
-    run_bcftools_call(BAMLIST_FILE, args.genomeFasta, CALL_DIR, args.threads) # handles skipping internally
+    run_bcftools_call(locations.bamListFile, args.genomeFasta, locations.callDir, args.threads) # handles skipping internally
     
     # Index each VCF file
-    for vcfFile in [ os.path.join(CALL_DIR, f) for f in os.listdir(CALL_DIR) ]:
+    for vcfFile in [ os.path.join(locations.callDir, f) for f in os.listdir(locations.callDir) ]:
         if vcfFile.endswith(".vcf.gz") and not os.path.isfile(vcfFile + ".csi"):
             run_bcftools_index(vcfFile)
     
     # Run normalisation on each contig's VCF
-    run_normalisation(args.genomeFasta, CALL_DIR, args.threads) # handles skipping internally
+    run_normalisation(args.genomeFasta, locations.callDir, args.threads) # handles skipping internally
     
     # Index each VCF file
-    for vcfFile in [ os.path.join(CALL_DIR, f) for f in os.listdir(CALL_DIR) ]:
+    for vcfFile in [ os.path.join(locations.callDir, f) for f in os.listdir(locations.callDir) ]:
         if vcfFile.endswith(".vcf.gz") and not os.path.isfile(vcfFile + ".csi"):
             run_bcftools_index(vcfFile)
     
     # Concatenate all VCF files
-    CONCAT_VCF_FILE = os.path.join(CALL_DIR, "psQTL_variants.vcf.gz")
-    if (not os.path.isfile(CONCAT_VCF_FILE)) or (not os.path.isfile(CONCAT_VCF_FILE + ".ok")):
-        run_bcftools_concat(args.genomeFasta, CALL_DIR, CONCAT_VCF_FILE)
+    if (not os.path.isfile(locations.vcfFile)) or (not os.path.isfile(locations.vcfFile + ".ok")):
+        run_bcftools_concat(args.genomeFasta, locations.callDir, locations.vcfFile)
     else:
-        print(f"# Concatenated VCF file '{CONCAT_VCF_FILE}' exists; skipping ...")
+        print(f"# Concatenated VCF file '{locations.vcfFile}' exists; skipping ...")
     
     # Index the concatenated VCF file
-    if not os.path.isfile(CONCAT_VCF_FILE + ".csi"):
-        run_bcftools_index(CONCAT_VCF_FILE)
+    if not os.path.isfile(locations.vcfFile + ".csi"):
+        run_bcftools_index(locations.vcfFile)
     
     # Update param cache with newly produced VCF file
-    paramsCache = ParameterCache(args.workingDirectory)
+    paramsCache = ParameterCache(locations.workingDirectory)
     paramsCache.load() # reload in case we're running depth simultaneously
-    paramsCache.vcfFile = CONCAT_VCF_FILE
+    paramsCache.vcfFile = locations.vcfFile
     
     # Filter the VCF file
-    FILTERED_FILE = os.path.join(CALL_DIR, "psQTL_variants.filtered.vcf.gz")
-    if (not os.path.isfile(FILTERED_FILE)) or (not os.path.isfile(FILTERED_FILE + ".ok")):        
+    if (not os.path.isfile(locations.filteredVcfFile)) or (not os.path.isfile(locations.filteredVcfFile + ".ok")):        
         # Filter the VCF file
         print("# Filtering VCF file...")
-        run_bcftools_filter(CONCAT_VCF_FILE, FILTERED_FILE, args.qualFilter)
+        run_bcftools_filter(locations.vcfFile, locations.filteredVcfFile, args.qualFilter)
         
         # Index the filtered VCF file
-        run_bcftools_index(FILTERED_FILE)
+        run_bcftools_index(locations.filteredVcfFile)
     else:
-        print(f"# Filtered VCF file '{FILTERED_FILE}' exists; skipping ...")
+        print(f"# Filtered VCF file '{locations.filteredVcfFile}' exists; skipping ...")
     
     # Update param cache with newly produced filtered VCF file
-    paramsCache = ParameterCache(args.workingDirectory)
+    paramsCache = ParameterCache(locations.workingDirectory)
     paramsCache.load() # reload in case we're running depth simultaneously
-    paramsCache.filteredVcfFile = FILTERED_FILE
+    paramsCache.filteredVcfFile = locations.filteredVcfFile
     
     print("Variant calling complete!")
 
-def vmain(args):
-    paramsCache = ParameterCache(args.workingDirectory)
+def vmain(args, locations):
+    paramsCache = ParameterCache(locations.workingDirectory)
     paramsCache.merge(args) # raises FileNotFoundError if cache does not exist
     
     # Present standard parameters
     print("# Parameters:")
-    print(f"Working directory: {args.workingDirectory}")
+    print(f"Working directory: {locations.workingDirectory}")
     
     if args.bamFiles != []:
         print(f"BAM files: {args.bamFiles}")
@@ -420,7 +380,7 @@ def vmain(args):
     print() # blank line for spacing
     print("# Metadata details:")
     if args.metadataFile is not None:
-        metadataCache = MetadataCache(args.workingDirectory)
+        metadataCache = MetadataCache(locations.workingDirectory)
         metadataCache.establish()
         if metadataCache.metadataFile == None:
             print("## Metadata cache not found; re-initialising...")
@@ -436,7 +396,7 @@ def vmain(args):
     print() # blank line for spacing
     print("# Variants VCF details:")
     if args.vcfFile is not None:
-        vcfCache = VcfCache(args.workingDirectory)
+        vcfCache = VcfCache(locations.workingDirectory)
         vcfCache.establish()
         if vcfCache.vcfFile == None:
             print("## VCF cache not found; re-initialising...")
@@ -452,7 +412,7 @@ def vmain(args):
     print() # blank line for spacing
     print("# Filtered variants VCF details:")
     if args.filteredVcfFile is not None:
-        vcfCache = VcfCache(args.workingDirectory)
+        vcfCache = VcfCache(locations.workingDirectory)
         vcfCache.establish()
         if vcfCache.filteredVcfFile == None:
             print("## VCF cache not found; re-initialising...")
@@ -473,7 +433,7 @@ def vmain(args):
     # Present deletion cache
     print("# Deletion VCF-like details:")
     if args.deletionFile is not None:
-        deletionCache = DeletionCache(args.workingDirectory)
+        deletionCache = DeletionCache(locations.workingDirectory)
         deletionCache.establish()
         if deletionCache.deletionFile == None:
             print("## Deletion cache not found; re-initialising...")

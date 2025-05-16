@@ -7,57 +7,13 @@
 import os, argparse, sys, gzip
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-from modules.parameters import ParameterCache
+from modules.validation import validate_proc_args, validate_c, validate_d
 from modules.parsing import parse_metadata
 from modules.ed import parse_vcf_for_ed
+from modules.splsda import recode_vcf
 from _version import __version__
 
-def validate_args(args):
-    # Validate working directory
-    args.workingDirectory = os.path.abspath(args.workingDirectory)
-    if not os.path.isdir(args.workingDirectory):
-        raise FileNotFoundError(f"-d working directory '{args.workingDirectory}' is not a directory!")
-    
-    # Validate cache existence & merge into args
-    paramsCache = ParameterCache(args.workingDirectory)
-    paramsCache.merge(args) # raises FileNotFoundError if cache does not exist
-    
-    # Validate metadata file
-    if args.metadataFile == None:
-        raise FileNotFoundError("Working directory has not been initialised with a metadata file!")
-    elif not os.path.isfile(args.metadataFile):
-            raise FileNotFoundError(f"Metadata file '{args.metadataFile}' was identified in " +
-                                    "the parameters cache, but it doesn't exist or is not a file!")
-
-def validate_c(args):
-    '''
-    Params cache should have been merged into args before calling this function.
-    '''
-    # Choose which VCF file to use
-    args.vcfFile = args.filteredVcfFile if args.filteredVcfFile != None else args.vcfFile
-    
-    # Validate VCF file
-    if args.vcfFile == None:
-        raise FileNotFoundError("Working directory has not been initialised with a VCF file!")
-    else:
-        args.vcfFile = os.path.abspath(args.vcfFile)
-        if not os.path.isfile(args.vcfFile):
-            raise FileNotFoundError(f"VCF file '{args.vcfFile}' was identified in " +
-                                    "the parameters cache, but it doesn't exist or is not a file!")
-
-def validate_d(args):
-    '''
-    Params cache should have been merged into args before calling this function.
-    '''
-    if args.deletionFile == None:
-        raise FileNotFoundError("Working directory has not been initialised with a deletion file!")
-    else:
-        args.deletionFile = os.path.abspath(args.deletionFile)
-        if not os.path.isfile(args.deletionFile):
-            raise FileNotFoundError(f"Deletion file '{args.deletionFile}' was identified in " +
-                                    "the parameters cache, but it doesn't exist or is not a file!")
-
-def generate_ed_file(vcfFile, metadataDict, outputFileName, ignoreIdentical, parents):
+def generate_ed_file(vcfFile, metadataDict, outputFileName, ignoreIdentical):
     '''
     Parameters:
         vcfFile -- a string indicating the path to the VCF file to be processed
@@ -95,6 +51,12 @@ def main():
     p.add_argument("-d", dest="workingDirectory",
                     required=True,
                     help="Specify the location where the analysis is being performed")
+    p.add_argument("-i", dest="inputType",
+                   required=True,
+                   nargs="+",
+                   choices=["call", "depth"],
+                   help="""Specify one or both of 'call' and 'depth' to indicate which
+                   types of variants to process.""")
     p.add_argument("-v", "--version",
                    action="version",
                    version="psQTL_proc.py {version}".format(version=__version__))
@@ -108,29 +70,20 @@ def main():
     subparsers = subParentParser.add_subparsers(dest="mode",
                                                 required=True)
     
-    cparser = subparsers.add_parser("call",
+    eparser = subparsers.add_parser("ed",
                                     parents=[p],
                                     add_help=False,
-                                    help="Analyse variant calls in the VCF file")
-    cparser.set_defaults(func=cmain)
+                                    help="Compute Euclidean distance of call and/or depth variants")
+    eparser.set_defaults(func=emain)
     
-    dparser = subparsers.add_parser("depth",
+    sparser = subparsers.add_parser("splsda",
                                     parents=[p],
                                     add_help=False,
-                                    help="Analyse depth-predicted deletions in the VCF-like file")
-    dparser.set_defaults(func=dmain)
+                                    help="Compute local sPLS-DA of call and/or depth variants")
+    sparser.set_defaults(func=smain)
     
-    # Call-subparser arguments
-    cparser.add_argument("--parents", dest="parents",
-                         required=False,
-                         nargs=2,
-                         help="""Optionally, specify the names of the two parents (one from each phenotype
-                         group) from which the samples used here are derived. This is used to determine
-                         the bulk names in the metadata file. If not provided, psQTL will run
-                         agnostically and just look for segregation
-                         """,
-                         default=[])
-    cparser.add_argument("--ignoreIdentical", dest="ignoreIdentical",
+    # ED-subparser arguments
+    eparser.add_argument("--ignoreIdentical", dest="ignoreIdentical",
                          required=False,
                          action="store_true",
                          help="""Optionally, provide this flag if you'd like variants where
@@ -138,65 +91,76 @@ def main():
                          have the same variant with respect to the reference genome""",
                          default=False)
     
-    # Depth-subparser arguments
-    # N/A
+    # sPLS-DA-subparser arguments
+    ## N/A
     
     args = subParentParser.parse_args()
-    validate_args(args)
+    locations = validate_proc_args(args)
     
     # Parse metadata file
     metadataDict = parse_metadata(args.metadataFile)
     
-    # Validate that parent samples are in the metadata file
-    if args.parents != []:
-        b1Found = False
-        b2Found = False
-        for parent in args.parents:
-            if parent in metadataDict["bulk1"]:
-                b1Found = True
-            elif parent in metadataDict["bulk2"]:
-                b2Found = True
-            else:
-                raise ValueError(f"Parent '{parent}' not found in metadata file!")
-        if not b1Found:
-            raise ValueError("Neither parent was found in bulk1!")
-        if not b2Found:
-            raise ValueError("Neither parent was found in bulk2!")
-    
     # Split into mode-specific functions
-    if args.mode == "call":
-        print("## psQTL_proc.py - Variant Distances ##")
-        cmain(args, metadataDict)
+    if args.mode == "ed":
+        print("## psQTL_proc.py - Euclidean Distances ##")
+        emain(args, metadataDict, locations)
     elif args.mode == "depth":
-        print("## psQTL_proc.py - Depth Distances ##")
-        dmain(args, metadataDict)
+        print("## psQTL_proc.py - sPLS-DA ##")
+        dmain(args, metadataDict, locations)
     
     # Print completion flag if we reach this point
     print("Program completed successfully!")
 
-def cmain(args, metadataDict):
-    validate_c(args)
-    FINAL_ED_FILE = os.path.join(args.workingDirectory, "psQTL_variants.ed.tsv.gz")
+def emain(args, metadataDict, locations):
+    # Validate input types before proceeding
+    if "call" in args.inputType:
+        validate_c(args)
+    if "depth" in args.inputType:
+        validate_d(args)
     
-    # Generate Euclidean distance file if it doesn't exist
-    if not os.path.isfile(FINAL_ED_FILE + ".ok"):
-        generate_ed_file(args.vcfFile, metadataDict, FINAL_ED_FILE, args.ignoreIdentical, args.parents)
-    # If the .ok file exists, raise an error
+    # Run the main function for each input type
+    if "call" in args.inputType:
+        call_ed(args, metadataDict, locations)
+    if "depth" in args.inputType:
+        depth_ed(args, metadataDict, locations)
+
+def call_ed(args, metadataDict, locations):    
+    if not os.path.isfile(locations.variantEdFile + ".ok"):
+        generate_ed_file(args.vcfFile, metadataDict, locations.variantEdFile, args.ignoreIdentical)
     else:
-        raise FileExistsError(f"Euclidean distance file '{FINAL_ED_FILE}' already has a .ok file; " +
+        raise FileExistsError(f"Euclidean distance file '{locations.variantEdFile}' already has a .ok file; " +
                               "move, rename, or delete it before re-running psQTL_proc.py!")
 
-def dmain(args, metadataDict):
-    validate_d(args)
-    FINAL_ED_FILE = os.path.join(args.workingDirectory, "psQTL_depth.ed.tsv.gz")
-    
-    # Generate Euclidean distance file if it doesn't exist
-    if not os.path.isfile(FINAL_ED_FILE + ".ok"):
-        generate_ed_file(args.deletionFile, metadataDict, FINAL_ED_FILE, False, args.parents) # don't ignore identical
-    # If the .ok file exists, raise an error
+def depth_ed(args, metadataDict, locations):
+    if not os.path.isfile(locations.depthEdFile + ".ok"):
+        generate_ed_file(args.deletionFile, metadataDict, locations.depthEdFile, False) # don't ignore identical
     else:
-        raise FileExistsError(f"Euclidean distance file '{FINAL_ED_FILE}' already has a .ok file; " +
+        raise FileExistsError(f"Euclidean distance file '{locations.depthEdFile}' already has a .ok file; " +
                               "move, rename, or delete it before re-running psQTL_proc.py!")
+
+def smain(args, metadataDict, locations):
+    # Validate input types before proceeding
+    if "call" in args.inputType:
+        validate_c(args)
+    if "depth" in args.inputType:
+        validate_d(args)
+    
+    # Run the main function for each input type
+    if "call" in args.inputType:
+        call_splsda(args, metadataDict, locations)
+    if "depth" in args.inputType:
+        depth_splsda(args, metadataDict, locations)
+    if "call" in args.inputType and "depth" in args.inputType:
+        integrative_splsda(args, metadataDict, locations)
+
+def call_splsda(args, metadataDict, locations):
+    raise NotImplementedError("sPLS-DA for call variants is not yet implemented.")
+
+def depth_splsda(args, metadataDict, locations):
+    raise NotImplementedError("sPLS-DA for depth variants is not yet implemented.")
+
+def integrative_splsda(args, metadataDict, locations):
+    raise NotImplementedError("Integrative sPLS-DA for both call and depth variants is not yet implemented.")
 
 if __name__ == "__main__":
     main()

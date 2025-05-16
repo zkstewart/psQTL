@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 from Bio import SeqIO
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-from modules.parameters import ParameterCache
+from modules.validation import validate_post_args, validate_regions, validate_p, validate_r
 from modules.parsing import parse_metadata
 from modules.depth import parse_bins_as_dict, normalise_coverage_dict, convert_dict_to_depthncls
 from modules.ed import parse_ed_as_dict, convert_dict_to_edncls
@@ -19,146 +19,6 @@ from modules.plotting import linescatter, histogram, genes, coverage, scalebar, 
 from modules.reporting import report_genes, report_depth
 from modules.gff3 import GFF3
 from _version import __version__
-
-def validate_args(args):
-    # Validate working directory
-    if not os.path.exists(args.workingDirectory):
-        raise FileNotFoundError(f"-d working directory '{args.workingDirectory}' does not exist!")
-    
-    # Validate cache existence & merge into args
-    paramsCache = ParameterCache(args.workingDirectory)
-    paramsCache.merge(args) # raises FileNotFoundError if cache does not exist
-    
-    # Validate metadata file
-    if args.metadataFile == None:
-        raise FileNotFoundError(f"Metadata file has not been initialised with psQTL_prep.py!")
-    elif not os.path.isfile(args.metadataFile):
-        raise FileNotFoundError(f"Metadata file '{args.metadataFile}' was initialised previously " + 
-                                "but no longer exists!")
-    else:
-        args.metadataDict = parse_metadata(args.metadataFile)
-    
-    # Validate input file
-    if args.inputType == "call":
-        args.inputFile = os.path.join(args.workingDirectory, "psQTL_variants.ed.tsv.gz")
-    else:
-        args.inputFile = os.path.join(args.workingDirectory, "psQTL_depth.ed.tsv.gz")
-    
-    if not os.path.isfile(args.inputFile):
-        raise FileNotFoundError(f"Euclidean distance file '{args.inputFile}' does not exist!")
-    elif not os.path.isfile(args.inputFile + ".ok"):
-        raise FileNotFoundError(f"Euclidean distance file '{args.inputFile}' does not have a '.ok' flag!")
-    
-    # Validate genome FASTA file
-    if not os.path.isfile(args.genomeFasta):
-        raise FileNotFoundError(f"-f '{args.genomeFasta}' is not a file!")
-    
-    # Validate numeric arguments
-    if args.power < 1:
-        raise ValueError(f"--power value '{args.power}' must be >= 1!")
-    if args.missingFilter < 0 or args.missingFilter > 1:
-        raise ValueError(f"--missing value '{args.missingFilter}' must be between 0 and 1!")
-    
-    # Validate annotation GFF3 file
-    if args.annotationGFF3 != None:
-        if not os.path.isfile(args.annotationGFF3):
-            raise FileNotFoundError(f"-a/--annotation file '{args.annotationGFF3}' is not a file!")
-        else:
-            args.gff3Obj = GFF3(args.annotationGFF3) # parsing now to raise errors early
-            args.gff3Obj.create_ncls_index("gene")
-    
-    # Validate output file
-    if os.path.exists(args.outputFileName):
-        raise FileExistsError(f"-o output file '{args.outputFileName}' already exists!")
-    args.outputFileName = os.path.abspath(args.outputFileName)
-    
-    if not os.path.isdir(os.path.dirname(args.outputFileName)):
-        raise FileNotFoundError(f"-o parent directory '{os.path.dirname(args.outputFileName)}' does not exist!")
-
-def validate_regions(args, lengthsDict):
-    # Validate regions
-    regions = []
-    regionsRegex = re.compile(r"^([^:]+):(\d+)-(\d+)$")
-    for region in args.regions:
-        reMatch = regionsRegex.match(region)
-        
-        # Handle chr:start-end format
-        if reMatch != None:
-            contigID, start, end = reMatch.groups()
-            start = int(start)
-            end = int(end)
-            
-            # Validate contig ID
-            if not contigID in lengthsDict:
-                raise ValueError(f"--region contig ID '{contigID}' not found in the -f FASTA!")
-            # Validate start and end positions
-            if start < 0:
-                raise ValueError(f"--region start position '{start}' is < 0!")
-            reverse = False
-            if start >= end:
-                start, end = end, start
-                reverse = True
-            # Store region
-            regions.append([contigID, start, end, reverse])
-        # Handle invalid format
-        elif ":" in region:
-            raise ValueError(f"Invalid region input '{region}'; you included a ':' but did " + 
-                             "not format the region as 'chr:start-end'!")
-        # Handle chr format
-        else:
-            if not region in lengthsDict:
-                raise ValueError(f"--region contig ID '{region}' not found in the -f FASTA!")
-            regions.append([region, 0, lengthsDict[region], False])
-    
-    # Handle empty regions
-    if regions == []:
-        regions = [[contigID, 0, lengthsDict[contigID], False] for contigID in lengthsDict]
-    
-    args.regions = regions
-
-def validate_p(args):
-    # Validate numeric arguments
-    if args.wmaSize < 1:
-        raise ValueError(f"--wma value '{args.wmaSize}' must be >= 1!")
-    if args.width != None:
-        if args.width < 1:
-            raise ValueError(f"--width value '{args.width}' must be >= 1!")
-    if args.height != None:
-        if args.height < 1:
-            raise ValueError(f"--height value '{args.height}' must be >= 1!")
-    if args.binSize < 2:
-        raise ValueError(f"--bin value '{args.binSize}' must be >= 2!")
-    if args.binThreshold < 0:
-        raise ValueError(f"--threshold value '{args.binThreshold}' must be >= 0!")
-    
-    # Validate plot types
-    if len(set(args.plotTypes)) != len(args.plotTypes):
-        raise ValueError(f"-p must not contain duplicate plot types!")
-    if "genes" in args.plotTypes and args.annotationGFF3 == None:
-        raise ValueError(f"Cannot plot gene locations without providing an --annotation GFF3 file!")
-    if "histogram" in args.plotTypes and args.inputType == "depth":
-        raise ValueError(f"Cannot plot histogram for -i depth data!")
-    
-    # Validate samples for coverage plot
-    if "coverage" in args.plotTypes:
-        for sampleID in args.sampleCoverage:
-            if not sampleID in args.metadataDict["bulk1"] + args.metadataDict["bulk2"]:
-                raise ValueError(f"Sample '{sampleID}' specified in --sampleCoverage not found in metadata!")
-        if len(args.sampleCoverage) > NUM_SAMPLE_LINES:
-            raise ValueError(f"Cannot plot more than {NUM_SAMPLE_LINES} samples using --sampleCoverage for clarity")
-    
-    # Validate output file suffix
-    if not (args.outputFileName.endswith(".pdf") or args.outputFileName.endswith(".png") or args.outputFileName.endswith(".svg")):
-        raise ValueError(f"-o output file '{args.outputFileName}' must end with '.pdf', '.png', or '.svg'!")
-
-def validate_r(args):
-    # Validate numeric arguments
-    if args.radiusSize < 0:
-        raise ValueError(f"--radius value '{args.radiusSize}' must be >= 0!")
-    
-    # Validate output file suffix
-    if not args.outputFileName.endswith(".tsv") and not args.outputFileName.endswith(".csv"):
-        raise ValueError(f"-o output file '{args.outputFileName}' must end with '.tsv' or '.csv'!")
 
 def derive_window_size(args, edDict):
     windowSize = None
@@ -350,7 +210,7 @@ def main():
                          default=50000)
     
     args = subParentParser.parse_args()
-    validate_args(args)
+    validate_post_args(args)
     
     # Perform mode-specific validation
     "Validate upfront before we get into time-consuming parsing to frontload the error checking"
