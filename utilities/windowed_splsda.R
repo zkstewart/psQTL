@@ -4,11 +4,9 @@ if (!requireNamespace("argparser", quietly=TRUE)) {
   install.packages("argparser")
 }
 library(argparser)
-#library(tidyr)
-#library(dplyr)
 
 # Establish parser
-p <- arg_parser("Run PLS-DA in windows across a genome, selecting features that contribute to the model")
+p <- arg_parser("Run PLS-DA in windows across a genome, using sPLS-DA to select features that contribute to the model")
 
 # Add arguments
 p <- add_argument(p, "m", help="Metadata file", type = "character")

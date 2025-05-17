@@ -24,6 +24,10 @@ class Locations:
     def callDir(self):
         return os.path.join(self.workingDirectory, "call")
     
+    @property
+    def splsdaDir(self):
+        return os.path.join(self.workingDirectory, "splsda")
+    
     # Naive file properties
     @property
     def depthSuffix(self):
@@ -50,6 +54,33 @@ class Locations:
         return os.path.join(self.workingDirectory, "psQTL_variants.ed.tsv.gz")
     
     @property
-    def depthEdFile(self):
+    def variantRecodedFile(self):
+        return os.path.join(self.splsdaDir, "psQTL_variants.recode.tsv.gz")
+    
+    @property
+    def variantSplsdaSelectedFile(self):
+        return os.path.join(self.splsdaDir, "psQTL_variants.selected.tsv")
+    
+    @property
+    def variantSplsdaBerFile(self):
+        return os.path.join(self.splsdaDir, "psQTL_variants.BER.tsv")
+    
+    @property
+    def deletionEdFile(self):
         return os.path.join(self.workingDirectory, "psQTL_depth.ed.tsv.gz")
     
+    @property
+    def deletionRecodedFile(self):
+        return os.path.join(self.splsdaDir, "psQTL_depth.recode.tsv.gz")
+    
+    @property
+    def deletionSplsdaSelectedFile(self):
+        return os.path.join(self.splsdaDir, "psQTL_depth.selected.tsv")
+    
+    @property
+    def deletionSplsdaSelectedFile(self):
+        return os.path.join(self.splsdaDir, "psQTL_depth.BER.tsv")
+    
+    @property
+    def windowedSplsdaRscript(self):
+        return os.path.join(os.path.dirname(os.path.dirname(__file__)), "utilities", "windowed_splsda.R")

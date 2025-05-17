@@ -10,7 +10,8 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from modules.validation import validate_proc_args, validate_c, validate_d
 from modules.parsing import parse_metadata
 from modules.ed import parse_vcf_for_ed
-from modules.splsda import recode_vcf
+from modules.splsda import validate_r_exists, validate_r_packages_installation, \
+    recode_vcf, run_windowed_splsda
 from _version import __version__
 
 def generate_ed_file(vcfFile, metadataDict, outputFileName, ignoreIdentical):
@@ -36,7 +37,6 @@ def generate_ed_file(vcfFile, metadataDict, outputFileName, ignoreIdentical):
             # Write content line
             fileOut.write(f"{contig}\t{pos}\t{variant}\t{numAllelesB1}\t" + \
                             f"{numAllelesB2}\t{euclideanDist}\n")
-    open(outputFileName + ".ok", "w").close() # touch a .ok file to indicate success
 
 def main():
     usage = """%(prog)s processes VCF or VCF-like files to calculate Euclidean distance values
@@ -127,16 +127,20 @@ def emain(args, metadataDict, locations):
 def call_ed(args, metadataDict, locations):    
     if not os.path.isfile(locations.variantEdFile + ".ok"):
         generate_ed_file(args.vcfFile, metadataDict, locations.variantEdFile, args.ignoreIdentical)
+        open(locations.variantEdFile + ".ok", "w").close() # touch a .ok file to indicate success
     else:
         raise FileExistsError(f"Euclidean distance file '{locations.variantEdFile}' already has a .ok file; " +
                               "move, rename, or delete it before re-running psQTL_proc.py!")
+    print("Variant call ED file generation complete!")
 
 def depth_ed(args, metadataDict, locations):
-    if not os.path.isfile(locations.depthEdFile + ".ok"):
-        generate_ed_file(args.deletionFile, metadataDict, locations.depthEdFile, False) # don't ignore identical
+    if not os.path.isfile(locations.deletionEdFile + ".ok"):
+        generate_ed_file(args.deletionFile, metadataDict, locations.deletionEdFile, False) # don't ignore identical
+        open(locations.deletionEdFile + ".ok", "w").close() # touch a .ok file to indicate success
     else:
-        raise FileExistsError(f"Euclidean distance file '{locations.depthEdFile}' already has a .ok file; " +
+        raise FileExistsError(f"Euclidean distance file '{locations.deletionEdFile}' already has a .ok file; " +
                               "move, rename, or delete it before re-running psQTL_proc.py!")
+    print("Deletion variant ED file generation complete!")
 
 def smain(args, metadataDict, locations):
     # Validate input types before proceeding
@@ -144,6 +148,11 @@ def smain(args, metadataDict, locations):
         validate_c(args)
     if "depth" in args.inputType:
         validate_d(args)
+    os.makedirs(locations.splsdaDir, exist_ok=True)
+    
+    # Validate that R and necessary packages are available
+    validate_r_exists()
+    validate_r_packages_installation()
     
     # Run the main function for each input type
     if "call" in args.inputType:
@@ -154,10 +163,40 @@ def smain(args, metadataDict, locations):
         integrative_splsda(args, metadataDict, locations)
 
 def call_splsda(args, metadataDict, locations):
-    raise NotImplementedError("sPLS-DA for call variants is not yet implemented.")
+    # Encode variant calls for sPLS-DA analysis
+    if (not os.path.isfile(locations.variantRecodedFile)) or (not os.path.isfile(locations.variantRecodedFile + ".ok")):
+        print("# Encoding variant calls for sPLS-DA analysis ...")
+        recode_vcf(args.vcfFile, locations.variantRecodedFile)
+    
+    # Run windowed sPLS-DA for variant calls
+    if (not os.path.isfile(locations.variantSplsdaSelectedFile) or \
+        not os.path.isfile(locations.variantSplsdaSelectedFile + ".ok")) or \
+        (not os.path.isfile(locations.variantSplsdaBerFile) or \
+        not os.path.isfile(locations.variantSplsdaBerFile + ".ok")):
+            print("# Running windowed sPLS-DA for variant calls ...")
+            run_windowed_splsda(args.metadataFile, locations.variantRecodedFile,
+                                locations.variantSplsdaSelectedFile,
+                                locations.variantSplsdaBerFile,
+                                locations.windowedSplsdaRscript)
+    print("Variant call sPLS-DA analysis complete!")
 
 def depth_splsda(args, metadataDict, locations):
-    raise NotImplementedError("sPLS-DA for depth variants is not yet implemented.")
+    # Encode deletion variants for sPLS-DA analysis
+    if (not os.path.isfile(locations.variantRecodedFile)) or (not os.path.isfile(locations.variantRecodedFile + ".ok")):
+        print("# Encoding deletion variants for sPLS-DA analysis ...")
+        recode_vcf(args.deletionFile, locations.deletionRecodedFile)
+    
+    # Run windowed sPLS-DA for deletion variants
+    if (not os.path.isfile(locations.deletionSplsdaSelectedFile) or \
+        not os.path.isfile(locations.deletionSplsdaSelectedFile + ".ok")) or \
+        (not os.path.isfile(locations.deletionSplsdaBerFile) or \
+        not os.path.isfile(locations.deletionSplsdaBerFile + ".ok")):
+            print("# Running windowed sPLS-DA for deletion variants ...")
+            run_windowed_splsda(args.metadataFile, locations.deletionRecodedFile,
+                                locations.deletionSplsdaSelectedFile,
+                                locations.deletionSplsdaBerFile,
+                                locations.windowedSplsdaRscript)
+    print("Deletion variant sPLS-DA analysis complete!")
 
 def integrative_splsda(args, metadataDict, locations):
     raise NotImplementedError("Integrative sPLS-DA for both call and depth variants is not yet implemented.")
