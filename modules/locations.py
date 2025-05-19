@@ -66,6 +66,10 @@ class Locations:
         return os.path.join(self.splsdaDir, "psQTL_variants.BER.tsv")
     
     @property
+    def variantSplsdaRdataFile(self):
+        return os.path.join(self.splsdaDir, "psQTL_variants.Rdata")
+    
+    @property
     def deletionEdFile(self):
         return os.path.join(self.workingDirectory, "psQTL_depth.ed.tsv.gz")
     
@@ -80,6 +84,10 @@ class Locations:
     @property
     def deletionSplsdaBerFile(self):
         return os.path.join(self.splsdaDir, "psQTL_depth.BER.tsv")
+    
+    @property
+    def deletionSplsdaRdataFile(self):
+        return os.path.join(self.splsdaDir, "psQTL_depth.Rdata")
     
     @property
     def windowedSplsdaRscript(self):

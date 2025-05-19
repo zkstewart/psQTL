@@ -13,6 +13,7 @@ p <- add_argument(p, "m", help="Metadata file", type = "character")
 p <- add_argument(p, "v", help="Encoded VCF to process", type = "character")
 p <- add_argument(p, "ov", help="Output file for selected variants", type = "character")
 p <- add_argument(p, "ob", help="Output file for Balanced Error Rate (BER) by window", type = "character")
+p <- add_argument(p, "or", help="Output file for Rdata objects", type = "character")
 p <- add_argument(p, "--windowSize", help="Window size (default: 100000)", type="numeric", default=100000)
 p <- add_argument(p, "--berCutoff", help="BER cutoff (default: 0.4)", type="numeric", default=0.4)
 p <- add_argument(p, "--MAF", help="Minor Allele Frequency (MAF) filter (default: 0.05)", type="numeric", default=0.05)
@@ -23,9 +24,8 @@ args <- parse_args(p)
 # Load in remaining libraries
 if (!require("BiocManager", quietly = TRUE))
     install.packages("BiocManager")
-if (!requireNamespace("mixOmics", quietly=TRUE)) {
+if (!requireNamespace("mixOmics", quietly=TRUE))
     BiocManager::install("mixOmics")
-}
 library(mixOmics)
 
 # Parse metadata file
@@ -160,3 +160,6 @@ window.explanation.adjusted$BER[window.explanation.adjusted$BER > 0.5] <- 0.5 - 
 # Write selected variants and BER to file
 write.table(feature.details.table, file=args$ov, sep="\t", row.names=FALSE, quote=FALSE)
 write.table(window.explanation.adjusted, file=args$ob, sep="\t", row.names=FALSE, quote=FALSE)
+
+# Write R objects to file for later integration
+save(selected.X, Y, feature.details.table, file=args$or)

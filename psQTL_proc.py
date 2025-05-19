@@ -175,14 +175,18 @@ def call_splsda(args, metadataDict, locations):
     if (not os.path.isfile(locations.variantSplsdaSelectedFile) or \
         not os.path.isfile(locations.variantSplsdaSelectedFile + ".ok")) or \
         (not os.path.isfile(locations.variantSplsdaBerFile) or \
-        not os.path.isfile(locations.variantSplsdaBerFile + ".ok")):
+        not os.path.isfile(locations.variantSplsdaBerFile + ".ok")) or \
+        (not os.path.isfile(locations.variantSplsdaRdataFile) or \
+        not os.path.isfile(locations.variantSplsdaRdataFile + ".ok")):
             print("# Running windowed sPLS-DA for variant calls ...")
             run_windowed_splsda(args.metadataFile, locations.variantRecodedFile,
                                 locations.variantSplsdaSelectedFile,
                                 locations.variantSplsdaBerFile,
+                                locations.variantSplsdaRdataFile,
                                 locations.windowedSplsdaRscript)
             open(locations.variantSplsdaSelectedFile + ".ok", "w").close()
             open(locations.variantSplsdaBerFile + ".ok", "w").close()
+            open(locations.variantSplsdaRdataFile + ".ok", "w").close()
     else:
         print("# Variant calls already processed for sPLS-DA analysis; skipping ...")
     print("Variant call sPLS-DA analysis complete!")
@@ -200,14 +204,18 @@ def depth_splsda(args, metadataDict, locations):
     if (not os.path.isfile(locations.deletionSplsdaSelectedFile) or \
         not os.path.isfile(locations.deletionSplsdaSelectedFile + ".ok")) or \
         (not os.path.isfile(locations.deletionSplsdaBerFile) or \
-        not os.path.isfile(locations.deletionSplsdaBerFile + ".ok")):
+        not os.path.isfile(locations.deletionSplsdaBerFile + ".ok")) or \
+        (not os.path.isfile(locations.deletionSplsdaRdataFile) or \
+        not os.path.isfile(locations.deletionSplsdaRdataFile + ".ok")):
             print("# Running windowed sPLS-DA for deletion variants ...")
             run_windowed_splsda(args.metadataFile, locations.deletionRecodedFile,
                                 locations.deletionSplsdaSelectedFile,
                                 locations.deletionSplsdaBerFile,
+                                locations.deletionSplsdaRdataFile,
                                 locations.windowedSplsdaRscript)
             open(locations.deletionSplsdaSelectedFile + ".ok", "w").close()
             open(locations.deletionSplsdaBerFile + ".ok", "w").close()
+            open(locations.deletionSplsdaRdataFile + ".ok", "w").close()
     else:
         print("# Deletion variants already processed for sPLS-DA analysis; skipping ...")
     print("Deletion variant sPLS-DA analysis complete!")
