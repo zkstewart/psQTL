@@ -104,9 +104,9 @@ def main():
     if args.mode == "ed":
         print("## psQTL_proc.py - Euclidean Distances ##")
         emain(args, metadataDict, locations)
-    elif args.mode == "depth":
+    elif args.mode == "splsda":
         print("## psQTL_proc.py - sPLS-DA ##")
-        dmain(args, metadataDict, locations)
+        smain(args, metadataDict, locations)
     
     # Print completion flag if we reach this point
     print("Program completed successfully!")
@@ -167,6 +167,9 @@ def call_splsda(args, metadataDict, locations):
     if (not os.path.isfile(locations.variantRecodedFile)) or (not os.path.isfile(locations.variantRecodedFile + ".ok")):
         print("# Encoding variant calls for sPLS-DA analysis ...")
         recode_vcf(args.vcfFile, locations.variantRecodedFile)
+        open(locations.variantRecodedFile + ".ok", "w").close() # touch a .ok file to indicate success
+    else:
+        print("# Variant calls already encoded for sPLS-DA analysis; skipping ...")
     
     # Run windowed sPLS-DA for variant calls
     if (not os.path.isfile(locations.variantSplsdaSelectedFile) or \
@@ -178,6 +181,10 @@ def call_splsda(args, metadataDict, locations):
                                 locations.variantSplsdaSelectedFile,
                                 locations.variantSplsdaBerFile,
                                 locations.windowedSplsdaRscript)
+            open(locations.variantSplsdaSelectedFile + ".ok", "w").close()
+            open(locations.variantSplsdaBerFile + ".ok", "w").close()
+    else:
+        print("# Variant calls already processed for sPLS-DA analysis; skipping ...")
     print("Variant call sPLS-DA analysis complete!")
 
 def depth_splsda(args, metadataDict, locations):
@@ -185,6 +192,9 @@ def depth_splsda(args, metadataDict, locations):
     if (not os.path.isfile(locations.variantRecodedFile)) or (not os.path.isfile(locations.variantRecodedFile + ".ok")):
         print("# Encoding deletion variants for sPLS-DA analysis ...")
         recode_vcf(args.deletionFile, locations.deletionRecodedFile)
+        open(locations.deletionRecodedFile + ".ok", "w").close() # touch a .ok file to indicate success
+    else:
+        print("# Deletion variants already encoded for sPLS-DA analysis; skipping ...")
     
     # Run windowed sPLS-DA for deletion variants
     if (not os.path.isfile(locations.deletionSplsdaSelectedFile) or \
@@ -196,6 +206,10 @@ def depth_splsda(args, metadataDict, locations):
                                 locations.deletionSplsdaSelectedFile,
                                 locations.deletionSplsdaBerFile,
                                 locations.windowedSplsdaRscript)
+            open(locations.deletionSplsdaSelectedFile + ".ok", "w").close()
+            open(locations.deletionSplsdaBerFile + ".ok", "w").close()
+    else:
+        print("# Deletion variants already processed for sPLS-DA analysis; skipping ...")
     print("Deletion variant sPLS-DA analysis complete!")
 
 def integrative_splsda(args, metadataDict, locations):

@@ -78,7 +78,7 @@ class Locations:
         return os.path.join(self.splsdaDir, "psQTL_depth.selected.tsv")
     
     @property
-    def deletionSplsdaSelectedFile(self):
+    def deletionSplsdaBerFile(self):
         return os.path.join(self.splsdaDir, "psQTL_depth.BER.tsv")
     
     @property

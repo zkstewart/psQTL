@@ -1,13 +1,50 @@
-import os, shutil, gzip
+import os, shutil, subprocess, gzip
 
 from .parsing import read_gz_file
 
 def validate_r_exists():
     if not shutil.which("R"):
         raise FileNotFoundError("R not found in PATH")
+    if not shutil.which("Rscript"):
+        raise FileNotFoundError("Rscript not found in PATH")
+
+def validate_r_package(packageName):
+    '''
+    Checks if the specified R package is installed via command-line
+    input to Rscript.
+    
+    Parameters:
+        packageName -- a string indicating the name of the R package to check
+    Returns:
+        isInstalled -- a boolean indicating whether the package is installed
+    '''
+    # Format command
+    cmd = ["echo", f'\'find.package("{packageName}")\'', "|", "Rscript", "-"]
+    
+    # Check if package is installed through Rscript interface
+    run_Rscript = subprocess.Popen(" ".join(cmd), shell=True,
+                                   stdout = subprocess.PIPE,
+                                   stderr = subprocess.PIPE)
+    rout, rerr = run_Rscript.communicate()
+    
+    # Check for errors
+    errorMsg = rerr.decode("utf-8")
+    if "there is no package" in errorMsg or "error" in errorMsg:
+        return False
+    else:
+        # If the package is installed, rout will contain the path to the package
+        return True if rout.decode("utf-8").strip() else False
 
 def validate_r_packages_installation():
-    raise NotImplementedError("R package validation not implemented yet")
+    '''
+    Sequentially checks if the required R packages for sPLS-DA are installed.
+    Raises an exception if any package is not installed.
+    '''
+    REQUIRED_PACKAGES = ["argparser", "mixOmics"]
+    for package in REQUIRED_PACKAGES:
+        if not validate_r_package(package):
+            raise FileNotFoundError(f"The R package '{package}' is not installed. "
+                                    "Please install it before running sPLS-DA.")
 
 def recode_vcf(vcfFile, outputFileName):
     '''
@@ -86,7 +123,7 @@ def run_windowed_splsda(metadataFile, encodedVcfFile, outputVariants, outputBER,
                filter on (default is 0.05)
     '''
     # Format command
-    cmd = ["R", scriptLocation, metadataFile, encodedVcfFile, outputVariants, outputBER,
+    cmd = ["Rscript", scriptLocation, metadataFile, encodedVcfFile, outputVariants, outputBER,
            "--windowSize", str(windowSize), "--berCutoff", str(berCutoff), "--MAF", str(maf)]
     
     # Run bcftools index

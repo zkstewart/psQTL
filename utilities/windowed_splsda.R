@@ -32,7 +32,7 @@ library(mixOmics)
 metadata.table <- read.table(file=args$m, header=FALSE, sep="\t", stringsAsFactors=FALSE)
 
 # Read in encoded values
-df <- read.table(gzfile(args$v), header=TRUE, sep="\t")
+df <- read.table(gzfile(args$v), header=TRUE, sep="\t", na.strings=".")
 maf.cutoff <- ceiling((ncol(df) - 2) * args$MAF)
 
 df <- df[rowSums(df[,! colnames(df) %in% c("chrom", "pos")], na.rm=TRUE)>0,]
