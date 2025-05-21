@@ -102,15 +102,21 @@ for (chromosome in unique(df$chrom))
                           ncomp = 1,
                           scale = FALSE,
                           max.iter = args$maxiters)
-    if (ncol(window.plsda$X) <= 5) {
+    if (ncol(window.plsda$X) <= 6) {
       window.perf <- perf(window.plsda,
-                          validation = "loo",
-                          BPPARAM = BPPARAM)
+                          validation = "loo")
     } else {
-      window.perf <- perf(window.plsda,
-                          folds = 2, validation = "Mfold", 
-                          nrepeat = args$nrepeat,
-                          BPPARAM = BPPARAM)
+      window.perf <- tryCatch(
+        {
+           perf(window.plsda,
+                folds = 2, validation = "Mfold", 
+                nrepeat = NREP)
+        },
+        error = function(e) {
+          perf(window.plsda,
+               validation = "loo")
+        }
+      )
     }
     window.ber <- window.perf$error.rate$BER[[1]]
     
