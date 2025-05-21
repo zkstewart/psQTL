@@ -14,9 +14,12 @@ p <- add_argument(p, "v", help="Encoded VCF to process", type = "character")
 p <- add_argument(p, "ov", help="Output file for selected variants", type = "character")
 p <- add_argument(p, "ob", help="Output file for Balanced Error Rate (BER) by window", type = "character")
 p <- add_argument(p, "or", help="Output file for Rdata objects", type = "character")
+p <- add_argument(p, "--threads", help="Threads to use", type = "numeric", default = 1)
 p <- add_argument(p, "--windowSize", help="Window size (default: 100000)", type="numeric", default=100000)
 p <- add_argument(p, "--berCutoff", help="BER cutoff (default: 0.4)", type="numeric", default=0.4)
 p <- add_argument(p, "--MAF", help="Minor Allele Frequency (MAF) filter (default: 0.05)", type="numeric", default=0.05)
+p <- add_argument(p, "--nrepeat", help="Number of repeats for stability analysis", type = "numeric", default = 10)
+p <- add_argument(p, "--maxiters", help="Maximum number of iterations when tuning sPLS-DA", type = "numeric", default = 1000)
 
 # Parse the command line arguments
 args <- parse_args(p)
@@ -27,6 +30,25 @@ if (!require("BiocManager", quietly = TRUE))
 if (!requireNamespace("mixOmics", quietly=TRUE))
     BiocManager::install("mixOmics")
 library(mixOmics)
+
+if (!requireNamespace("BiocParallel", quietly=TRUE))
+    BiocManager::install("BiocParallel")
+library(BiocParallel)
+
+# Set up parallel processing
+if (args$threads == 1) {
+  BPPARAM <- BiocParallel::SerialParam()
+} else if (Sys.info()['sysname'] == "Windows") {
+  BPPARAM <- BiocParallel::SnowParam(workers = args$threads)
+} else {
+  BPPARAM <- BiocParallel::MulticoreParam(workers = args$threads)
+}
+
+# Identify mixOmics version
+mixomicsVersion = unlist(packageVersion("mixOmics"))
+if (mixomicsVersion[2] < 30) {
+    print("Older version of mixOmics detected, which means that the plotLoadings function will emit an 'Rplots.pdf' file you can ignore")
+}
 
 # Parse metadata file
 metadata.table <- read.table(file=args$m, header=FALSE, sep="\t", stringsAsFactors=FALSE)
@@ -76,13 +98,29 @@ for (chromosome in unique(df$chrom))
     X <- t(windowDF[, ! colnames(windowDF) %in% c("chrom", "pos")])
     
     # Run PLS-DA
-    window.plsda <- plsda(X, Y, ncomp = 1)
-    window.perf <- perf(window.plsda, folds = 2, validation = "Mfold", 
-                        dist = "max.dist", progressBar = FALSE, nrepeat = 10)
+    window.plsda <- plsda(X, Y,
+                          ncomp = 1,
+                          scale = FALSE,
+                          max.iter = args$maxiters)
+    if (ncol(window.plsda$X) <= 5) {
+      window.perf <- perf(window.plsda,
+                          validation = "loo",
+                          BPPARAM = BPPARAM)
+    } else {
+      window.perf <- perf(window.plsda,
+                          folds = 2, validation = "Mfold", 
+                          nrepeat = args$nrepeat,
+                          BPPARAM = BPPARAM)
+    }
     window.ber <- window.perf$error.rate$BER[[1]]
     
     # Locate the features contributing most to PLS-DA outcome
-    window.loadings <- plotLoadings(window.plsda, comp=1, contrib = 'max', method = 'median')
+    if (mixomicsVersion[2] >= 30) {
+        window.loadings <- plotLoadings(window.plsda, comp=1, contrib = 'max', method = 'median', plot = FALSE)
+    } else {
+        window.loadings <- plotLoadings(window.plsda, comp=1, contrib = 'max', method = 'median')
+    }
+    
     window.contribution <- window.loadings$X[window.loadings$X$GroupContrib != "tie",]
     importance.cutoff <- abs(window.contribution[1,]$importance)/2 # arbitrary, but adequate
     window.features <- window.contribution[abs(window.contribution$importance) >= importance.cutoff,]
@@ -94,8 +132,8 @@ for (chromosome in unique(df$chrom))
       next
     }
     window.explanation[nrow(window.explanation) + 1,] <- c(chromosome, (windowEnd + windowStart) / 2, window.ber)
-
-    # Store selected features
+    
+    # Store best selected feature
     for (row.index in 1:nrow(window.features))
     {
       feature.row <- window.features[row.index,]
@@ -115,16 +153,23 @@ selected.X <- t(selected.df[, ! colnames(selected.df) %in% c("chrom", "pos")])
 
 # Tune sPLS-DA to choose number of genomic features
 list.keepX <- c(1:9,  seq(10, 30, 5)) # it is very improbable that more than 30 QTLs exist or can be meaningfully identified
-tune.splsda.test <- tune.splsda(selected.X, Y, ncomp = 2, validation = 'Mfold',
-                                folds = 2, dist = 'max.dist',
-                                test.keepX = list.keepX, nrepeat = 10)
+tune.splsda.test <- tune.splsda(selected.X, Y, test.keepX = list.keepX,
+                                ncomp = 2, folds = 2, validation = 'Mfold',
+                                scale = FALSE,
+                                nrepeat = args$nrepeat, max.iter = args$maxiters,
+                                BPPARAM = BPPARAM)
 ncomp <- 1 # 'tune.splsda.test$choice.ncomp$ncomp' won't be used as a single component is sufficient when discriminating two groups
 select.keepX <- tune.splsda.test$choice.keepX[1:ncomp]
 
 # Run sPLS-DA to select multi-QTLs and identify most important features
-final.splsda <- splsda(selected.X, Y, ncomp = ncomp, keepX = select.keepX)
-perf.final.splsda <- perf(final.splsda, folds = 2, validation = "Mfold",
-                          dist = "max.dist", progressBar = FALSE, nrepeat = 10)
+final.splsda <- splsda(selected.X, Y, keepX = select.keepX,
+                       ncomp = ncomp,
+                       scale = FALSE,
+                       max.iter = args$maxiters)
+perf.final.splsda <- perf(final.splsda,
+                          folds = 2, validation = "Mfold",
+                          nrepeat = args$nrepeat,
+                          BPPARAM = BPPARAM)
 
 # Tabulate stability values
 select.name <- selectVar(final.splsda, comp = 1)$name

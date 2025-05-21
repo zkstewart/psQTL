@@ -7,11 +7,11 @@
 import os, argparse, sys, gzip
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-from modules.validation import validate_proc_args, validate_c, validate_d
+from modules.validation import validate_proc_args, validate_c, validate_d, validate_s
 from modules.parsing import parse_metadata
 from modules.ed import parse_vcf_for_ed
 from modules.splsda import validate_r_exists, validate_r_packages_installation, \
-    recode_vcf, run_windowed_splsda
+    recode_vcf, run_windowed_splsda, run_integrative_splsda
 from _version import __version__
 
 def generate_ed_file(vcfFile, metadataDict, outputFileName, ignoreIdentical):
@@ -92,7 +92,44 @@ def main():
                          default=False)
     
     # sPLS-DA-subparser arguments
-    ## N/A
+    sparser.add_argument("--threads", dest="threads",
+                         type=int,
+                         required=False,
+                         help="""Optionally, specify the number of threads to use when running
+                         sPLS-DA analyses (default: 1)""",
+                         default=1)
+    sparser.add_argument("--windowSize", dest="splsdaWindowSize",
+                         type=int,
+                         required=False,
+                         help="""Optionally, specify the window size that sPLS-DA will
+                         be run within (recommended: 100000)""",
+                         default=100000)
+    sparser.add_argument("--maf", dest="mafFilter",
+                         type=float,
+                         required=False,
+                         help="""Optionally, specify the Minor Allele Frequency to filter
+                         variants by prior to sPLS-DA analysis (recommended: 0.05;
+                         equivalent to 5% MAF)""",
+                         default=0.05)
+    sparser.add_argument("--ber", dest="berFilter",
+                         type=float,
+                         required=False,
+                         help="""Optionally, specify the Balanced Error Rate to select
+                         variants during sPLS-DA analysis (recommended: 0.4)""",
+                         default=0.05)
+    sparser.add_argument("--maxiters", dest="maxIterations",
+                         type=int,
+                         required=False,
+                         help="""Optionally, specify the maximum number of iterations
+                         allowed for sPLS-DA convergence (recommended: 10000)""",
+                         default=10000)
+    sparser.add_argument("--nrepeat", dest="numRepeats",
+                         type=int,
+                         required=False,
+                         help="""Optionally, specify the number of times to repeat
+                         M-fold validation during sPLS-DA optimisation (recommended: 20
+                         (default) or more if you have the time)""",
+                         default=20)
     
     args = subParentParser.parse_args()
     locations = validate_proc_args(args)
@@ -143,6 +180,9 @@ def depth_ed(args, metadataDict, locations):
     print("Deletion variant ED file generation complete!")
 
 def smain(args, metadataDict, locations):
+    # Validate sPLS-DA arguments
+    validate_s(args)
+    
     # Validate input types before proceeding
     if "call" in args.inputType:
         validate_c(args)
@@ -183,13 +223,15 @@ def call_splsda(args, metadataDict, locations):
                                 locations.variantSplsdaSelectedFile,
                                 locations.variantSplsdaBerFile,
                                 locations.variantSplsdaRdataFile,
-                                locations.windowedSplsdaRscript)
+                                locations.windowedSplsdaRscript,
+                                args.threads, args.splsdaWindowSize, args.berFilter,
+                                args.mafFilter, args.numRepeats, args.maxIterations)
             open(locations.variantSplsdaSelectedFile + ".ok", "w").close()
             open(locations.variantSplsdaBerFile + ".ok", "w").close()
             open(locations.variantSplsdaRdataFile + ".ok", "w").close()
+            print("Variant call sPLS-DA analysis complete!")
     else:
         print("# Variant calls already processed for sPLS-DA analysis; skipping ...")
-    print("Variant call sPLS-DA analysis complete!")
 
 def depth_splsda(args, metadataDict, locations):
     # Encode deletion variants for sPLS-DA analysis
@@ -212,16 +254,29 @@ def depth_splsda(args, metadataDict, locations):
                                 locations.deletionSplsdaSelectedFile,
                                 locations.deletionSplsdaBerFile,
                                 locations.deletionSplsdaRdataFile,
-                                locations.windowedSplsdaRscript)
+                                locations.windowedSplsdaRscript,
+                                args.threads, args.splsdaWindowSize, args.berFilter,
+                                args.mafFilter, args.numRepeats, args.maxIterations)
             open(locations.deletionSplsdaSelectedFile + ".ok", "w").close()
             open(locations.deletionSplsdaBerFile + ".ok", "w").close()
             open(locations.deletionSplsdaRdataFile + ".ok", "w").close()
+            print("Deletion variant sPLS-DA analysis complete!")
     else:
         print("# Deletion variants already processed for sPLS-DA analysis; skipping ...")
-    print("Deletion variant sPLS-DA analysis complete!")
 
 def integrative_splsda(args, metadataDict, locations):
-    raise NotImplementedError("Integrative sPLS-DA for both call and depth variants is not yet implemented.")
+    # Run integrative sPLS-DA for variant calls
+    if (not os.path.isfile(locations.integrativeSplsdaSelectedFile) or \
+        not os.path.isfile(locations.integrativeSplsdaSelectedFile + ".ok")):
+            print("# Running integration of sPLS-DA for variants and deletions ...")
+            run_integrative_splsda(locations.variantSplsdaRdataFile, locations.deletionSplsdaRdataFile,
+                                   locations.integrativeSplsdaSelectedFile,
+                                   locations.integrativeSplsdaRscript,
+                                   args.threads, args.numRepeats, args.maxIterations)
+            open(locations.integrativeSplsdaSelectedFile + ".ok", "w").close()
+            print("Integrative sPLS-DA analysis complete!")
+    else:
+        print("# Integrative sPLS-DA of variants and deletions already processed; skipping ...")
 
 if __name__ == "__main__":
     main()

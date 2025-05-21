@@ -104,7 +104,8 @@ def recode_vcf(vcfFile, outputFileName):
             fileOut.write("\t".join(encodedLine) + "\n")
 
 def run_windowed_splsda(metadataFile, encodedVcfFile, outputVariants, outputBER, outputRdata,
-                        scriptLocation, windowSize=1000000, berCutoff=0.4, maf=0.05):
+                        scriptLocation, threads=1, windowSize=1000000, berCutoff=0.4, maf=0.05,
+                        nrepeat=10, maxiters=1000):
     '''
     Calls the windowed_plsda.R script to run sPLS-DA on the provided encoded VCF file.
     
@@ -117,16 +118,21 @@ def run_windowed_splsda(metadataFile, encodedVcfFile, outputVariants, outputBER,
         outputBER -- a string indicating the location of the output BER file
         outputRdata -- a string indicating the location of the output RData file
         scriptLocation -- a string indicating the location of the windowed_plsda.R script
+        threads -- (OPTIONAL) an integer indicating the number of threads to use (default is 1)
         windowSize -- (OPTIONAL) an integer indicating the size of the windows to run local
                        PLS-DA within (default is 1000000)
         berCutoff -- (OPTIONAL) a float indicating the BER cutoff to filter on (default is 0.4)
         maf -- (OPTIONAL) a float indicating the minor allele frequency threshold to
                filter on (default is 0.05)
+        nrepeat -- (OPTIONAL) an integer indicating the number of repeats for stability analysis
+        maxiters -- (OPTIONAL) an integer indicating the maximum number of iterations when tuning sPLS-DA
     '''
     # Format command
     cmd = ["Rscript", scriptLocation, metadataFile, encodedVcfFile,
            outputVariants, outputBER, outputRdata,
-           "--windowSize", str(windowSize), "--berCutoff", str(berCutoff), "--MAF", str(maf)]
+           "--threads", str(threads), "--windowSize", str(windowSize),
+           "--berCutoff", str(berCutoff), "--MAF", str(maf),
+            "--nrepeat", str(nrepeat), "--maxiters", str(maxiters)]
     
     # Run bcftools index
     run_Rscript = subprocess.Popen(" ".join(cmd), shell=True,
@@ -142,4 +148,37 @@ def run_windowed_splsda(metadataFile, encodedVcfFile, outputVariants, outputBER,
         raise Exception(("run_windowed_splsda encountered an unhandled situation when processing " + 
                          f"'{encodedVcfFile}'; have a look at the stderr to make sense of this:\n'{errorMsg}'"))
 
-## TBD: Implement a function to run sPLS-DA on selected features from windows (capable of 1 or more inputs)
+def run_integrative_splsda(callRdataFile, depthRdataFile, outputVariants,
+                           scriptLocation, threads=1, nrepeat=10, maxiters=1000):
+    '''
+    Calls the integrative_splsda.R script to run sPLS-DA on the outputs of call and depth sPLS-DA.
+    
+    Parameters:
+        callRdataFile -- a string indicating the location of the call sPLS-DA RData file
+        depthRdataFile -- a string indicating the location of the depth sPLS-DA RData file
+        outputVariants -- a string indicating the location of the output variants file
+        scriptLocation -- a string indicating the location of the integrative_plsda.R script
+        windowSize -- (OPTIONAL) an integer indicating the size of the windows to run local
+                       PLS-DA within (default is 1000000)
+        berCutoff -- (OPTIONAL) a float indicating the BER cutoff to filter on (default is 0.4)
+        maf -- (OPTIONAL) a float indicating the minor allele frequency threshold to
+               filter on (default is 0.05)
+    '''
+    # Format command
+    cmd = ["Rscript", scriptLocation, callRdataFile, depthRdataFile, outputVariants,
+           "--threads", str(threads), "--nrepeat", str(nrepeat), "--maxiters", str(maxiters)]
+    
+    # Run bcftools index
+    run_Rscript = subprocess.Popen(" ".join(cmd), shell=True,
+                                   stdout = subprocess.DEVNULL,
+                                   stderr = subprocess.PIPE)
+    rout, rerr = run_Rscript.communicate()
+    
+    # Check for errors
+    if run_Rscript.returncode == 0:
+        return None
+    else:
+        errorMsg = rerr.decode("utf-8").rstrip("\r\n ")
+        raise Exception(("run_integrative_splsda encountered an unhandled situation when processing " + 
+                         f"'{callRdataFile}' and '{depthRdataFile}'; have a look at the stderr to " + 
+                         f"make sense of this:\n'{errorMsg}'"))
