@@ -90,7 +90,7 @@ for (chromosome in unique(df$chrom))
     # Store BER=0.5 if insufficient variants are found in this window
     if (nrow(windowDF) < 2)
     {
-      window.explanation[nrow(window.explanation) + 1,] <- c(chromosome, (windowEnd + windowStart) / 2, 0.5) # BER=0.5
+      window.explanation[nrow(window.explanation) + 1,] <- c(chromosome, windowStart, 0.5) # BER=0.5
       next
     }
     
@@ -102,6 +102,8 @@ for (chromosome in unique(df$chrom))
                           ncomp = 1,
                           scale = FALSE,
                           max.iter = args$maxiters)
+    
+    # Assess model performance
     if (ncol(window.plsda$X) <= 6) {
       window.perf <- perf(window.plsda,
                           validation = "loo")
@@ -134,10 +136,10 @@ for (chromosome in unique(df$chrom))
     # Store window explanatory power if features are found
     if (nrow(window.features) == 0)
     {
-      window.explanation[nrow(window.explanation) + 1,] <- c(chromosome, (windowEnd + windowStart) / 2, 0.5) # BER=0.5
+      window.explanation[nrow(window.explanation) + 1,] <- c(chromosome, windowStart, 0.5) # BER=0.5
       next
     }
-    window.explanation[nrow(window.explanation) + 1,] <- c(chromosome, (windowEnd + windowStart) / 2, window.ber)
+    window.explanation[nrow(window.explanation) + 1,] <- c(chromosome, windowStart, window.ber)
     
     # Store best selected feature
     for (row.index in 1:nrow(window.features))
