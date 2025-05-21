@@ -116,7 +116,7 @@ def main():
                          required=False,
                          help="""Optionally, specify the Balanced Error Rate to select
                          variants during sPLS-DA analysis (recommended: 0.4)""",
-                         default=0.05)
+                         default=0.4)
     sparser.add_argument("--maxiters", dest="maxIterations",
                          type=int,
                          required=False,

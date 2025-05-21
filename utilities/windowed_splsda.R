@@ -157,10 +157,21 @@ selected.features$BER <- as.numeric(selected.features$BER)
 selected.df <- df[match(rownames(selected.features[selected.features$BER <= args$berCutoff,]), rownames(df)),]
 selected.X <- t(selected.df[, ! colnames(selected.df) %in% c("chrom", "pos")])
 
+# Raise error if we've filtered out all features with BER cutoff
+if (nrow(selected.X) == 0)
+{
+  original.number <- ncol(selected.df) - 2 # sans the chrom and pos columns
+  stop(paste0(
+    "BER cutoff of ", args$berCutoff, " reduces potential features from ",
+    original.number, " down to 0. Your data either has insufficient information ",
+    "to enable QTL prediction or your BER cutoff may be too strict."
+  ))
+}
+
 # Tune sPLS-DA to choose number of genomic features
 list.keepX <- c(1:9,  seq(10, 30, 5)) # it is very improbable that more than 30 QTLs exist or can be meaningfully identified
 tune.splsda.test <- tune.splsda(selected.X, Y, test.keepX = list.keepX,
-                                ncomp = 2, folds = 2, validation = 'Mfold',
+                                ncomp = 1, folds = 2, validation = 'Mfold',
                                 scale = FALSE,
                                 nrepeat = args$nrepeat, max.iter = args$maxiters,
                                 BPPARAM = BPPARAM)
