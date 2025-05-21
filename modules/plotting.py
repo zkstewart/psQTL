@@ -1,70 +1,13 @@
-import os, math
+import os
 import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
 
-from matplotlib.patches import Rectangle
-from itertools import product
+import matplotlib.pyplot as plt
 
 from .gff3 import GFF3
 
 YLIM_HEADSPACE = 0.1 # proportion of ylim to add to the top of the plot
 SAMPLE_AESTHETICS = [["#000000", "dotted"], ["#002D7E", "dashed"], ["#ECE45A", "dashdot"]]
 NUM_SAMPLE_LINES = len(SAMPLE_AESTHETICS) # for validation
-
-def WMA(s, period):
-    """
-    See https://stackoverflow.com/questions/74518386/improving-weighted-moving-average-performance
-    
-    Parameters:
-        s -- a numpy array of values to smooth
-        period -- an integer value indicating the number of previous values to consider
-                  during weighted moving average calculation
-    Returns:
-        sw -- a pandas Series of the smoothed values
-    """
-    w = np.arange(period)+1
-    w_s = w.sum()
-    
-    try:
-        swv = np.lib.stride_tricks.sliding_window_view(s.flatten(), window_shape=period)
-    except ValueError:
-        "Less data points than period size causes this error"
-        return None
-    sw = (swv * w).sum(axis=1) / w_s
-    
-    # Need to now return it as a normal series
-    sw = np.concatenate((np.full(period - 1, np.nan), sw))
-    try:
-        sw[0:period] = sw[period] # set first n=period values to be same as first smoothed value
-    except:
-        "len(sw)==1 causes this error"
-        return None
-    return pd.Series(sw)
-
-def bin_values(values, start, end, binSize, binThreshold):
-    '''
-    Parameters:
-        values -- a list of lists containing three values: [position, contigID, statistical value]
-        start -- an integer value indicating the start of the region
-        end -- an integer value indicating the end of the region
-        binSize -- an integer value indicating the size of the bins/windows
-        binThreshold -- an integer value indicating the threshold for counting a variant
-                        within a bin/window
-    Returns:
-        histo -- a numpy array with length equal to the number of bins/windows
-                 within the given region boundaries, with each value indicating
-                 the number of variants within that bin/window that met the
-                 binThreshold
-    '''
-    histo = np.array([
-        0 for _ in range(math.ceil((end - start + 1) / binSize))
-    ])
-    for pos, _, stat in values:
-        if abs(stat) >= binThreshold:
-            binIndex = (pos-start) // binSize
-            histo[binIndex] += 1
-    return histo
 
 def linescatter(axs, rowNum, edNCLS, regions, wmaSize, line, scatter, 
                 outputDirectory, plotScalebar, fileSuffix,

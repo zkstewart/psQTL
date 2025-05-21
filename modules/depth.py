@@ -2,7 +2,7 @@ import os, gzip
 import pandas as pd
 import numpy as np
 from .parsing import parse_binned_tsv
-from .ed import EDNCLS
+from .ncls import WindowedNCLS
 
 def get_median_value(values):
     medianValue = np.median(values)
@@ -235,8 +235,8 @@ def convert_dict_to_depthncls(coverageDict, windowSize):
         depthNCLSDict -- a dictionary with structure like:
                          {
                              "bulk1": {
-                                 "sample1": EDNCLS,
-                                 "sample2": EDNCLS,
+                                 "sample1": WindowedNCLS,
+                                 "sample2": WindowedNCLS,
                                  ...
                             },
                              "bulk2": { ... }
@@ -246,10 +246,10 @@ def convert_dict_to_depthncls(coverageDict, windowSize):
     for bulk, sampleDict in coverageDict.items():
         depthNCLSDict[bulk] = {}
         for sampleID, depthDict in sampleDict.items():
-            edNCLS = EDNCLS(windowSize)
+            windowedNCLS = WindowedNCLS(windowSize)
             for chrom, value in depthDict.items():
                 positions = np.array(value[0])
                 edValues = np.array(value[1])
-                edNCLS.add(chrom, positions, edValues)
-                depthNCLSDict[bulk][sampleID] = edNCLS
+                windowedNCLS.add(chrom, positions, edValues)
+                depthNCLSDict[bulk][sampleID] = windowedNCLS
     return depthNCLSDict

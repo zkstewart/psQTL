@@ -1,6 +1,7 @@
 import os, shutil, subprocess, gzip
 
 from .parsing import read_gz_file
+from .ncls import WindowedNCLS
 
 def validate_r_exists():
     if not shutil.which("R"):
@@ -182,3 +183,103 @@ def run_integrative_splsda(callRdataFile, depthRdataFile, outputVariants,
         raise Exception(("run_integrative_splsda encountered an unhandled situation when processing " + 
                          f"'{callRdataFile}' and '{depthRdataFile}'; have a look at the stderr to " + 
                          f"make sense of this:\n'{errorMsg}'"))
+
+def parse_selected_to_windowed_ncls(selectedFileName):
+    '''
+    Parameters:
+        selectedFileName -- a file name indicating the location of the selected variants file
+    Returns:
+        windowedNCLS -- a WindowedNCLS object containing statistical values indexed by chromosome
+                        and position
+    '''
+    EXPECTED_HEADER = ["chrom", "pos", "stability", "abs_loading", "direction"]
+    
+    # Parse the selected file
+    statDict = {}
+    with open(selectedFileName, "r") as fileIn:
+        # Read and validate the header
+        header = fileIn.readline().strip().split("\t")
+        if header != EXPECTED_HEADER:
+            raise ValueError(f"Invalid header in file '{selectedFileName}', should be: {EXPECTED_HEADER}")
+        
+        # Store each line in the windowedNCLS object
+        for line in fileIn:
+            # Parse relevant details
+            chrom, pos, stability, abs_loading, direction = line.strip().split("\t")
+            try:
+                pos = int(pos)
+            except:
+                raise ValueError(f"Position '{pos}' is not an integer in file '{selectedFileName}'")
+            try:
+                stability = float(stability)
+            except:
+                raise ValueError(f"Stability '{stability}' is not a float in file '{selectedFileName}'")
+            try:
+                abs_loading = float(abs_loading)
+            except:
+                raise ValueError(f"abs_loading '{abs_loading}' is not a float in file '{selectedFileName}'")
+            
+            # Compute the stability*abs_loading value
+            statProduct = stability * abs_loading
+            
+            # Store the values in the dictionary
+            if chrom not in statDict:
+                statDict[chrom] = [[], []]
+            statDict[chrom][0].append(pos)
+            statDict[chrom][1].append(statProduct)
+    
+    # Convert the dictionary to a WindowedNCLS object
+    windowedNCLS = WindowedNCLS(windowSize=0)
+    for chrom, value in statDict.items():
+        positions = np.array(value[0])
+        statsValues = np.array(value[1])
+        windowedNCLS.add(chrom, positions, statsValues)
+    
+    return windowedNCLS
+
+def parse_ber_to_windowed_ncls(berFileName, windowSize):
+    '''
+    Parameters:
+        berFileName -- a file name indicating the location of the BER windows file
+        windowSize -- an integer indicating the size of the windows used for binning
+    Returns:
+        windowedNCLS -- a WindowedNCLS object containing statistical values indexed by chromosome
+                        and position
+    '''
+    EXPECTED_HEADER = ["chrom", "pos", "BER"]
+    
+    # Parse the selected file
+    statDict = {}
+    with open(berFileName, "r") as fileIn:
+        # Read and validate the header
+        header = fileIn.readline().strip().split("\t")
+        if header != EXPECTED_HEADER:
+            raise ValueError(f"Invalid header in file '{berFileName}', should be: {EXPECTED_HEADER}")
+        
+        # Store each line in the windowedNCLS object
+        for line in fileIn:
+            # Parse relevant details
+            chrom, pos, ber = line.strip().split("\t")
+            try:
+                pos = int(pos)
+            except:
+                raise ValueError(f"Position '{pos}' is not an integer in file '{berFileName}'")
+            try:
+                ber = float(ber)
+            except:
+                raise ValueError(f"BER '{ber}' is not a float in file '{berFileName}'")
+            
+            # Store the values in the dictionary
+            if chrom not in statDict:
+                statDict[chrom] = [[], []]
+            statDict[chrom][0].append(pos)
+            statDict[chrom][1].append(ber)
+    
+    # Convert the dictionary to a WindowedNCLS object
+    windowedNCLS = WindowedNCLS(windowSize=windowSize)
+    for chrom, value in statDict.items():
+        positions = np.array(value[0])
+        statsValues = np.array(value[1])
+        windowedNCLS.add(chrom, positions, statsValues)
+    
+    return windowedNCLS

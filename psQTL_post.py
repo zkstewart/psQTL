@@ -14,7 +14,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from modules.validation import validate_post_args, validate_regions, validate_p, validate_r
 from modules.parsing import parse_metadata
 from modules.depth import parse_bins_as_dict, normalise_coverage_dict, convert_dict_to_depthncls
-from modules.ed import parse_ed_as_dict, convert_dict_to_edncls
+from modules.ed import parse_ed_as_dict, convert_dict_to_windowed_ncls
 from modules.plotting import linescatter, histogram, genes, coverage, scalebar, NUM_SAMPLE_LINES
 from modules.reporting import report_genes, report_depth
 from modules.gff3 import GFF3
@@ -22,7 +22,7 @@ from _version import __version__
 
 def derive_window_size(args, edDict):
     windowSize = None
-    if args.inputType == "depth":
+    if "depth" in args.resultType:
         # Derive window size from dictionary
         for key, posEDpairs in edDict.items():
             if len(posEDpairs[0]) > 1:
@@ -85,11 +85,19 @@ def main():
     p.add_argument("-f", dest="genomeFasta",
                    required=True,
                    help="Specify the location of the genome FASTA file")
-    p.add_argument("-i", dest="inputType",
+    p.add_argument("-r", dest="resultType",
                    required=True,
+                   nargs="+",
                    choices=["depth", "call"],
-                   help="""Specify whether you are analysing the Euclidean distance calculation
-                   from variant 'call's or 'depth' predictions of deleted regions""")
+                   help="""Specify whether you are analysing the results from variant 'call's
+                   and/or 'depth' predictions of deleted regions""")
+    p.add_argument("-m", dest="measurementType",
+                   required=True,
+                   nargs="+",
+                   choices=["ed", "splsda"],
+                   help="""Specify whether you are analysing 'ed' (Euclidean distance)
+                   and/or 'splsda' (Sparse Partial Least Squares Discriminant Analysis)
+                   measurements""")
     p.add_argument("-o", dest="outputFileName",
                    required=True,
                    help="""Specify the location to write the output file; for 'plot', this must
@@ -150,6 +158,10 @@ def main():
                          nargs="+",
                          choices=["line", "scatter", "histogram", "coverage", "genes"],
                          help="Specify one or more plot types to generate")
+    pparser.add_argument("-s", dest="plotStyle",
+                         required=True,
+                         choices=["horizontal", "circos"],
+                         help="Specify the style of plot to generate")
     ## Optional file arguments
     pparser.add_argument("--annotation", dest="annotationGFF3",
                          required=False,
@@ -254,7 +266,7 @@ def main():
     
     # Convert dictionary to Euclidean distance NCLS data structure
     "EDNCLS cannot be pickled so we need to do it like file->dict->EDNCLS"
-    edNCLS = convert_dict_to_edncls(edDict, args.windowSize)
+    edNCLS = convert_dict_to_windowed_ncls(edDict, args.windowSize)
     
     # Make sure all contigs in Euclidean distance data are in genome FASTA
     for contigID in edNCLS.contigs:
@@ -277,14 +289,14 @@ def main():
     
     # Split into mode-specific functions
     if args.mode == "plot":
-        pmain(args, edNCLS, lengthsDict)
+        pmain(args, edNCLS)
     elif args.mode == "report":
         rmain(args, edNCLS)
     
     # Print completion flag if we reach this point
     print("Program completed successfully!")
 
-def pmain(args, edNCLS, lengthsDict):
+def pmain(args, edNCLS):
     STANDARD_DIMENSION = 5
     PLOT_DIR = os.path.join(args.workingDirectory, "plots")
     os.makedirs(PLOT_DIR, exist_ok=True)
@@ -337,7 +349,7 @@ def pmain(args, edNCLS, lengthsDict):
                     True if "line" in args.plotTypes else False,
                     True if "scatter" in args.plotTypes else False,
                     PLOT_DIR, rowNum+1 == len(rowLabels),
-                    args.inputType)
+                    args.resultType)
         rowNum += 1
     
     # Plot a histogram
@@ -370,7 +382,7 @@ def pmain(args, edNCLS, lengthsDict):
     print("Plotting complete!")
 
 def rmain(args, edNCLS):
-    if args.inputType == "depth":
+    if args.resultType == "depth":
         report_depth(edNCLS, args.gff3Obj, args.regions, args.outputFileName, args.radiusSize)
     else:
         report_genes(edNCLS, args.gff3Obj, args.regions, args.outputFileName, args.radiusSize)
