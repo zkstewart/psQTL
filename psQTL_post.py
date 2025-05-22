@@ -290,11 +290,10 @@ def pmain(args, locations, dataDict):
                                  args.width, args.height)
         plotter.start_plotting()
     elif args.plotStyle == "circos":
-        # plotter = CircosPlot(args.resultTypes, args.measurementTypes, args.plotTypes, args.regions,
-        #                      args.wmaSize, args.binSize, args.binThreshold,
-        #                      args.width, args.height)
-        # plotter.start_plotting()
-        raise NotImplementedError("Circos plot style is not yet implemented")
+        plotter = CircosPlot(args.resultTypes, args.measurementTypes, args.plotTypes, args.regions,
+                             args.wmaSize, args.binSize, args.binThreshold,
+                             args.width, args.height)
+        plotter.start_plotting()
     
     rowLabels = []
     colLabels = []

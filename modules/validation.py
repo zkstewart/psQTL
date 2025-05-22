@@ -1,4 +1,5 @@
 import os, subprocess, re
+from pycirclize.parser import Gff
 
 from .locations import Locations
 from .parameters import ParameterCache
@@ -172,8 +173,12 @@ def validate_post_args(args):
         if not os.path.isfile(args.annotationGFF3):
             raise FileNotFoundError(f"-a/--annotation file '{args.annotationGFF3}' is not a file!")
         else:
-            args.gff3Obj = GFF3(args.annotationGFF3) # parsing now to raise errors early
-            args.gff3Obj.create_ncls_index("gene")
+            if args.plotStyle == "horizontal":
+                args.gff3Obj = GFF3(args.annotationGFF3) # parsing now to raise errors early
+                args.gff3Obj.create_ncls_index("gene")
+            elif args.plotStyle == "circos":
+                parser = Gff(args.genomeGFF3)
+                args.gff3Obj = parser.get_seqid2features(feature_type=None)
     
     # Validate output file
     if os.path.exists(args.outputFileName):

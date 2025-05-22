@@ -2,6 +2,7 @@ import math
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+from pycirclize import Circos
 
 from .gff3 import GFF3
 
@@ -90,49 +91,16 @@ class Plot:
         self.rowNum = None
     
     def start_plotting(self):
-        '''
-        Initialises a matplotlib figure and axes for plotting. Method is not called
-        immediately to allow for customisation of optional attributes especially
-        the figure width and height if not set during object initialisation.
-        '''
-        self.fig, self.axs = plt.subplots(nrows=self.nrow, ncols=self.ncol,
-                                          figsize=(self.width, self.height))
-        self.axs = np.reshape(self.axs, (self.nrow, self.ncol)) # ensure shape is as expected
-        self.fig.tight_layout()
-        self.rowNum = -1 # to keep track of the current row number
+        raise NotImplementedError("start_plotting() must be implemented in subclasses")
     
     def savefig(self, outputFileName):
-        self.fig.savefig(outputFileName, bbox_inches="tight")
+        raise NotImplementedError("savefig() must be implemented in subclasses")
     
     def set_col_labels(self, labels):
-        '''
-        Sets the column labels for the plot.
-        
-        Parameters:
-            labels -- a list of strings indicating the labels for each column
-        '''
-        if self.axs is None:
-            raise ValueError("Call .start_plotting() before setting column labels")
-        if len(labels) != self.ncol:
-            raise ValueError(f"Number of labels ({len(labels)}) does not match number of columns ({self.ncol})")
-        
-        for ax, label in zip(self.axs[0], labels):
-            ax.set_title(label, fontweight="bold")
+        raise NotImplementedError("set_col_labels() must be implemented in subclasses")
     
     def set_row_labels(self, labels):
-        '''
-        Sets the row labels for the plot.
-        
-        Parameters:
-            labels -- a list of strings indicating the labels for each row
-        '''
-        if self.axs is None:
-            raise ValueError("Call .start_plotting() before setting column labels")
-        if len(labels) != self.nrow:
-            raise ValueError(f"Number of labels ({len(labels)}) does not match number of rows ({self.nrow})")
-        
-        for ax, label in zip(self.axs[:,0], labels):
-            ax.set_ylabel(label)
+        raise NotImplementedError("set_row_labels() must be implemented in subclasses")
     
     @property
     def resultTypes(self):
@@ -463,6 +431,51 @@ class HorizontalPlot(Plot):
         super().__init__(resultTypes, measurementTypes, plotTypes, regions, 
                          wmaSize, binSize, binThreshold,
                          width, height)
+    
+    def start_plotting(self):
+        '''
+        Initialises a matplotlib figure and axes for plotting. Method is not called
+        immediately to allow for customisation of optional attributes especially
+        the figure width and height if not set during object initialisation.
+        '''
+        self.fig, self.axs = plt.subplots(nrows=self.nrow, ncols=self.ncol,
+                                          figsize=(self.width, self.height))
+        self.axs = np.reshape(self.axs, (self.nrow, self.ncol)) # ensure shape is as expected
+        self.fig.tight_layout()
+        self.rowNum = -1 # to keep track of the current row number
+    
+    def savefig(self, outputFileName):
+        self.fig.savefig(outputFileName, bbox_inches="tight")
+    
+    def set_col_labels(self, labels):
+        '''
+        Sets the column labels for the plot.
+        
+        Parameters:
+            labels -- a list of strings indicating the labels for each column
+        '''
+        if self.axs is None:
+            raise ValueError("Call .start_plotting() before setting column labels")
+        if len(labels) != self.ncol:
+            raise ValueError(f"Number of labels ({len(labels)}) does not match number of columns ({self.ncol})")
+        
+        for ax, label in zip(self.axs[0], labels):
+            ax.set_title(label, fontweight="bold")
+    
+    def set_row_labels(self, labels):
+        '''
+        Sets the row labels for the plot.
+        
+        Parameters:
+            labels -- a list of strings indicating the labels for each row
+        '''
+        if self.axs is None:
+            raise ValueError("Call .start_plotting() before setting column labels")
+        if len(labels) != self.nrow:
+            raise ValueError(f"Number of labels ({len(labels)}) does not match number of rows ({self.nrow})")
+        
+        for ax, label in zip(self.axs[:,0], labels):
+            ax.set_ylabel(label)
     
     def plot_linescatter(self, scatterNCLS, lineNCLS,
                          linewidth=1, dotsize=3):
@@ -883,15 +896,206 @@ class HorizontalPlot(Plot):
         return f"HorizontalPlot(resultTypes={self.resultTypes}, measurementTypes={self.measurementTypes}, plotTypes={self.plotTypes})"
 
 class CircosPlot(Plot):
+    START_POSITION = 95
+    TRACK_GAP = 2
+    OUTER_HEIGHT = 0.3
+    CENTRE_SPACE = 30
+    COLOURS = ["#cc6677", "#332288", "#ddcc77", # Paul Tol muted colour palette
+               "#117733", "#88ccee", "#882255",
+               "#44aa99", "#999933", "#aa4499",
+               "#dddddd"] # 10 colours as 10 rows are the max that psQTL_post can produce
+    
     def __init__(self, resultTypes, measurementTypes, plotTypes, regions,
                  wmaSize=5, binSize=100000, binThreshold=0.4,
                  width=None, height=None):
         super().__init__(resultTypes, measurementTypes, plotTypes, regions, 
                          wmaSize, binSize, binThreshold,
                          width, height)
-    def plot(self):
-        # Implement the plotting logic here
-        pass
+    
+    def start_plotting(self):
+        seqid2size = {
+            f"{contigID}:{start}-{end}": end - start + 1 if not reverse
+            else f"{contigID}:{end}-{start}": end - start + 1
+            for contigID, start, end, reverse in self.regions:
+        }
+        self.circos = Circos(seqid2size, space = 0 if len(seqid2size) == 1 else 2)
+        self.handles = [] # to store legend handles (which are row labels)
+        
+        self.trackHeight = (100 - (
+            (CircosPlot.TRACK_GAP * self.nrow) +
+            (100 - CircosPlot.START_POSITION) +
+            CircosPlot.CENTRE_SPACE)) / self.nrow # height of each track
+        
+        # Establish axes for each region/sector
+        "Enables us to use a similar interface to the HorizontalPlot class for plotting to specific [row,col] indices"
+        self.axs = []
+        for colNum, sector in enumerate(self.circos.sectors): ## TBD: can I access sectors by key?
+            currentPosition = CircosPlot.START_POSITION
+            
+            # Set up outer track with scalebar
+            #sector.text(sector.name, size=10) ## TBD: leave this to set_col_labels?
+            outer_track = sector.add_track((currentPosition-CircosPlot.OUTER_HEIGHT, currentPosition))
+            outer_track.axis(fc="black")
+            major_interval = 10000000 ## TBD: determine based on size of region
+            minor_interval = int(major_interval / 10)
+            if sector.size > minor_interval:
+                outer_track.xticks_by_interval(major_interval, label_formatter=lambda v: f"{v / 1000000:.0f} Mb")
+                outer_track.xticks_by_interval(minor_interval, tick_length=1, show_label=False)
+            currentPosition -= (CircosPlot.OUTER_HEIGHT + CircosPlot.TRACK_GAP)
+            
+            # Set all inner row/tracks
+            column = []
+            for rowNum in range(self.nrow):
+                track = sector.add_track((currentPosition-self.trackHeight, currentPosition))
+                track.axis()
+                column.append(track)
+                currentPosition -= (self.trackHeight + CircosPlot.TRACK_GAP)
+            
+            # Store the column of tracks
+            self.axs.append(column)
+        
+        self.axs = np.column_stack(self.axs)
+        self.rowNum = -1 # to keep track of the current row/track number
+    
+    def savefig(self, outputFileName):
+        fig = circos.plotfig()
+        _ = circos.ax.legend(
+            handles=self.handles,
+            bbox_to_anchor=(0.5, 0.5),
+            loc="center",
+            ncols=2, ## TBD: check how this looks
+        )
+        fig.savefig(outputFileName)
+    
+    def set_col_labels(self, labels):
+        for label, sector in zip(labels, self.circos.sectors): ## TBD: make sure ordering is stable
+            sector.text(label, size=10)
+    
+    def set_row_labels(self, labels):
+        self.handles = [
+            Patch(color=CircosPlot.COLOURS[i], label=x)
+            for i, x in enumerate(labels)
+        ]
+    
+    def plot_linescatter(self, scatterNCLS, lineNCLS):
+        '''
+        Plots the data for a line or scatter plot.
+        
+        Parameters:
+            scatterNCLS -- a WindowedNCLS object with statistical values
+                            queryable by contigID and start/end positions;
+                            used for scatter plots
+            lineNCLS -- a WindowedNCLS object with statistical values
+                        queryable by contigID and start/end positions;
+                        used for line plots
+        '''
+        if self.fig is None:
+            self.start_plotting()
+        self.rowNum += 1 # increment row number for plotting
+        plotScaleBar = self.rowNum+1 == self.nrow # set up scale bar if this is the last row
+        
+        # Derive y limits from the maximum Y value across all regions
+        maxY = 0 # to set y limits at end
+        for colNum, (contigID, start, end, reverse) in enumerate(self.regions):
+            if "scatter" in self.plotTypes and contigID in scatterNCLS.contigs:
+                x, y = self.scatter(scatterNCLS, contigID, start, end)
+                if y.size != 0:
+                    maxY = max(maxY, max(y))
+            if "line" in self.plotTypes and contigID in lineNCLS.contigs:
+                x, smoothedY = self.line(lineNCLS, contigID, start, end)
+                if smoothedY.size != 0:
+                    maxY = max(maxY, max(smoothedY))
+        
+        # Plot each region
+        for colNum, (contigID, start, end, reverse) in enumerate(self.regions):
+            # Plot scatter (if applicable)
+            if "scatter" in self.plotTypes and contigID in scatterNCLS.contigs:
+                x, y = self.scatter(scatterNCLS, contigID, start, end)
+                x = CircosPlot.adjustX(x, start, reverse) ## TBD: implement this
+                self.axs[self.rowNum, colNum].scatter(x, y, vmax=maxY,
+                                                      color="red", s=dotsize,
+                                                      alpha=0.5, zorder=0)
+            
+            # Plot line (if applicable)
+            if "line" in self.plotTypes and contigID in lineNCLS.contigs:
+                x, smoothedY = self.line(lineNCLS, contigID, start, end)
+                x = CircosPlot.adjustX(x, start, reverse) ## TBD: implement this
+                self.axs[self.rowNum, colNum].plot(x, smoothedY, vmax=maxY,
+                                                   linewidth=linewidth,
+                                                   zorder=1)
+    
+    def plot_histogram(self, windowedNCLS):
+        '''
+        Plots the data for a histogram.
+        
+        Parameters:
+            windowedNCLS -- a WindowedNCLS object with statistical values
+                            queryable by contigID and start/end positions
+        '''
+        if self.fig is None:
+            self.start_plotting()
+        self.rowNum += 1 # increment row number for plotting
+        plotScaleBar = self.rowNum+1 == self.nrow # set up scale bar if this is the last row
+        
+        # Get the maximum Y value across all regions
+        maxY = 0
+        for contigID, start, end, reverse in self.regions:
+            if contigID in windowedNCLS.contigs:
+                x, y = self.histogram(windowedNCLS, contigID, start, end)
+                if y.size != 0:
+                    maxY = max(maxY, max(y))
+        
+        # Plot each region
+        for colNum, (contigID, start, end, reverse) in enumerate(self.regions):
+            pass
+    
+    def plot_genes(self, gff3Obj):
+        '''
+        Plots the data for gene models.
+        
+        Parameters:
+            gff3Obj -- a GFF3 class object from gff3.py in this repository
+        '''
+        if self.fig is None:
+            self.start_plotting()
+        self.rowNum += 1 # increment row number for plotting
+        plotScaleBar = self.rowNum+1 == self.nrow # set up scale bar if this is the last row
+        
+        self.fig.canvas.draw() # need to draw the figure to get the renderer
+        alreadyWarned = False
+        
+        for colNum, (contigID, start, end, reverse) in enumerate(self.regions):     
+            pass
+    
+    def plot_coverage(self, depthNCLSDict, samples,
+                      linewidth=1):
+        '''
+        Parameters:
+            depthNCLSDict -- a dictionary with structure like:
+                            {
+                                "bulk1": {
+                                    "sample1": EDNCLS,
+                                    "sample2": EDNCLS,
+                                    ...
+                                },
+                                "bulk2": { ... }
+                            }
+            samples -- a list of strings indicating the sample names to plot individual
+                       lines for
+            linewidth -- OPTIONAL; an integer value indicating the width of the line plot (default=1)
+        '''
+        if self.fig is None:
+            self.start_plotting()
+        self.rowNum += 1 # increment row number for plotting
+        plotScaleBar = self.rowNum+1 == self.nrow # set up scale bar if this is the last row
+        
+        # Plot each region
+        minY = 0 # to set y limits at end
+        maxY = 0
+        for colNum, (contigID, start, end, reverse) in enumerate(self.regions):
+            coverageData = self.coverage(depthNCLSDict, samples, contigID, start, end) # keys: bulk1, bulk2, [*samples]
+    
+    
     
     def __repr__(self):
         return f"CircosPlot(resultTypes={self.resultTypes}, measurementTypes={self.measurementTypes}, plotTypes={self.plotTypes})"
