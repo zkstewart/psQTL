@@ -100,3 +100,10 @@ class Locations:
     @property
     def integrativeSplsdaRscript(self):
         return os.path.join(os.path.dirname(os.path.dirname(__file__)), "utilities", "integrative_splsda.R")
+
+    # Attributes with value input
+    def variantEdPickleFile(self, value):
+        return os.path.join(self.workingDirectory, f"psQTL_variants.ed.{value}.pkl")
+
+    def deletionEdPickleFile(self, value):
+        return os.path.join(self.workingDirectory, f"psQTL_depth.ed.{value}.pkl")

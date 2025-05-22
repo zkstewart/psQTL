@@ -1,4 +1,5 @@
 import os, shutil, subprocess, gzip
+import numpy as np
 
 from .parsing import read_gz_file
 from .ncls import WindowedNCLS
@@ -237,14 +238,14 @@ def parse_selected_to_windowed_ncls(selectedFileName):
     
     return windowedNCLS
 
-def parse_ber_to_windowed_ncls(berFileName, windowSize):
+def parse_ber_to_windowed_ncls(berFileName):
     '''
     Parameters:
         berFileName -- a file name indicating the location of the BER windows file
-        windowSize -- an integer indicating the size of the windows used for binning
     Returns:
         windowedNCLS -- a WindowedNCLS object containing statistical values indexed by chromosome
                         and position
+        windowSize -- an integer indicating the size of the windows used in the analysis
     '''
     EXPECTED_HEADER = ["chrom", "pos", "BER"]
     
@@ -257,6 +258,8 @@ def parse_ber_to_windowed_ncls(berFileName, windowSize):
             raise ValueError(f"Invalid header in file '{berFileName}', should be: {EXPECTED_HEADER}")
         
         # Store each line in the windowedNCLS object
+        windowSize = None
+        prevPos = None
         for line in fileIn:
             # Parse relevant details
             chrom, pos, ber = line.strip().split("\t")
@@ -268,6 +271,13 @@ def parse_ber_to_windowed_ncls(berFileName, windowSize):
                 ber = float(ber)
             except:
                 raise ValueError(f"BER '{ber}' is not a float in file '{berFileName}'")
+            
+            # Figure out the window size (if not set yet)
+            if windowSize == None:
+                if prevPos == None:
+                    prevPos = pos
+                else:
+                    windowSize = pos - prevPos
             
             # Store the values in the dictionary
             if chrom not in statDict:
@@ -282,4 +292,4 @@ def parse_ber_to_windowed_ncls(berFileName, windowSize):
         statsValues = np.array(value[1])
         windowedNCLS.add(chrom, positions, statsValues)
     
-    return windowedNCLS
+    return windowedNCLS, windowSize

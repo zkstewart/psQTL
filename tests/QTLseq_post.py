@@ -11,8 +11,9 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from snpindex import DeltaNCLS, parse_qtlseq_as_dict, convert_dict_to_deltancls
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from modules.plotting import linescatter, histogram, genes, scalebar, NUM_SAMPLE_LINES
+from modules.plot import HorizontalPlot
 from modules.gff3 import GFF3
+from modules.validation import validate_regions
 
 def validate_args(args):
     # Validate input file
@@ -38,45 +39,6 @@ def validate_args(args):
     
     if not os.path.isdir(os.path.dirname(args.outputFileName)):
         raise FileNotFoundError(f"-o parent directory '{os.path.dirname(args.outputFileName)}' does not exist!")
-
-def validate_regions(args, lengthsDict):
-    # Validate regions
-    regions = []
-    regionsRegex = re.compile(r"^([^:]+):(\d+)-(\d+)$")
-    for region in args.regions:
-        reMatch = regionsRegex.match(region)
-        
-        # Handle chr:start-end format
-        if reMatch != None:
-            contigID, start, end = reMatch.groups()
-            start = int(start)
-            end = int(end)
-            
-            # Validate contig ID
-            if not contigID in lengthsDict:
-                raise ValueError(f"--region contig ID '{contigID}' not found in the -f FASTA!")
-            # Validate start and end positions
-            if start < 0:
-                raise ValueError(f"--region start position '{start}' is < 0!")
-            if start >= end:
-                raise ValueError(f"--region start position '{start}' is >= end position '{end}'!")
-            # Store region
-            regions.append([contigID, start, end])
-        # Handle invalid format
-        elif ":" in region:
-            raise ValueError(f"Invalid region input '{region}'; you included a ':' but did " + 
-                             "not format the region as 'chr:start-end'!")
-        # Handle chr format
-        else:
-            if not region in lengthsDict:
-                raise ValueError(f"--region contig ID '{region}' not found in the -f FASTA!")
-            regions.append([region, 0, lengthsDict[region]])
-    
-    # Handle empty regions
-    if regions == []:
-        regions = [[contigID, 0, lengthsDict[contigID]] for contigID in lengthsDict]
-    
-    args.regions = regions
 
 def validate_p(args):
     # Validate numeric arguments
@@ -189,7 +151,7 @@ def main():
     lengthsDict = { record.id:len(record) for record in genomeRecords }
     
     # Validate and impute regions
-    validate_regions(args, lengthsDict)
+    args.regions = validate_regions(args, lengthsDict)
     
     # Parse input file into NCLS data structure
     deltaDict = parse_qtlseq_as_dict(args.inputFile)
@@ -208,64 +170,47 @@ def main():
     print("Program completed successfully!")
 
 def pmain(args, deltaNCLS, lengthsDict):
-    STANDARD_DIMENSION = 5
+    args.resultTypes = ["call"]
+    args.measurementTypes = ["ed"]
     
-    # Get our labels for the plots
-    rowLabels = [
-        f"ΔSNP-index" if "scatter" in args.plotTypes or "line" in args.plotTypes else None,
-        f"Num. variants with abs. ΔSNP-index\n" + \
-            f"≥ {args.binThreshold} in {args.binSize} bp windows" if "histogram" in args.plotTypes else None,
-        "Representative models" if "genes" in args.plotTypes else None
-    ]
-    rowLabels = [label for label in rowLabels if label != None]
-    colLabels = [f"{region[0]}:{region[1]}-{region[2]}" for region in args.regions]
+    # Establish plotting object
+    plotter = HorizontalPlot(args.resultTypes, args.measurementTypes, args.plotTypes, args.regions,
+                             args.wmaSize, args.binSize, args.binThreshold,
+                             args.width, args.height)
+    plotter.start_plotting()
     
-    # Derive plot dimensions
-    if args.width == None:
-        args.width = STANDARD_DIMENSION * len(colLabels)
-        print(f"# Calculated width as num. regions ({len(colLabels)}) multiplied by 5 = {args.width}")
-    if args.height == None:
-        args.height = STANDARD_DIMENSION * len(rowLabels)
-        print(f"# Calculated height as num. plot types ({len(rowLabels)}) multiplied by 5 = {args.height}")
+    rowLabels = []
+    colLabels = []
     
-    # Set up the overall figure object
-    fig, axs = plt.subplots(nrows=len(rowLabels), ncols=len(colLabels),
-                            figsize=(args.width, args.height))
-    axs = np.reshape(axs, (len(rowLabels), len(colLabels))) # ensure shape is as expected
-    fig.tight_layout()
+    # Generate plots grouped by plotTypes > resultTypes > measurementTypes
+    alreadyPlottedScatter = False
+    for pType in args.plotTypes:
+        # Plot a line and/or scatter plot
+        if pType in ["line", "scatter"] and not alreadyPlottedScatter:
+            alreadyPlottedScatter = True
+            rowLabels.append(f"abs. ΔSNP-index")
+            plotter.plot_linescatter(deltaNCLS, deltaNCLS)
+        # Plot a histogram
+        elif pType == "histogram":
+            rowLabels.append(f"Num. variants with abs. ΔSNP-index ≥ {args.binThreshold}\n" + \
+                f"in {args.binSize} bp windows")
+            plotter.plot_histogram(deltaNCLS)
+        # Plot gene locations
+        elif pType == "genes":
+            plotter.plot_genes(args.gff3Obj)
+            rowLabels.append("Representative models")
     
-    # Set titles and labels
-    for ax, label in zip(axs[0], colLabels):
-        ax.set_title(label, fontweight="bold")
-    for ax, label in zip(axs[:,0], rowLabels):
-        ax.set_ylabel(label)
-    for ax in axs[-1]:
-        ax.set_xlabel(f"Chromosomal position", fontweight="bold")
+    # Format column labels
+    colLabels = [f"{region[0]}:{region[1]}-{region[2]}" if region[3] == False
+                 else f"{region[0]}:{region[2]}-{region[1]}" # if reversed
+                 for region in args.regions]
     
-    # Plot a line and/or scatter plot
-    rowNum = 0
-    if "line" in args.plotTypes or "scatter" in args.plotTypes:        
-        linescatter(axs, rowNum, deltaNCLS, args.regions, args.wmaSize,
-                    True if "line" in args.plotTypes else False,
-                    True if "scatter" in args.plotTypes else False,
-                    None, rowNum+1 == len(rowLabels),
-                    "qtlseq")
-        rowNum += 1
-    
-    # Plot a histogram
-    if "histogram" in args.plotTypes:
-        histogram(axs, rowNum, deltaNCLS, args.regions, args.binSize, args.binThreshold,
-                  None, rowNum+1 == len(rowLabels))
-        rowNum += 1
-    
-    # Plot gene locations
-    if "genes" in args.plotTypes:
-        genes(fig, axs, rowNum, args.gff3Obj, args.regions,
-              rowNum+1 == len(rowLabels))
-        rowNum += 1
+    # Set the row and column labels
+    plotter.set_row_labels(rowLabels)
+    plotter.set_col_labels(colLabels)
     
     # Write plot to file
-    fig.savefig(args.outputFileName, bbox_inches="tight")
+    plotter.savefig(args.outputFileName)
     
     print("Plotting complete!")
 

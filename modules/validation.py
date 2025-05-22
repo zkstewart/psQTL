@@ -1,7 +1,10 @@
-import os, subprocess
+import os, subprocess, re
 
 from .locations import Locations
 from .parameters import ParameterCache
+from .parsing import parse_metadata
+from .gff3 import GFF3
+from .plot import NUM_SAMPLE_LINES
 
 def validate_prep_args(args):
     # Validate working directory
@@ -118,16 +121,41 @@ def validate_post_args(args):
     else:
         args.metadataDict = parse_metadata(args.metadataFile)
     
-    # Validate input file
-    if args.inputType == "call":
-        args.inputFile = os.path.join(args.workingDirectory, "psQTL_variants.ed.tsv.gz")
-    else:
-        args.inputFile = os.path.join(args.workingDirectory, "psQTL_depth.ed.tsv.gz")
-    
-    if not os.path.isfile(args.inputFile):
-        raise FileNotFoundError(f"Euclidean distance file '{args.inputFile}' does not exist!")
-    elif not os.path.isfile(args.inputFile + ".ok"):
-        raise FileNotFoundError(f"Euclidean distance file '{args.inputFile}' does not have a '.ok' flag!")
+    # Locate and validate input files
+    if "call" in args.resultTypes:
+        if "ed" in args.measurementTypes:
+            if not os.path.isfile(locations.variantEdFile):
+                raise FileNotFoundError(f"'call' ED file '{locations.variantEdFile}' does not exist!")
+            if not os.path.isfile(locations.variantEdFile + ".ok"):
+                raise FileNotFoundError(f"'call' ED file '{locations.variantEdFile}' does not have a '.ok' flag!")
+            
+        if "splsda" in args.measurementTypes:
+            if not os.path.isfile(locations.variantSplsdaSelectedFile):
+                raise FileNotFoundError(f"sPLS-DA file for 'call' selected features '{locations.variantSplsdaSelectedFile}' does not exist!")
+            if not os.path.isfile(locations.variantSplsdaSelectedFile + ".ok"):
+                raise FileNotFoundError(f"sPLS-DA file for 'call' selected features '{locations.variantSplsdaSelectedFile}' does not have a '.ok' flag!")
+            
+            if not os.path.isfile(locations.variantSplsdaBerFile):
+                raise FileNotFoundError(f"sPLS-DA file for 'call' Balanced Error Rate '{locations.variantSplsdaBerFile}' does not exist!")
+            if not os.path.isfile(locations.variantSplsdaBerFile + ".ok"):
+                raise FileNotFoundError(f"sPLS-DA file for 'call' Balanced Error Rate '{locations.variantSplsdaBerFile}' does not have a '.ok' flag!")
+    if "depth" in args.measurementTypes:
+        if "ed" in args.measurementTypes:
+            if not os.path.isfile(locations.deletionEdFile):
+                raise FileNotFoundError(f"'depth' ED file '{locations.deletionEdFile}' does not exist!")
+            if not os.path.isfile(locations.deletionEdFile + ".ok"):
+                raise FileNotFoundError(f"'depth' ED file '{locations.deletionEdFile}' does not have a '.ok' flag!")
+        
+        if "splsda" in args.measurementTypes:
+            if not os.path.isfile(locations.deletionSplsdaSelectedFile):
+                raise FileNotFoundError(f"sPLS-DA file for 'depth' selected features '{locations.deletionSplsdaSelectedFile}' does not exist!")
+            if not os.path.isfile(locations.deletionSplsdaSelectedFile + ".ok"):
+                raise FileNotFoundError(f"sPLS-DA file for 'depth' selected features '{locations.deletionSplsdaSelectedFile}' does not have a '.ok' flag!")
+            
+            if not os.path.isfile(locations.deletionSplsdaBerFile):
+                raise FileNotFoundError(f"sPLS-DA file for 'depth' Balanced Error Rate '{locations.deletionSplsdaBerFile}' does not exist!")
+            if not os.path.isfile(locations.deletionSplsdaBerFile + ".ok"):
+                raise FileNotFoundError(f"sPLS-DA file for 'depth' Balanced Error Rate '{locations.deletionSplsdaBerFile}' does not have a '.ok' flag!")
     
     # Validate genome FASTA file
     if not os.path.isfile(args.genomeFasta):
@@ -158,7 +186,15 @@ def validate_post_args(args):
     return locations
 
 def validate_regions(args, lengthsDict):
-    # Validate regions
+    '''
+    Returns:
+        regions -- a list of lists with structure like:
+                   [
+                       [contigID, start, end, reverse],
+                       ...
+                   ]
+    '''
+    # Parse regions
     regions = []
     regionsRegex = re.compile(r"^([^:]+):(\d+)-(\d+)$")
     for region in args.regions:
@@ -173,15 +209,24 @@ def validate_regions(args, lengthsDict):
             # Validate contig ID
             if not contigID in lengthsDict:
                 raise ValueError(f"--region contig ID '{contigID}' not found in the -f FASTA!")
-            # Validate start and end positions
+            
+            # Validate start position
             if start < 0:
                 raise ValueError(f"--region start position '{start}' is < 0!")
+            
+            # Detect reverse orientation and swap start/end if necessary
             reverse = False
             if start >= end:
                 start, end = end, start
                 reverse = True
+            
+            # Validate end position
+            if end > lengthsDict[contigID]:
+                raise ValueError(f"--region '{contigID, start, end}' end position is > contig length '{lengthsDict[contigID]}'!")
+            
             # Store region
             regions.append([contigID, start, end, reverse])
+        
         # Handle invalid format
         elif ":" in region:
             raise ValueError(f"Invalid region input '{region}'; you included a ':' but did " + 
@@ -196,7 +241,39 @@ def validate_regions(args, lengthsDict):
     if regions == []:
         regions = [[contigID, 0, lengthsDict[contigID], False] for contigID in lengthsDict]
     
-    args.regions = regions
+    return regions
+
+def validate_depth_files(depthDir, metadataDict, windowSize):
+    '''
+    Parameters:
+        depthDir -- a string indicating the path to the directory containing
+                    depth files
+        metadataDict -- a dictionary with structure like:
+                        {
+                            "bulk1": [sampleID, ...],
+                            "bulk2": [sampleID, ...]
+                        }
+        windowSize -- the window size used when generating the depth files
+    Returns:
+        depthFileDict --  a dictionary with structure like:
+                          {
+                              "bulk1": [[sampleID, depthFile], ...],
+                              "bulk2": [[sampleID, depthFile], ...]
+                          }
+    '''
+    notFound = []
+    depthFileDict = {"bulk1": [], "bulk2": []}
+    for bulk, sampleList in metadataDict.items():
+        for sample in sampleList:
+            depthFile = os.path.join(depthDir, f"{sample}.binned.{windowSize}.tsv")
+            if not os.path.isfile(depthFile):
+                notFound.append(sample)
+            else:
+                depthFileDict[bulk].append([sample, depthFile])
+    if notFound != []:
+        raise FileNotFoundError(f"Could not find depth files with bin size of {windowSize} " +
+                                f"for samples: {', '.join(notFound)}")
+    return depthFileDict
 
 def validate_p(args):
     # Validate numeric arguments
@@ -218,8 +295,6 @@ def validate_p(args):
         raise ValueError(f"-p must not contain duplicate plot types!")
     if "genes" in args.plotTypes and args.annotationGFF3 == None:
         raise ValueError(f"Cannot plot gene locations without providing an --annotation GFF3 file!")
-    if "histogram" in args.plotTypes and args.inputType == "depth":
-        raise ValueError(f"Cannot plot histogram for -i depth data!")
     
     # Validate samples for coverage plot
     if "coverage" in args.plotTypes:
@@ -227,7 +302,11 @@ def validate_p(args):
             if not sampleID in args.metadataDict["bulk1"] + args.metadataDict["bulk2"]:
                 raise ValueError(f"Sample '{sampleID}' specified in --sampleCoverage not found in metadata!")
         if len(args.sampleCoverage) > NUM_SAMPLE_LINES:
-            raise ValueError(f"Cannot plot more than {NUM_SAMPLE_LINES} samples using --sampleCoverage for clarity")
+            raise ValueError(f"Cannot plot more than {NUM_SAMPLE_LINES} samples using --sampleCoverage (for clarity reasons)!")
+    
+    # Validate argument logic
+    if "coverage" in args.plotTypes and not "depth" in args.resultTypes:
+        raise ValueError(f"Cannot specify '-p coverage' without also specifying '-r depth'!")
     
     # Validate output file suffix
     if not (args.outputFileName.endswith(".pdf") or args.outputFileName.endswith(".png") or args.outputFileName.endswith(".svg")):

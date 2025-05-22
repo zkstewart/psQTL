@@ -5,67 +5,34 @@
 # approach of several different plot types (line, scatter, histogram, genes) or it
 # can report on genes that are proximal to or contained within potential QTLs.
 
-import os, argparse, re, sys, pickle
+import os, argparse, sys, pickle
 import numpy as np
 import matplotlib.pyplot as plt
 from Bio import SeqIO
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-from modules.validation import validate_post_args, validate_regions, validate_p, validate_r
-from modules.parsing import parse_metadata
+from modules.validation import validate_post_args, validate_regions, validate_depth_files, \
+                               validate_p, validate_r
 from modules.depth import parse_bins_as_dict, normalise_coverage_dict, convert_dict_to_depthncls
 from modules.ed import parse_ed_as_dict, convert_dict_to_windowed_ncls
-from modules.plotting import linescatter, histogram, genes, coverage, scalebar, NUM_SAMPLE_LINES
+from modules.splsda import parse_selected_to_windowed_ncls, parse_ber_to_windowed_ncls
+from modules.plot import HorizontalPlot, CircosPlot
 from modules.reporting import report_genes, report_depth
-from modules.gff3 import GFF3
 from _version import __version__
 
 def derive_window_size(args, edDict):
     windowSize = None
-    if "depth" in args.resultType:
-        # Derive window size from dictionary
-        for key, posEDpairs in edDict.items():
-            if len(posEDpairs[0]) > 1:
-                windowSize = posEDpairs[0][1] - posEDpairs[0][0]
-                break
-        if windowSize != None:
-            print(f"# Window size detected as {windowSize} bp from parsing of Euclidean distance file")
-    if windowSize == None:
-        if hasattr(args, "plotTypes") and "coverage" in args.plotTypes:
-            if args.windowSize != None:
-                print(f"# Window size specified as {args.windowSize} in cached parameters")
-                windowSize = args.windowSize
-            else:
-                raise ValueError("Could not determine window size from Euclidean distance file or cached parameters!")
-        else:
-            windowSize = 0
-    args.windowSize = windowSize
+    for key, posEDpairs in edDict.items():
+        if len(posEDpairs[0]) > 1:
+            windowSize = posEDpairs[0][1] - posEDpairs[0][0]
+            break
+    return windowSize
 
 def raise_to_power(edDict, power):
     if power > 1:
         for key, posEDpairs in edDict.items():
             for i in range(len(posEDpairs[1])):
                 posEDpairs[1][i] = posEDpairs[1][i] ** power
-
-def locate_depth_files(args):
-    DEPTH_DIR = os.path.join(args.workingDirectory, "depth")
-    if not os.path.exists(DEPTH_DIR):
-        raise FileNotFoundError(f"Depth directory '{DEPTH_DIR}' does not exist!")
-    
-    # Locate and validate depth files
-    notFound = []
-    depthFileDict = {"bulk1": [], "bulk2": []}
-    for bulk, sampleList in args.metadataDict.items():
-        for sample in sampleList:
-            depthFile = os.path.join(DEPTH_DIR, f"{sample}.binned.{args.windowSize}.tsv")
-            if not os.path.isfile(depthFile):
-                notFound.append(sample)
-            else:
-                depthFileDict[bulk].append([sample, depthFile])
-    if notFound != []: # for testing and development
-        raise FileNotFoundError(f"Could not find depth files with bin size of {args.windowSize} " +
-                                f"for samples: {', '.join(notFound)}")
-    return depthFileDict
 
 def main():
     usage = """%(prog)s processes the output of psQTL_proc.py to either 1) plot segregation
@@ -85,13 +52,13 @@ def main():
     p.add_argument("-f", dest="genomeFasta",
                    required=True,
                    help="Specify the location of the genome FASTA file")
-    p.add_argument("-r", dest="resultType",
+    p.add_argument("-r", dest="resultTypes",
                    required=True,
                    nargs="+",
                    choices=["depth", "call"],
                    help="""Specify whether you are analysing the results from variant 'call's
                    and/or 'depth' predictions of deleted regions""")
-    p.add_argument("-m", dest="measurementType",
+    p.add_argument("-m", dest="measurementTypes",
                    required=True,
                    nargs="+",
                    choices=["ed", "splsda"],
@@ -123,7 +90,7 @@ def main():
                    type=float,
                    required=False,
                    help="""Optionally, specify the proportion of missing data that is
-                   tolerated in both bulk populations before a variant is filtered out
+                   tolerated in either bulk population before a variant is filtered out
                    (recommended: 0.5)""",
                    default=0.5)
     p.add_argument("-v", "--version",
@@ -222,13 +189,13 @@ def main():
                          default=50000)
     
     args = subParentParser.parse_args()
-    validate_post_args(args)
+    locations = validate_post_args(args) # sets args.metadataDict; args.gff3Obj if relevant
     
     # Perform mode-specific validation
     "Validate upfront before we get into time-consuming parsing to frontload the error checking"
     if args.mode == "plot":
         print("## psQTL_post.py - Plot Euclidean Statistics ##")
-        validate_p(args)
+        validate_p(args) # sets args.depthFileDict if relevant
     elif args.mode == "report":
         print("## psQTL_post.py - Report Gene Proximity ##")
         validate_r(args)
@@ -236,153 +203,177 @@ def main():
     # Get contig lengths from genome FASTA
     genomeRecords = SeqIO.parse(open(args.genomeFasta, 'r'), "fasta")
     lengthsDict = { record.id:len(record) for record in genomeRecords }
-    
-    # Raise error if no contigs are found in genome FASTA
     if lengthsDict == {}:
         raise ValueError(f"No contigs found in genome FASTA '{args.genomeFasta}'; is it actually a FASTA file?")
     
     # Validate and impute regions
-    validate_regions(args, lengthsDict)
-    for contigID, start, end, reverse in args.regions:
-        if end > lengthsDict[contigID]:
-            raise ValueError(f"--region '{contigID, start, end}' end position is > contig length '{lengthsDict[contigID]}'!")
+    args.regions = validate_regions(args, lengthsDict)
     
-    # Parse input file into dictionary data structure or load pre-existing pickle
-    PICKLE_FILE = args.inputFile.replace(".tsv.gz", f".{args.missingFilter}.pkl")
-    if os.path.isfile(PICKLE_FILE):
-        with open(PICKLE_FILE, "rb") as fileIn:
-            edDict = pickle.load(fileIn)
-    else:
-        edDict = parse_ed_as_dict(args.inputFile, args.metadataDict, args.missingFilter)
-        with open(PICKLE_FILE, "wb") as fileOut:
-            pickle.dump(edDict, fileOut)
+    # Parse result and measurement type data
+    dataDict = {}
+    if "call" in args.resultTypes:
+        dataDict["call"] = {}
+        if "ed" in args.measurementTypes:
+            # Parse the Euclidean distance data
+            pickleFile = locations.variantEdPickleFile(args.missingFilter)
+            if os.path.isfile(pickleFile) and os.path.isfile(pickleFile + ".ok"):
+                with open(pickleFile, "rb") as fileIn:
+                    dataDict["call"]["ed"] = pickle.load(fileIn)
+            else:
+                dataDict["call"]["ed"] = parse_ed_as_dict(locations.variantEdFile, args.metadataDict, args.missingFilter)
+                with open(pickleFile, "wb") as fileOut:
+                    pickle.dump(dataDict["call"]["ed"], fileOut)
+                open(pickleFile + ".ok", "w").close()
+            
+            # Raise Euclidean distances to the power specified by the user
+            "Raising to power after pickling lets us reuse the pickled data with different power values"
+            raise_to_power(dataDict["call"]["ed"], args.power)
+            
+            # Convert dictionary to Euclidean distance NCLS data structure
+            "WindowedNCLS cannot be pickled so we need to do it like file->dict->WindowedNCLS"
+            dataDict["call"]["ed"] = convert_dict_to_windowed_ncls(dataDict["call"]["ed"], 0) # windowSize = 0
+        
+        if "splsda" in args.measurementTypes:
+            # Parse the Sparse Partial Least Squares Discriminant Analysis data
+            dataDict["call"]["selected"] = parse_selected_to_windowed_ncls(locations.variantSplsdaSelectedFile)
+            dataDict["call"]["ber"], dataDict["call"]["ber_windowSize"] = parse_ber_to_windowed_ncls(locations.variantSplsdaBerFile)
     
-    # Obtain window size
-    derive_window_size(args, edDict)
+    if "depth" in args.resultTypes:
+        dataDict["depth"] = {}
+        if "ed" in args.measurementTypes:
+            # Parse the Euclidean distance data
+            pickleFile = locations.deletionEdPickleFile(args.missingFilter)
+            if os.path.isfile(pickleFile) and os.path.isfile(pickleFile + ".ok"):
+                with open(pickleFile, "rb") as fileIn:
+                    dataDict["depth"]["ed"] = pickle.load(fileIn)
+            else:
+                dataDict["depth"]["ed"] = parse_ed_as_dict(locations.deletionEdFile, args.metadataDict, args.missingFilter)
+                with open(pickleFile, "wb") as fileOut:
+                    pickle.dump(dataDict["depth"]["ed"], fileOut)
+                open(pickleFile + ".ok", "w").close()
+            
+            # Obtain window size
+            args.windowSize = derive_window_size(args, dataDict["depth"]["ed"])
+            
+            # Raise Euclidean distances to the power specified by the user
+            raise_to_power(dataDict["depth"]["ed"], args.power)
+            
+            # Convert dictionary to Euclidean distance NCLS data structure
+            dataDict["depth"]["ed"] = convert_dict_to_windowed_ncls(dataDict["depth"]["ed"], args.windowSize)
+        
+        if "splsda" in args.measurementTypes:
+            # Parse the Sparse Partial Least Squares Discriminant Analysis data
+            dataDict["depth"]["selected"] = parse_selected_to_windowed_ncls(locations.deletionSplsdaSelectedFile)
+            dataDict["depth"]["ber"], dataDict["depth"]["ber_windowSize"] = parse_ber_to_windowed_ncls(locations.deletionSplsdaBerFile)
     
-    # Raise Euclidean distances to the power specified by the user
-    "Raising to power after pickling lets us reuse the pickled data with different power values"
-    raise_to_power(edDict, args.power)
-    
-    # Convert dictionary to Euclidean distance NCLS data structure
-    "EDNCLS cannot be pickled so we need to do it like file->dict->EDNCLS"
-    edNCLS = convert_dict_to_windowed_ncls(edDict, args.windowSize)
-    
-    # Make sure all contigs in Euclidean distance data are in genome FASTA
-    for contigID in edNCLS.contigs:
-        if contigID not in lengthsDict:
-            raise ValueError(f"Contig ID '{contigID}' from Euclidean distance data not found in -f FASTA!")
-    
-    # Drop any regions that are not in the Euclidean distance data
-    passedRegions = []
-    for contigID, start, end, reverse in args.regions:
-        if contigID in edNCLS.contigs:
-            passedRegions.append([contigID, start, end, reverse])
-        else:
-            print(f"WARNING: {contigID} not found in Euclidean distance data; it will be skipped")
-    args.regions = passedRegions
-    
-    # Exit if no regions are left
-    if args.regions == []:
-        raise ValueError("No regions remain after filtering; set --regions to one or more valid regions " + 
-                         "and ensure your Euclidean distance data and genome FASTA are compatible!")
+    # Parse depth data if necessary
+    if "coverage" in args.plotTypes and "depth" in args.resultTypes:
+        depthFileDict = validate_depth_files(locations.depthDir, args.metadataDict, args.windowSize)
+        coverageDict = parse_bins_as_dict(depthFileDict, args.windowSize)
+        normalise_coverage_dict(coverageDict)
+        dataDict["depth"]["ncls"] = convert_dict_to_depthncls(coverageDict, args.windowSize)
     
     # Split into mode-specific functions
     if args.mode == "plot":
-        pmain(args, edNCLS)
+        pmain(args, locations, dataDict)
     elif args.mode == "report":
-        rmain(args, edNCLS)
+        rmain(args, locations, dataDict)
     
     # Print completion flag if we reach this point
     print("Program completed successfully!")
 
-def pmain(args, edNCLS):
-    STANDARD_DIMENSION = 5
-    PLOT_DIR = os.path.join(args.workingDirectory, "plots")
-    os.makedirs(PLOT_DIR, exist_ok=True)
+def pmain(args, locations, dataDict):
+    # Establish plotting object
+    if args.plotStyle == "horizontal":
+        plotter = HorizontalPlot(args.resultTypes, args.measurementTypes, args.plotTypes, args.regions,
+                                 args.wmaSize, args.binSize, args.binThreshold,
+                                 args.width, args.height)
+        plotter.start_plotting()
+    elif args.plotStyle == "circos":
+        # plotter = CircosPlot(args.resultTypes, args.measurementTypes, args.plotTypes, args.regions,
+        #                      args.wmaSize, args.binSize, args.binThreshold,
+        #                      args.width, args.height)
+        # plotter.start_plotting()
+        raise NotImplementedError("Circos plot style is not yet implemented")
     
-    # Locate depth files if necessary
-    if "coverage" in args.plotTypes:
-        depthFileDict = locate_depth_files(args)
-    else:
-        depthFileDict = None
+    rowLabels = []
+    colLabels = []
     
-    # Get our labels for the plots
-    rowLabels = [
-        f"$ED^{args.power}$" if "scatter" in args.plotTypes or "line" in args.plotTypes else None,
-        f"Num. variants with $ED^{args.power}$ ≥ {args.binThreshold}\n" + \
-            f"in {args.binSize} bp windows" if "histogram" in args.plotTypes else None,
-        "Median-normalised coverage" if "coverage" in args.plotTypes else None,
-        "Representative models" if "genes" in args.plotTypes else None
-    ]
-    rowLabels = [label for label in rowLabels if label != None]
+    # Generate plots grouped by plotTypes > resultTypes > measurementTypes
+    alreadyPlottedScatter = False
+    for pType in args.plotTypes:
+        # Plot a line and/or scatter plot
+        if pType in ["line", "scatter"] and not alreadyPlottedScatter:
+            alreadyPlottedScatter = True
+            for rType in args.resultTypes:
+                for mType in args.measurementTypes:
+                    # Get the data for the plot
+                    if mType == "ed":
+                        if rType == "call":
+                            scatterNCLS = dataDict["call"]["ed"]
+                            lineNCLS = dataDict["call"]["ed"]
+                        elif rType == "depth" and mType == "ed":
+                            scatterNCLS = dataDict["depth"]["ed"]
+                            lineNCLS = dataDict["depth"]["ed"]
+                        rowLabels.append(f"$ED^{args.power}$")
+                    elif mType == "splsda":
+                        if rType == "call" and mType == "splsda":
+                            scatterNCLS = dataDict["call"]["selected"]
+                            lineNCLS = dataDict["call"]["ber"]
+                        elif rType == "depth" and mType == "splsda":
+                            scatterNCLS = dataDict["depth"]["selected"]
+                            lineNCLS = dataDict["depth"]["ber"]
+                        rowLabels.append("$BER$") 
+                    # Plug data into the plotting function
+                    "Plotter is capable of determining if the plot should have line and/or scatter data"
+                    plotter.plot_linescatter(scatterNCLS, lineNCLS)
+        # Plot a histogram
+        elif pType == "histogram":
+            for rType in args.resultTypes:
+                for mType in args.measurementTypes:
+                    # Get the data for the plot
+                    if mType == "ed":
+                        if rType == "call":
+                            histNCLS = dataDict["call"]["ed"]
+                        elif rType == "depth":
+                            histNCLS = dataDict["depth"]["ed"]
+                        rowLabels.append(f"Num. variants with $ED^{args.power}$ ≥ {args.binThreshold}\n" + \
+                            f"in {args.binSize} bp windows")
+                    elif mType == "splsda":
+                        if rType == "call":
+                            histNCLS = dataDict["call"]["selected"]
+                        elif rType == "depth":
+                            histNCLS = dataDict["depth"]["selected"]
+                        rowLabels.append(f"Num. variants with $BER$ ≥ {args.binThreshold}\n" + \
+                            f"in {args.binSize} bp windows")
+                    # Plug data into the plotting function
+                    plotter.plot_histogram(histNCLS)
+        # Plot coverage data
+        elif pType == "coverage":
+            coverageNCLS = dataDict["depth"]["ncls"]
+            plotter.plot_coverage(coverageNCLS, args.sampleCoverage)
+            rowLabels.append("Median-normalised coverage")
+        # Plot gene locations
+        elif pType == "genes":
+            plotter.plot_genes(args.gff3Obj)
+            rowLabels.append("Representative models")
+    
+    # Format column labels
     colLabels = [f"{region[0]}:{region[1]}-{region[2]}" if region[3] == False
                  else f"{region[0]}:{region[2]}-{region[1]}" # if reversed
                  for region in args.regions]
     
-    # Derive plot dimensions
-    if args.width == None:
-        args.width = STANDARD_DIMENSION * len(colLabels)
-        print(f"# Calculated width as num. regions ({len(colLabels)}) multiplied by 5 = {args.width}")
-    if args.height == None:
-        args.height = STANDARD_DIMENSION * len(rowLabels)
-        print(f"# Calculated height as num. plot types ({len(rowLabels)}) multiplied by 5 = {args.height}")
-    
-    # Set up the overall figure object
-    fig, axs = plt.subplots(nrows=len(rowLabels), ncols=len(colLabels),
-                            figsize=(args.width, args.height))
-    axs = np.reshape(axs, (len(rowLabels), len(colLabels))) # ensure shape is as expected
-    fig.tight_layout()
-    
-    # Set titles and labels
-    for ax, label in zip(axs[0], colLabels):
-        ax.set_title(label, fontweight="bold")
-    for ax, label in zip(axs[:,0], rowLabels):
-        ax.set_ylabel(label)
-    for ax in axs[-1]:
-        ax.set_xlabel(f"Chromosomal position", fontweight="bold")
-    
-    # Plot a line and/or scatter plot
-    rowNum = 0
-    if "line" in args.plotTypes or "scatter" in args.plotTypes:        
-        linescatter(axs, rowNum, edNCLS, args.regions, args.wmaSize,
-                    True if "line" in args.plotTypes else False,
-                    True if "scatter" in args.plotTypes else False,
-                    PLOT_DIR, rowNum+1 == len(rowLabels),
-                    args.resultType)
-        rowNum += 1
-    
-    # Plot a histogram
-    if "histogram" in args.plotTypes:
-        histogram(axs, rowNum, edNCLS, args.regions, args.binSize, args.binThreshold,
-                  PLOT_DIR, rowNum+1 == len(rowLabels))
-        rowNum += 1
-    
-    # Plot coverage data
-    if "coverage" in args.plotTypes:
-        # Parse coverage data
-        coverageDict = parse_bins_as_dict(depthFileDict, args.windowSize)
-        normalise_coverage_dict(coverageDict)
-        depthNCLSDict = convert_dict_to_depthncls(coverageDict, args.windowSize)
-        
-        # Plot the parsed data
-        coverage(axs, rowNum, depthNCLSDict, args.regions,
-                 args.sampleCoverage, rowNum+1 == len(rowLabels))
-        rowNum += 1
-    
-    # Plot gene locations
-    if "genes" in args.plotTypes:
-        genes(fig, axs, rowNum, args.gff3Obj, args.regions,
-              rowNum+1 == len(rowLabels))
-        rowNum += 1
+    # Set the row and column labels
+    plotter.set_row_labels(rowLabels)
+    plotter.set_col_labels(colLabels)
     
     # Write plot to file
-    fig.savefig(args.outputFileName, bbox_inches="tight")
+    plotter.savefig(args.outputFileName)
     
     print("Plotting complete!")
 
-def rmain(args, edNCLS):
-    if args.resultType == "depth":
+def rmain(args, locations, dataDict):
+    if args.resultTypes == "depth":
         report_depth(edNCLS, args.gff3Obj, args.regions, args.outputFileName, args.radiusSize)
     else:
         report_genes(edNCLS, args.gff3Obj, args.regions, args.outputFileName, args.radiusSize)
