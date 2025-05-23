@@ -290,10 +290,6 @@ def validate_p(args):
     if args.height != None:
         if args.height < 1:
             raise ValueError(f"--height value '{args.height}' must be >= 1!")
-    if args.binSize < 2:
-        raise ValueError(f"--bin value '{args.binSize}' must be >= 2!")
-    if args.binThreshold < 0:
-        raise ValueError(f"--threshold value '{args.binThreshold}' must be >= 0!")
     
     # Validate plot types
     if len(set(args.plotTypes)) != len(args.plotTypes):

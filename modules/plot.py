@@ -73,8 +73,7 @@ class Plot:
     STANDARD_DIMENSION = 5
     
     def __init__(self, resultTypes, measurementTypes, plotTypes, regions,
-                 wmaSize=5, binSize=100000, binThreshold=0.4,
-                 width=None, height=None):
+                 wmaSize=5, width=None, height=None):
         # Mandatory parameters
         self.resultTypes = resultTypes
         self.measurementTypes = measurementTypes
@@ -83,8 +82,6 @@ class Plot:
         
         # Optional parameters
         self.wmaSize = wmaSize
-        self.binSize = binSize
-        self.binThreshold = binThreshold
         self.width = width
         self.height = height
         
@@ -179,32 +176,6 @@ class Plot:
             raise ValueError(f"wmaSize must be >= 1")
         
         self._wmaSize = value
-    
-    @property
-    def binSize(self):
-        return self._binSize
-    
-    @binSize.setter
-    def binSize(self, value):
-        if not isinstance(value, int):
-            raise TypeError("binSize must be an integer")
-        if value < 2:
-            raise ValueError(f"binSize must be >= 2")
-        
-        self._binSize = value
-    
-    @property
-    def binThreshold(self):
-        return self._binThreshold
-    
-    @binThreshold.setter
-    def binThreshold(self, value):
-        if not isinstance(value, float) and not isinstance(value, int):
-            raise TypeError("binThreshold must be a float or int")
-        if value < 0:
-            raise ValueError(f"binThreshold must be >= 0")
-        
-        self._binThreshold = value
     
     @property
     def ncol(self):
@@ -308,6 +279,11 @@ class Plot:
     
     def histogram(self, windowedNCLS, contigID, start, end):
         '''
+        NOTE: histograms have been removed from the front end code as they
+        are complicated to configure correctly, hard to explain, and of
+        limited use. They are still here for reference and may be
+        reintroduced in the future.
+        
         Returns data suited for histogram plots of binned ED values.
         
         Parameters:
@@ -429,11 +405,9 @@ class HorizontalPlot(Plot):
     SPACING = 0.1 # padding for gene plots
     
     def __init__(self, resultTypes, measurementTypes, plotTypes, regions,
-                 wmaSize=5, binSize=100000, binThreshold=0.4,
-                 width=None, height=None):
+                 wmaSize=5, width=None, height=None):
         super().__init__(resultTypes, measurementTypes, plotTypes, regions, 
-                         wmaSize, binSize, binThreshold,
-                         width, height)
+                         wmaSize, width, height)
     
     def start_plotting(self):
         '''
@@ -930,11 +904,9 @@ class CircosPlot(Plot):
     NUM_MAJOR_TICKS = 5 # number of major ticks to aim for on the scale bar
     
     def __init__(self, resultTypes, measurementTypes, plotTypes, regions,
-                 wmaSize=5, binSize=100000, binThreshold=0.4,
-                 width=None, height=None):
+                 wmaSize=5, width=None, height=None):
         super().__init__(resultTypes, measurementTypes, plotTypes, regions, 
-                         wmaSize, binSize, binThreshold,
-                         width, height)
+                         wmaSize, width, height)
         
         # Figure-related parameters (not to be set by user)
         self.axs = None

@@ -2,7 +2,7 @@
 # psQTL_post.py
 # Represents step 3 of the psQTL pipeline, which is to 'post'-process the data
 # generated from psQTL_proc.py. It can plot segregation statistics with a plug-and-play
-# approach of several different plot types (line, scatter, histogram, genes) or it
+# approach of several different plot types (line, scatter, coverage, genes) or it
 # can report on genes that are proximal to or contained within potential QTLs.
 
 import os, argparse, sys, pickle
@@ -37,7 +37,7 @@ def raise_to_power(edDict, power):
 def main():
     usage = """%(prog)s processes the output of psQTL_proc.py to either 1) plot segregation
     statistics or 2) report on gene proximity to potential QTLs. The segregation statistics
-    can be plotted in as a combination of line plots, scatter plots, histograms,
+    can be plotted in as a combination of line plots, scatter plots, alignment coverage plots,
     and/or gene locations. The gene proximity report will identify genes that are proximal to or
     contained within potential QTLs (in the case of deletions). The input directory is expected
     to have been 'initialise'd by psQTL_prep.py and 'process'ed by psQTL_proc.py.
@@ -123,7 +123,7 @@ def main():
     pparser.add_argument("-p", dest="plotTypes",
                          required=True,
                          nargs="+",
-                         choices=["line", "scatter", "histogram", "coverage", "genes"],
+                         choices=["line", "scatter", "coverage", "genes"],
                          help="Specify one or more plot types to generate")
     pparser.add_argument("-s", dest="plotStyle",
                          required=True,
@@ -142,19 +142,6 @@ def main():
                          values to consider during weighted moving average
                          calculation (default: 5)""",
                          default=5)
-    pparser.add_argument("--bin", dest="binSize",
-                         type=int,
-                         required=False,
-                         help="""HISTOGRAM PLOT: Optionally, specify the bin size to 
-                         count variants within (default: 100000)""",
-                         default=100000)
-    pparser.add_argument("--threshold", dest="binThreshold",
-                         type=float,
-                         required=False,
-                         help="""HISTOGRAM PLOT: Optionally, specify the Euclidean
-                         distance threshold for counting a variant within each bin
-                         (default: 0.4)""",
-                         default=0.4)
     pparser.add_argument("--sampleCoverage", dest="sampleCoverage",
                          required=False,
                          nargs="+",
@@ -286,13 +273,11 @@ def pmain(args, locations, dataDict):
     # Establish plotting object
     if args.plotStyle == "horizontal":
         plotter = HorizontalPlot(args.resultTypes, args.measurementTypes, args.plotTypes, args.regions,
-                                 args.wmaSize, args.binSize, args.binThreshold,
-                                 args.width, args.height)
+                                 args.wmaSize, args.width, args.height)
         plotter.start_plotting()
     elif args.plotStyle == "circos":
         plotter = CircosPlot(args.resultTypes, args.measurementTypes, args.plotTypes, args.regions,
-                             args.wmaSize, args.binSize, args.binThreshold,
-                             args.width, args.height)
+                             args.wmaSize, args.width, args.height)
         plotter.start_plotting()
     
     rowLabels = []
@@ -326,27 +311,6 @@ def pmain(args, locations, dataDict):
                     # Plug data into the plotting function
                     "Plotter is capable of determining if the plot should have line and/or scatter data"
                     plotter.plot_linescatter(scatterNCLS, lineNCLS)
-        # Plot a histogram
-        elif pType == "histogram":
-            for rType in args.resultTypes:
-                for mType in args.measurementTypes:
-                    # Get the data for the plot
-                    if mType == "ed":
-                        if rType == "call":
-                            histNCLS = dataDict["call"]["ed"]
-                        elif rType == "depth":
-                            histNCLS = dataDict["depth"]["ed"]
-                        rowLabels.append(f"Num. variants with $ED^{args.power}$ ≥ {args.binThreshold}\n" + \
-                            f"in {args.binSize} bp windows")
-                    elif mType == "splsda":
-                        if rType == "call":
-                            histNCLS = dataDict["call"]["selected"]
-                        elif rType == "depth":
-                            histNCLS = dataDict["depth"]["selected"]
-                        rowLabels.append(f"Num. variants with $BA$ ≥ {args.binThreshold}\n" + \
-                            f"in {args.binSize} bp windows")
-                    # Plug data into the plotting function
-                    plotter.plot_histogram(histNCLS)
         # Plot coverage data
         elif pType == "coverage":
             coverageNCLS = dataDict["depth"]["ncls"]
