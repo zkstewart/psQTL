@@ -238,14 +238,16 @@ def parse_selected_to_windowed_ncls(selectedFileName):
     
     return windowedNCLS
 
-def parse_ber_to_windowed_ncls(berFileName):
+def parse_ber_to_windowed_ncls(berFileName, balancedAccuracy=True):
     '''
     Parameters:
         berFileName -- a file name indicating the location of the BER windows file
     Returns:
-        windowedNCLS -- a WindowedNCLS object containing statistical values indexed by chromosome
-                        and position
-        windowSize -- an integer indicating the size of the windows used in the analysis
+        windowedNCLS -- a WindowedNCLS object containing statistical values indexed
+                        by chromosome and position
+        balancedAccuracy -- (OPTIONAL); a boolean indicating whether to convert the
+                            BER to balanced accuracy (default is True)
+        
     '''
     EXPECTED_HEADER = ["chrom", "pos", "BER"]
     
@@ -271,6 +273,10 @@ def parse_ber_to_windowed_ncls(berFileName):
                 ber = float(ber)
             except:
                 raise ValueError(f"BER '{ber}' is not a float in file '{berFileName}'")
+            
+            # Convert BER to balanced accuracy if needed
+            if balancedAccuracy:
+                ber = 1 - (ber*2)
             
             # Figure out the window size (if not set yet)
             if windowSize == None:

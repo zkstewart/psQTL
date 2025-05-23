@@ -322,7 +322,7 @@ def pmain(args, locations, dataDict):
                         elif rType == "depth" and mType == "splsda":
                             scatterNCLS = dataDict["depth"]["selected"]
                             lineNCLS = dataDict["depth"]["ber"]
-                        rowLabels.append("$BER$") 
+                        rowLabels.append("$BA$") 
                     # Plug data into the plotting function
                     "Plotter is capable of determining if the plot should have line and/or scatter data"
                     plotter.plot_linescatter(scatterNCLS, lineNCLS)
@@ -343,7 +343,7 @@ def pmain(args, locations, dataDict):
                             histNCLS = dataDict["call"]["selected"]
                         elif rType == "depth":
                             histNCLS = dataDict["depth"]["selected"]
-                        rowLabels.append(f"Num. variants with $BER$ ≥ {args.binThreshold}\n" + \
+                        rowLabels.append(f"Num. variants with $BA$ ≥ {args.binThreshold}\n" + \
                             f"in {args.binSize} bp windows")
                     # Plug data into the plotting function
                     plotter.plot_histogram(histNCLS)
