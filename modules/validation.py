@@ -177,7 +177,7 @@ def validate_post_args(args):
                 args.gff3Obj = GFF3(args.annotationGFF3) # parsing now to raise errors early
                 args.gff3Obj.create_ncls_index("gene")
             elif args.plotStyle == "circos":
-                parser = Gff(args.genomeGFF3)
+                parser = Gff(args.annotationGFF3)
                 args.gff3Obj = parser.get_seqid2features(feature_type=None)
     
     # Validate output file

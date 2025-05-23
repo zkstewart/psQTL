@@ -2,11 +2,14 @@ import math
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+
 from pycirclize import Circos
+from matplotlib.patches import Patch
 
 from .gff3 import GFF3
 
 SAMPLE_AESTHETICS = [["#000000", "dotted"], ["#002D7E", "dashed"], ["#ECE45A", "dashdot"]]
+COVERAGE_COLOURS = ["#004488", "#ddaa33"] # set aside to ensure contrast of colours
 NUM_SAMPLE_LINES = len(SAMPLE_AESTHETICS) # for validation
 
 def bin_values(values, start, end, binSize, binThreshold):
@@ -820,12 +823,14 @@ class HorizontalPlot(Plot):
                 ))
                 
                 # Plot median and Q1/Q3 lines
-                self.axs[self.rowNum, colNum].plot(x, median, linewidth=linewidth,
-                                              color="palevioletred" if bulk == "bulk1" else "mediumseagreen")
+                self.axs[self.rowNum, colNum].plot(
+                    x, median, linewidth=linewidth,
+                    color=COVERAGE_COLOURS[0] if bulk == "bulk1" else COVERAGE_COLOURS[1])
                 
-                self.axs[self.rowNum, colNum].fill_between(x, q1, q3, alpha = 0.5,
-                                                      color="palevioletred" if bulk == "bulk1" else "mediumseagreen",
-                                                      label="_nolegend_")
+                self.axs[self.rowNum, colNum].fill_between(
+                    x, q1, q3, alpha = 0.5,
+                    color=COVERAGE_COLOURS[0] if bulk == "bulk1" else COVERAGE_COLOURS[1],
+                    label="_nolegend_")
                 
                 # Get the maximum Y value for this region
                 maxY = max(maxY, np.percentile(median, 90)) # 90th percentile to trim outliers
@@ -839,7 +844,7 @@ class HorizontalPlot(Plot):
                 y = np.concatenate(([y[0]], y, [y[-1]]))
                 
                 # Get the line colour and type
-                lineColour, lineType = HorizontalPlot.SAMPLE_AESTHETICS[sampleIndex]
+                lineColour, lineType = SAMPLE_AESTHETICS[sampleIndex]
                 
                 # Plot the line
                 self.axs[self.rowNum, colNum].plot(x, y, color=lineColour,
@@ -904,6 +909,25 @@ class CircosPlot(Plot):
                "#117733", "#88ccee", "#882255",
                "#44aa99", "#999933", "#aa4499",
                "#dddddd"] # 10 colours as 10 rows are the max that psQTL_post can produce
+    INTERVALS = {
+        1: [1, "bp"], # 1 bp
+        10: [1, "bp"], # 10 bp
+        100: [1, "bp"], # 100 bp
+        1000: [1000, "Kb"], # 1 Kb
+        10000: [1000, "Kb"], # 10 Kb
+        100000: [1000, "Kb"], # 100 Kb
+        1000000: [1000000, "Mb"], # 1 Mb
+        10000000: [1000000, "Mb"], # 10 Mb
+        100000000: [1000000, "Mb"], # 100 Mb
+        1000000000: [1000000000, "Gb"], # 1 Gb
+        10000000000: [1000000000, "Gb"], # 10 Gb
+        100000000000: [1000000000, "Gb"], # 100 Gb
+        1000000000000: [1000000000000, "Tb"], # 1 Tb
+        10000000000000: [1000000000000, "Tb"], # 10 Tb
+        100000000000000: [1000000000000, "Tb"], # 100 Tb
+        1000000000000000: [1000000000000000, "Pb"] # that's got to future-proof it for a while
+    }
+    NUM_MAJOR_TICKS = 5 # number of major ticks to aim for on the scale bar
     
     def __init__(self, resultTypes, measurementTypes, plotTypes, regions,
                  wmaSize=5, binSize=100000, binThreshold=0.4,
@@ -911,12 +935,15 @@ class CircosPlot(Plot):
         super().__init__(resultTypes, measurementTypes, plotTypes, regions, 
                          wmaSize, binSize, binThreshold,
                          width, height)
+        
+        # Figure-related parameters (not to be set by user)
+        self.axs = None
+        self.rowNum = None
     
     def start_plotting(self):
         seqid2size = {
-            f"{contigID}:{start}-{end}": end - start + 1 if not reverse
-            else f"{contigID}:{end}-{start}": end - start + 1
-            for contigID, start, end, reverse in self.regions:
+            f"{contigID}:{start}-{end}" if not reverse else f"{contigID}:{end}-{start}": (start, end)
+            for contigID, start, end, reverse in self.regions
         }
         self.circos = Circos(seqid2size, space = 0 if len(seqid2size) == 1 else 2)
         self.handles = [] # to store legend handles (which are row labels)
@@ -929,17 +956,22 @@ class CircosPlot(Plot):
         # Establish axes for each region/sector
         "Enables us to use a similar interface to the HorizontalPlot class for plotting to specific [row,col] indices"
         self.axs = []
-        for colNum, sector in enumerate(self.circos.sectors): ## TBD: can I access sectors by key?
+        for colNum, sector in enumerate(self.circos.sectors):
             currentPosition = CircosPlot.START_POSITION
             
-            # Set up outer track with scalebar
-            #sector.text(sector.name, size=10) ## TBD: leave this to set_col_labels?
+            # Set up outer track
             outer_track = sector.add_track((currentPosition-CircosPlot.OUTER_HEIGHT, currentPosition))
             outer_track.axis(fc="black")
-            major_interval = 10000000 ## TBD: determine based on size of region
+            
+            # Determine scale bar intervals
+            major_interval = 10 ** (len(str(sector.size)) - 1)
+            divisor, unit = CircosPlot.INTERVALS[major_interval]
             minor_interval = int(major_interval / 10)
+            major_tick_interval = math.ceil((sector.size / CircosPlot.NUM_MAJOR_TICKS) / major_interval) * major_interval
+            
+            # Set up the scale bar
             if sector.size > minor_interval:
-                outer_track.xticks_by_interval(major_interval, label_formatter=lambda v: f"{v / 1000000:.0f} Mb")
+                outer_track.xticks_by_interval(major_tick_interval, label_formatter=lambda v: f"{v / divisor:.0f} {unit}")
                 outer_track.xticks_by_interval(minor_interval, tick_length=1, show_label=False)
             currentPosition -= (CircosPlot.OUTER_HEIGHT + CircosPlot.TRACK_GAP)
             
@@ -958,26 +990,49 @@ class CircosPlot(Plot):
         self.rowNum = -1 # to keep track of the current row/track number
     
     def savefig(self, outputFileName):
-        fig = circos.plotfig()
-        _ = circos.ax.legend(
+        fig = self.circos.plotfig()
+        _ = self.circos.ax.legend(
             handles=self.handles,
             bbox_to_anchor=(0.5, 0.5),
             loc="center",
             ncols=2, ## TBD: check how this looks
         )
-        fig.savefig(outputFileName)
+        fig.savefig(outputFileName, dpi=300)
     
     def set_col_labels(self, labels):
+        '''
+        Sets the column labels for the plot.
+        
+        Parameters:
+            labels -- a list of strings indicating the labels for each column
+        '''
+        if self.axs is None:
+            raise ValueError("Call .start_plotting() before setting column labels")
+        if len(labels) != self.ncol:
+            raise ValueError(f"Number of labels ({len(labels)}) does not match number of columns ({self.ncol})")
+        
         for label, sector in zip(labels, self.circos.sectors): ## TBD: make sure ordering is stable
             sector.text(label, size=10)
     
     def set_row_labels(self, labels):
+        '''
+        Sets the row labels for the plot.
+        
+        Parameters:
+            labels -- a list of strings indicating the labels for each row
+        '''
+        if self.axs is None:
+            raise ValueError("Call .start_plotting() before setting column labels")
+        if len(labels) != self.nrow:
+            raise ValueError(f"Number of labels ({len(labels)}) does not match number of rows ({self.nrow})")
+        
         self.handles = [
             Patch(color=CircosPlot.COLOURS[i], label=x)
             for i, x in enumerate(labels)
         ]
     
-    def plot_linescatter(self, scatterNCLS, lineNCLS):
+    def plot_linescatter(self, scatterNCLS, lineNCLS,
+                         linewidth=1, dotsize=3):
         '''
         Plots the data for a line or scatter plot.
         
@@ -989,10 +1044,9 @@ class CircosPlot(Plot):
                         queryable by contigID and start/end positions;
                         used for line plots
         '''
-        if self.fig is None:
+        if self.axs is None:
             self.start_plotting()
         self.rowNum += 1 # increment row number for plotting
-        plotScaleBar = self.rowNum+1 == self.nrow # set up scale bar if this is the last row
         
         # Derive y limits from the maximum Y value across all regions
         maxY = 0 # to set y limits at end
@@ -1011,16 +1065,19 @@ class CircosPlot(Plot):
             # Plot scatter (if applicable)
             if "scatter" in self.plotTypes and contigID in scatterNCLS.contigs:
                 x, y = self.scatter(scatterNCLS, contigID, start, end)
-                x = CircosPlot.adjustX(x, start, reverse) ## TBD: implement this
-                self.axs[self.rowNum, colNum].scatter(x, y, vmax=maxY,
-                                                      color="red", s=dotsize,
-                                                      alpha=0.5, zorder=0)
+                #x = CircosPlot.adjustX(x, start, reverse) ## TBD: implement this
+                self.axs[self.rowNum, colNum].scatter(np.clip(x, start, end), y, vmax=maxY,
+                                                      color=CircosPlot.COLOURS[self.rowNum],
+                                                      s=dotsize, alpha=0.5,
+                                                      zorder=0)
             
             # Plot line (if applicable)
             if "line" in self.plotTypes and contigID in lineNCLS.contigs:
                 x, smoothedY = self.line(lineNCLS, contigID, start, end)
-                x = CircosPlot.adjustX(x, start, reverse) ## TBD: implement this
-                self.axs[self.rowNum, colNum].plot(x, smoothedY, vmax=maxY,
+                smoothedY = smoothedY.to_numpy()
+                #x = CircosPlot.adjustX(x, start, reverse) ## TBD: implement this
+                self.axs[self.rowNum, colNum].line(np.clip(x, start, end), smoothedY, vmax=maxY,
+                                                   color=CircosPlot.COLOURS[self.rowNum],
                                                    linewidth=linewidth,
                                                    zorder=1)
     
@@ -1032,10 +1089,9 @@ class CircosPlot(Plot):
             windowedNCLS -- a WindowedNCLS object with statistical values
                             queryable by contigID and start/end positions
         '''
-        if self.fig is None:
+        if self.axs is None:
             self.start_plotting()
         self.rowNum += 1 # increment row number for plotting
-        plotScaleBar = self.rowNum+1 == self.nrow # set up scale bar if this is the last row
         
         # Get the maximum Y value across all regions
         maxY = 0
@@ -1047,25 +1103,35 @@ class CircosPlot(Plot):
         
         # Plot each region
         for colNum, (contigID, start, end, reverse) in enumerate(self.regions):
-            pass
+            if contigID in windowedNCLS.contigs:
+                x, y = self.histogram(windowedNCLS, contigID, start, end)
+                self.axs[self.rowNum, colNum].bar(np.clip(x, start, end), y, vmax=maxY,
+                                                  width=self.binSize,
+                                                  color=CircosPlot.COLOURS[self.rowNum],
+                                                  align="edge")
     
     def plot_genes(self, gff3Obj):
         '''
         Plots the data for gene models.
         
         Parameters:
-            gff3Obj -- a GFF3 class object from gff3.py in this repository
+            gff3Obj -- a Gff().get_seqid2features(feature_tyoe=None) instance
+                       from pyCirclize
         '''
-        if self.fig is None:
+        if self.axs is None:
             self.start_plotting()
         self.rowNum += 1 # increment row number for plotting
-        plotScaleBar = self.rowNum+1 == self.nrow # set up scale bar if this is the last row
         
-        self.fig.canvas.draw() # need to draw the figure to get the renderer
-        alreadyWarned = False
-        
-        for colNum, (contigID, start, end, reverse) in enumerate(self.regions):     
-            pass
+        for colNum, (contigID, start, end, reverse) in enumerate(self.regions):
+            for feature in gff3Obj[contigID]:
+                if feature.type == "gene":
+                    featureStart = feature.location.start.real
+                    featureEnd = feature.location.end.real
+                    # Check if the feature is within the region
+                    if featureEnd > start and featureStart < end:
+                        self.axs[self.rowNum, colNum].genomic_features(
+                            [feature], plotstyle="arrow",
+                            fc=CircosPlot.COLOURS[self.rowNum])
     
     def plot_coverage(self, depthNCLSDict, samples,
                       linewidth=1):
@@ -1084,18 +1150,92 @@ class CircosPlot(Plot):
                        lines for
             linewidth -- OPTIONAL; an integer value indicating the width of the line plot (default=1)
         '''
-        if self.fig is None:
+        if self.axs is None:
             self.start_plotting()
         self.rowNum += 1 # increment row number for plotting
-        plotScaleBar = self.rowNum+1 == self.nrow # set up scale bar if this is the last row
+        
+        # Get the maximum Y value across all regions
+        maxY = 0
+        for contigID, start, end, reverse in self.regions:
+            coverageData = self.coverage(depthNCLSDict, samples, contigID, start, end)
+            for bulk in ["bulk1", "bulk2"]:
+                bulkData = coverageData[bulk]
+                if bulkData != None:
+                    maxY = max(maxY, np.percentile(bulkData["median"], 90)) # 90th percentile to trim outliers
+        if maxY == 0:
+            maxY = 1 # this can occur if all values are 0
         
         # Plot each region
-        minY = 0 # to set y limits at end
-        maxY = 0
         for colNum, (contigID, start, end, reverse) in enumerate(self.regions):
             coverageData = self.coverage(depthNCLSDict, samples, contigID, start, end) # keys: bulk1, bulk2, [*samples]
-    
-    
+            
+            # Plot each bulk
+            extendStart = False
+            extendEnd = False
+            for bulk in ["bulk1", "bulk2"]:
+                bulkData = coverageData[bulk] # keys: x, q1, median, q3
+                
+                # Skip if there are no values
+                if bulkData == None:
+                    print(f"WARNING: No coverage values found for region '{contigID, start, end}' for '{bulk}'")
+                    continue
+                
+                # Extend tails for better visualisation
+                if bulkData["x"][0] < start:
+                    bulkData["x"][0] = start
+                else:
+                    bulkData["x"] = np.concatenate(([start], bulkData["x"]))
+                    bulkData["median"] = np.concatenate(([bulkData["median"][0]], bulkData["median"]))
+                    bulkData["q1"] = np.concatenate(([bulkData["q1"][0]], bulkData["q1"]))
+                    bulkData["q3"] = np.concatenate(([bulkData["q3"][0]], bulkData["q3"]))
+                    extendStart = True
+                
+                if bulkData["x"][-1] > end:
+                    bulkData["x"][-1] = end
+                else:
+                    bulkData["x"] = np.concatenate((bulkData["x"], [end]))
+                    bulkData["median"] = np.concatenate((bulkData["median"], [bulkData["median"][-1]]))
+                    bulkData["q1"] = np.concatenate((bulkData["q1"], [bulkData["q1"][-1]]))
+                    bulkData["q3"] = np.concatenate((bulkData["q3"], [bulkData["q3"][-1]]))
+                    extendEnd = True
+                
+                # Cap values at maxY
+                bulkData["median"] = np.clip(bulkData["median"], 0, maxY)
+                bulkData["q1"] = np.clip(bulkData["q1"], 0, maxY)
+                bulkData["q3"] = np.clip(bulkData["q3"], 0, maxY)
+                
+                # Plot median and Q1/Q3 lines
+                self.axs[self.rowNum, colNum].fill_between(
+                    bulkData["x"], bulkData["q1"], bulkData["q3"], vmax=maxY,
+                    alpha = 0.5, color=COVERAGE_COLOURS[0] if bulk == "bulk1" else COVERAGE_COLOURS[1],
+                    label="_nolegend_", zorder=0)
+                
+                self.axs[self.rowNum, colNum].line(
+                    bulkData["x"], bulkData["median"], vmax=maxY,
+                    color=COVERAGE_COLOURS[0] if bulk == "bulk1" else COVERAGE_COLOURS[1],
+                    linewidth=linewidth, zorder=1)
+            
+            # Plot individual samples
+            for sampleIndex, sample in enumerate(samples):
+                "x can be reused from the bulk plot"
+                y = coverageData[sample]
+                
+                # Extend tails for better visualisation
+                if extendStart:
+                    y = np.concatenate(([y[0]], y))
+                if extendEnd:
+                    y = np.concatenate((y, [y[-1]]))
+                
+                # Cap values at maxY
+                y = np.clip(y, 0, maxY)
+                
+                # Get the line colour and type
+                lineColour, lineType = SAMPLE_AESTHETICS[sampleIndex]
+                
+                # Plot the line
+                self.axs[self.rowNum, colNum].line(
+                    bulkData["x"], y, vmax=maxY, 
+                    color=lineColour, linestyle=lineType, linewidth=linewidth)
     
     def __repr__(self):
         return f"CircosPlot(resultTypes={self.resultTypes}, measurementTypes={self.measurementTypes}, plotTypes={self.plotTypes})"

@@ -55,7 +55,7 @@ def main():
     p.add_argument("-r", dest="resultTypes",
                    required=True,
                    nargs="+",
-                   choices=["depth", "call"],
+                   choices=["call", "depth"],
                    help="""Specify whether you are analysing the results from variant 'call's
                    and/or 'depth' predictions of deleted regions""")
     p.add_argument("-m", dest="measurementTypes",
@@ -194,7 +194,7 @@ def main():
     # Perform mode-specific validation
     "Validate upfront before we get into time-consuming parsing to frontload the error checking"
     if args.mode == "plot":
-        print("## psQTL_post.py - Plot Euclidean Statistics ##")
+        print("## psQTL_post.py - Plot QTL Statistics ##")
         validate_p(args) # sets args.depthFileDict if relevant
     elif args.mode == "report":
         print("## psQTL_post.py - Report Gene Proximity ##")
