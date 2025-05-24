@@ -9,6 +9,8 @@ from matplotlib.patches import Patch
 from .gff3 import GFF3
 
 SAMPLE_AESTHETICS = [["#000000", "dotted"], ["#002D7E", "dashed"], ["#ECE45A", "dashdot"]]
+LINESCATTER_COLOURS = [["#2166ac", "b2182b"], # blue to red
+                       ["762a83", "1b7837"]]  # purple to green
 COVERAGE_COLOURS = ["#004488", "#ddaa33"] # set aside to ensure contrast of colours
 NUM_SAMPLE_LINES = len(SAMPLE_AESTHETICS) # for validation
 
@@ -71,84 +73,183 @@ class Plot:
     MEASUREMENT_TYPES = ["ed", "splsda"]
     PLOT_TYPES = ["line", "scatter", "histogram", "coverage", "genes"]
     STANDARD_DIMENSION = 5
-    
-    def __init__(self, resultTypes, measurementTypes, plotTypes, regions,
-                 wmaSize=5, width=None, height=None):
+    def __init__(self, regions,
+                 callED=None, depthED=None,
+                 callSPLSDA=None, depthSPLSDA=None,
+                 coverageNCLSDict=None, coverageSamples=None,
+                 annotationGFF3=None,
+                 power=1, wmaSize=5, width=None, height=None):
+        '''
+        Parameters:
+            regions -- a list of tuples, each tuple containing:
+                (contigID, start, end, reverse)
+                where contigID is a string, start and end are integers,
+                and reverse is a boolean indicating whether the region is reversed
+            callED -- a WindowedNCLS object with Euclidean Distance (ED) values
+                      obtained from the call method
+            depthED -- a WindowedNCLS object with ED values obtained from the depth method
+            callSPLSDA -- a list or tuple of two WindowedNCLS objects indicating 1)
+                          selected SNPs and 2) the Balanced Accuracy (BA) for sPLSDA
+                          in windows.
+            depthSPLSDA -- a list or tuple of two WindowedNCLS objects indicating 1)
+                           selected SNPs and 2) the BA for sPLSDA in windows.
+            coverageNCLSDict -- a dictionary with structure like:
+                                {
+                                    "bulk1": {
+                                        "sample1": WindowedNCLS,
+                                        "sample2": WindowedNCLS,
+                                        ...
+                                    },
+                                    "bulk2": { ... }
+                                }
+            coverageSamples -- a list of sample names available in coverageNCLSDict
+                               that should be plotted individually OR None to not
+                               plot individual samples
+            annotationGFF3 -- a GFF3 object with gene annotations; type may vary
+            power -- an integer indicating the power that ED values were raised to;
+                     provide this for aesthetic reasons, does not affect the data
+            wmaSize -- an integer indicating the size of the weighted moving average
+                       (WMA) window to apply to line plots; must be >= 1
+            width -- an integer indicating the width of the plot in inches; if None,
+                     defaults to Plot.STANDARD_DIMENSION * number of regions
+            height -- an integer indicating the height of the plot in inches; if None,
+                      defaults to Plot.STANDARD_DIMENSION * number of rows
+        '''
         # Mandatory parameters
-        self.resultTypes = resultTypes
-        self.measurementTypes = measurementTypes
-        self.plotTypes = plotTypes
         self.regions = regions
         
-        # Optional parameters
+        # Plot data
+        self.callED = callED
+        self.depthED = depthED
+        self.callSPLSDA = callSPLSDA
+        self.depthSPLSDA = depthSPLSDA
+        self.coverageNCLSDict = coverageNCLSDict
+        self.annotationGFF3 = annotationGFF3
+        
+        # Aesthetic parameters
+        self.power = power
         self.wmaSize = wmaSize
         self.width = width
         self.height = height
+        self.coverageSamples = coverageSamples
         
         # Figure-related parameters (not to be set by user)
         self.fig = None
         self.axs = None
         self.rowNum = None
     
-    def start_plotting(self):
+    def plot(self):
         raise NotImplementedError("start_plotting() must be implemented in subclasses")
     
-    def savefig(self, outputFileName):
-        raise NotImplementedError("savefig() must be implemented in subclasses")
+    @property
+    def callED(self):
+        return self._callED
     
-    def set_col_labels(self, labels):
-        raise NotImplementedError("set_col_labels() must be implemented in subclasses")
-    
-    def set_row_labels(self, labels):
-        raise NotImplementedError("set_row_labels() must be implemented in subclasses")
+    @callED.setter
+    def callED(self, value):
+        if value is None:
+            self._callED = None
+            return
+        if not hasattr(value, "isWindowedNCLS") or not value.isWindowedNCLS:
+            raise TypeError("callED must be a WindowedNCLS object")
+        self._callED = value
     
     @property
-    def resultTypes(self):
-        return self._resultTypes
+    def depthED(self):
+        return self._depthED
     
-    @resultTypes.setter
-    def resultTypes(self, valueList):
-        if not isinstance(valueList, list):
-            raise TypeError("resultTypes must be a list")
-        if len(valueList) < 1 or len(valueList) > 2:
-            raise ValueError("resultTypes must be a list of length 1 or 2")
-        for value in valueList:
-            if value not in Plot.RESULT_TYPES:
-                raise ValueError(f"resultTypes must be one of {Plot.RESULT_TYPES}")
-        
-        self._resultTypes = valueList
+    @depthED.setter
+    def depthED(self, value):
+        if value is None:
+            self._depthED = None
+            return
+        if not hasattr(value, "isWindowedNCLS") or not value.isWindowedNCLS:
+            raise TypeError("depthED must be a WindowedNCLS object")
+        self._depthED = value
     
     @property
-    def measurementTypes(self):
-        return self._measurementTypes
+    def callSPLSDA(self):
+        return self._callSPLSDA
     
-    @measurementTypes.setter
-    def measurementTypes(self, valueList):
-        if not isinstance(valueList, list):
-            raise TypeError("measurementTypes must be a list")
-        if len(valueList) < 1 or len(valueList) > 2:
-            raise ValueError("measurementTypes must be a list of length 1 or 2")
-        for value in valueList:
-            if value not in Plot.MEASUREMENT_TYPES:
-                raise ValueError(f"measurementTypes must be one of {Plot.MEASUREMENT_TYPES}")
-        
-        self._measurementTypes = valueList
+    @callSPLSDA.setter
+    def callSPLSDA(self, value):
+        if value is None:
+            self._callSPLSDA = None
+            return
+        if not isinstance(value, list) and not isinstance(value, tuple):
+            raise TypeError("callSPLSDA must be a list or tuple of WindowedNCLS objects")
+        if not len(value) == 2:
+            raise ValueError("callSPLSDA must be a list or tuple of length 2")
+        for i, val in enumerate(value):
+            if not hasattr(val, "isWindowedNCLS") or not val.isWindowedNCLS:
+                raise TypeError(f"callSPLSDA[{i}] must be a WindowedNCLS object")
+        self._callSPLSDA = value
     
     @property
-    def plotTypes(self):
-        return self._plotTypes
+    def depthSPLSDA(self):
+        return self._depthSPLSDA
     
-    @plotTypes.setter
-    def plotTypes(self, valueList):
-        if not isinstance(valueList, list):
-            raise TypeError("plotTypes must be a list")
-        if len(valueList) < 1 or len(valueList) > len(Plot.PLOT_TYPES):
-            raise ValueError("plotTypes must be a list of length 1 or 2")
-        for value in valueList:
-            if value not in Plot.PLOT_TYPES:
-                raise ValueError(f"plotTypes must be one of {Plot.PLOT_TYPES}")
+    @depthSPLSDA.setter
+    def depthSPLSDA(self, value):
+        if value is None:
+            self._depthSPLSDA = None
+            return
+        if not isinstance(value, list) and not isinstance(value, tuple):
+            raise TypeError("depthSPLSDA must be a list or tuple of WindowedNCLS objects")
+        if not len(value) == 2:
+            raise ValueError("depthSPLSDA must be a list or tuple of length 2")
+        for i, val in enumerate(value):
+            if not hasattr(val, "isWindowedNCLS") or not val.isWindowedNCLS:
+                raise TypeError(f"depthSPLSDA[{i}] must be a WindowedNCLS object")
+        self._depthSPLSDA = value
+    
+    @property
+    def coverageNCLSDict(self):
+        return self._coverageNCLSDict
+    
+    @coverageNCLSDict.setter
+    def coverageNCLSDict(self, value):
+        if value is None:
+            self._coverageNCLSDict = None
+            return
+        if not isinstance(value, dict):
+            raise TypeError("coverageNCLSDict must be a dictionary")
+        if not set(value.keys()) == {"bulk1", "bulk2"}:
+            raise ValueError("coverageNCLSDict must have keys 'bulk1' and 'bulk2'")
+        for bulk, sampleDict in value.items():
+            for sampleID, sampleValue in sampleDict.items():
+                if not hasattr(sampleValue, "isWindowedNCLS") or not sampleValue.isWindowedNCLS:
+                    raise TypeError("coverageNCLSDict must index WindowedNCLS objects")
+        self._coverageNCLSDict = value
+    
+    @property
+    def coverageSamples(self):
+        return self._coverageSamples
+    
+    @coverageSamples.setter
+    def coverageSamples(self, value):
+        "Internally convert None to an empty list"
+        if value is None:
+            self._coverageSamples = []
+            return
+        if not isinstance(value, list):
+            raise TypeError("coverageSamples must be a list")
+        if len(value) > NUM_SAMPLE_LINES:
+            raise ValueError(f"coverageSamples must have at most {NUM_SAMPLE_LINES} samples")
+        for sample in value:
+            found = False
+            for key, v in self.coverageNCLSDict.items():
+                if sample in v:
+                    found = True
+                    break
+            if not found:
+                raise ValueError(f"coverageSamples contains sample '{sample}' not found in coverageNCLSDict")
         
-        self._plotTypes = valueList
+        self._coverageSamples = value
+    
+    def annotationGFF3(self):
+        "Must be implemented in subclasses"
+        raise NotImplementedError("annotationGFF3() must be implemented in subclasses")
     
     @property
     def regions(self):
@@ -163,6 +264,19 @@ class Plot:
             raise ValueError("regions must be a list of length >= 1")
         
         self._regions = value
+    
+    @property
+    def power(self):
+        return self._power
+    
+    @power.setter
+    def power(self, value):
+        if not isinstance(value, int):
+            raise TypeError("power must be an integer")
+        if value < 1:
+            raise ValueError(f"power must be >= 1")
+        
+        self._power = value
     
     @property
     def wmaSize(self):
@@ -183,14 +297,14 @@ class Plot:
     
     @property
     def nrow(self):
-        oneRowTypes = [ x for x in ["coverage", "genes"] if x in self.plotTypes ]
-        otherPlotTypes = [ x for x in self.plotTypes if x not in oneRowTypes ]
-        
-        return (len(self.resultTypes) * len(self.measurementTypes) * \
-            (
-                len(otherPlotTypes) if not all(["scatter" in otherPlotTypes, "line" in otherPlotTypes ]) 
-                else len(otherPlotTypes) - 1 # scatter and line are in the same row
-            )) + len(oneRowTypes)
+        return sum([
+            1 if self.callED is not None else 0,
+            1 if self.depthED is not None else 0,
+            1 if self.callSPLSDA is not None else 0,
+            1 if self.depthSPLSDA is not None else 0,
+            1 if self.coverageNCLSDict is not None else 0,
+            1 if self.annotationGFF3 is not None else 0
+        ])
     
     @property
     def width(self):
@@ -337,7 +451,8 @@ class Plot:
                             },
                              "bulk2": { ... }
                          }
-            samples -- a list of sample names to plot individually
+            samples -- a list of sample names to plot individually; provide
+                       an empty list to not plot individual samples
             contigID -- a string indicating the contig ID
             start -- an integer indicating the start position of the region
             end -- an integer indicating the end position of the region
@@ -404,55 +519,91 @@ class HorizontalPlot(Plot):
     YLIM_HEADSPACE = 0.1 # proportion of ylim to add to the top of the plot
     SPACING = 0.1 # padding for gene plots
     
-    def __init__(self, resultTypes, measurementTypes, plotTypes, regions,
-                 wmaSize=5, width=None, height=None):
-        super().__init__(resultTypes, measurementTypes, plotTypes, regions, 
-                         wmaSize, width, height)
+    def __init__(self, regions,
+                 callED=None, depthED=None,
+                 callSPLSDA=None, depthSPLSDA=None,
+                 coverageNCLSDict=None, coverageSamples=None,
+                 annotationGFF3=None,
+                 power=1, wmaSize=5, width=None, height=None):
+        super().__init__(regions, callED, depthED, callSPLSDA, depthSPLSDA,
+                         coverageNCLSDict, coverageSamples, annotationGFF3,
+                         power, wmaSize, width, height)
+    @property
+    def annotationGFF3(self):
+        return self._annotationGFF3
     
-    def start_plotting(self):
+    @annotationGFF3.setter
+    def annotationGFF3(self, value):
+        if value is None:
+            self._annotationGFF3 = None
+            return
+        if not hasattr(value, "isGFF3") or not value.isGFF3:
+            raise TypeError("annotationGFF3 must be a GFF3 object")
+        self._annotationGFF3 = value
+    
+    def plot(self, plotTypes, outputFileName):
         '''
         Initialises a matplotlib figure and axes for plotting. Method is not called
         immediately to allow for customisation of optional attributes especially
         the figure width and height if not set during object initialisation.
+        
+        Parameters:
+            plotTypes -- a list of strings indicating the types of plots to create
+            outputFileName -- a string indicating the file name to save the plot to
         '''
+        # Validate plot types
+        for plotType in plotTypes:
+            if plotType not in Plot.PLOT_TYPES:
+                raise ValueError(f"Invalid plot type '{plotType}'; must be one of {Plot.PLOT_TYPES}")
+        if len(set(plotTypes)) != len(plotTypes):
+            raise ValueError("plotTypes must not contain duplicate values")
+        
+        # Initialise the axes
         self.fig, self.axs = plt.subplots(nrows=self.nrow, ncols=self.ncol,
                                           figsize=(self.width, self.height))
         self.axs = np.reshape(self.axs, (self.nrow, self.ncol)) # ensure shape is as expected
         self.fig.tight_layout()
-        self.rowNum = -1 # to keep track of the current row number
-    
-    def savefig(self, outputFileName):
-        self.fig.savefig(outputFileName, bbox_inches="tight")
-    
-    def set_col_labels(self, labels):
-        '''
-        Sets the column labels for the plot.
         
-        Parameters:
-            labels -- a list of strings indicating the labels for each column
-        '''
-        if self.axs is None:
-            raise ValueError("Call .start_plotting() before setting column labels")
-        if len(labels) != self.ncol:
-            raise ValueError(f"Number of labels ({len(labels)}) does not match number of columns ({self.ncol})")
-        
-        for ax, label in zip(self.axs[0], labels):
+        # Establish column labels
+        self.colLabels = [f"{region[0]}:{region[1]}-{region[2]}" if region[3] == False
+                          else f"{region[0]}:{region[2]}-{region[1]}" # if reversed
+                          for region in self.regions]
+        for ax, label in zip(self.axs[0], self.colLabels):
             ax.set_title(label, fontweight="bold")
-    
-    def set_row_labels(self, labels):
-        '''
-        Sets the row labels for the plot.
         
-        Parameters:
-            labels -- a list of strings indicating the labels for each row
-        '''
-        if self.axs is None:
-            raise ValueError("Call .start_plotting() before setting column labels")
-        if len(labels) != self.nrow:
-            raise ValueError(f"Number of labels ({len(labels)}) does not match number of rows ({self.nrow})")
+        # Init values for storing data during iteration
+        self.rowLabels = []
+        self.rowNum = -1 # to keep track of the current row number
         
-        for ax, label in zip(self.axs[:,0], labels):
+        # Build the plot
+        if "line" in plotTypes or "scatter" in plotTypes:
+            if self.callED != None:
+                self.plot_linescatter(self.callED if "scatter" in plotTypes else None,
+                                      self.callED if "line" in plotTypes else None)
+                self.rowLabels.append(f"SNP $ED^{self.power}$")
+            if self.callSPLSDA != None:
+                self.plot_linescatter(self.callSPLSDA[0], self.callSPLSDA[1])
+                self.rowLabels.append(f"SNP $BA$")
+            if self.depthED != None:
+                self.plot_linescatter(self.depthED if "scatter" in plotTypes else None,
+                                      self.depthED if "line" in plotTypes else None)
+                self.rowLabels.append(f"Depth $ED^{self.power}$")
+            if self.depthSPLSDA != None:
+                self.plot_linescatter(self.depthSPLSDA[0], self.depthSPLSDA[1])
+                self.rowLabels.append(f"Depth $BA$")
+        if self.coverageNCLSDict != None:
+            self.plot_coverage(self.coverageNCLSDict, self.coverageSamples)
+            self.rowLabels.append("Median-normalised coverage")
+        if self.annotationGFF3 != None:
+            self.plot_genes(self.annotationGFF3)
+            self.rowLabels.append("Gene annotations")
+        
+        # Set row labels
+        for ax, label in zip(self.axs[:,0], self.rowLabels):
             ax.set_ylabel(label)
+        
+        # Save the figure
+        self.fig.savefig(outputFileName, bbox_inches="tight")
     
     def plot_linescatter(self, scatterNCLS, lineNCLS,
                          linewidth=1, dotsize=3):
@@ -462,11 +613,21 @@ class HorizontalPlot(Plot):
         Parameters:
             scatterNCLS -- a WindowedNCLS object with statistical values
                             queryable by contigID and start/end positions;
-                            used for scatter plots
+                            used for scatter plots OR None if not plotting
+                            scatter points
             lineNCLS -- a WindowedNCLS object with statistical values
                         queryable by contigID and start/end positions;
-                        used for line plots
+                        used for line plots OR None if not plotting
+                        a line
+            linewidth -- (OPTIONAL) an integer indicating the width of the line;
+                         default is 1
+            dotsize -- (OPTIONAL) an integer indicating the size of the scatter
+                        points; default is 3
         '''
+        # Validate that one of either scatterNCLS or lineNCLS is provided
+        if scatterNCLS is None and lineNCLS is None:
+            raise ValueError("At least one of scatterNCLS or lineNCLS must be provided")
+        
         if self.fig is None:
             self.start_plotting()
         self.rowNum += 1 # increment row number for plotting
@@ -482,7 +643,7 @@ class HorizontalPlot(Plot):
                 self.axs[self.rowNum, colNum].set_yticklabels([])
             
             # Plot scatter (if applicable)
-            if "scatter" in self.plotTypes and contigID in scatterNCLS.contigs:
+            if scatterNCLS != None and contigID in scatterNCLS.contigs:
                 x, y = self.scatter(scatterNCLS, contigID, start, end)
                 self.axs[self.rowNum, colNum].scatter(x, y, color="red", s=dotsize,
                                                       alpha=0.5, zorder=0)
@@ -490,7 +651,7 @@ class HorizontalPlot(Plot):
                     maxY = max(maxY, max(y))
             
             # Plot line (if applicable)
-            if "line" in self.plotTypes and contigID in lineNCLS.contigs:
+            if lineNCLS != None and contigID in lineNCLS.contigs:
                 x, smoothedY = self.line(lineNCLS, contigID, start, end)
                 self.axs[self.rowNum, colNum].plot(x, smoothedY, linewidth=linewidth,
                                                    zorder=1)
@@ -876,9 +1037,9 @@ class HorizontalPlot(Plot):
 
 class CircosPlot(Plot):
     START_POSITION = 95
-    TRACK_GAP = 2
+    TRACK_GAP = 3
     OUTER_HEIGHT = 0.3
-    CENTRE_SPACE = 30
+    CENTRE_SPACE = 20
     COLOURS = ["#cc6677", "#332288", "#ddcc77", # Paul Tol muted colour palette
                "#117733", "#88ccee", "#882255",
                "#44aa99", "#999933", "#aa4499",
@@ -902,30 +1063,44 @@ class CircosPlot(Plot):
         1000000000000000: [1000000000000000, "Pb"] # that's got to future-proof it for a while
     }
     NUM_MAJOR_TICKS = 5 # number of major ticks to aim for on the scale bar
+    NUM_Y_TICKS = 3 # number of y ticks to aim for on each track
     
-    def __init__(self, resultTypes, measurementTypes, plotTypes, regions,
-                 wmaSize=5, width=None, height=None):
-        super().__init__(resultTypes, measurementTypes, plotTypes, regions, 
-                         wmaSize, width, height)
+    def __init__(self, regions,
+                 callED=None, depthED=None,
+                 callSPLSDA=None, depthSPLSDA=None,
+                 coverageNCLSDict=None, coverageSamples=None,
+                 annotationGFF3=None,
+                 power=1, wmaSize=5, width=None, height=None):
+        super().__init__(regions, callED, depthED, callSPLSDA, depthSPLSDA,
+                         coverageNCLSDict, coverageSamples, annotationGFF3,
+                         power, wmaSize, width, height)
         
         # Figure-related parameters (not to be set by user)
         self.axs = None
         self.rowNum = None
+        self.samples = None # used during legend formatting; set by plot_coverage()
     
-    def start_plotting(self):
-        seqid2size = {
-            f"{contigID}:{start}-{end}" if not reverse else f"{contigID}:{end}-{start}": (start, end)
-            for contigID, start, end, reverse in self.regions
-        }
-        self.circos = Circos(seqid2size, space = 0 if len(seqid2size) == 1 else 2)
-        self.handles = [] # to store legend handles (which are row labels)
+    @property
+    def annotationGFF3(self):
+        return self._annotationGFF3
+    
+    @annotationGFF3.setter
+    def annotationGFF3(self, value):
+        if value is None:
+            self._annotationGFF3 = None
+            return
+        if not isinstance(value, dict):
+            raise TypeError("annotationGFF3 must be a dict object")
+        for key, valueList in value.items():
+            if not isinstance(valueList, list):
+                raise TypeError("annotationGFF3 must be a dict of lists")
+            for item in valueList:
+                if not type(item).__name__ == "SeqFeature":
+                    raise TypeError("annotationGFF3 must be a dict of lists of SeqFeature objects")
         
-        self.trackHeight = (100 - (
-            (CircosPlot.TRACK_GAP * self.nrow) +
-            (100 - CircosPlot.START_POSITION) +
-            CircosPlot.CENTRE_SPACE)) / self.nrow # height of each track
-        
-        # Establish axes for each region/sector
+        self._annotationGFF3 = value
+    
+    def _set_axs(self):
         "Enables us to use a similar interface to the HorizontalPlot class for plotting to specific [row,col] indices"
         self.axs = []
         for colNum, sector in enumerate(self.circos.sectors):
@@ -943,7 +1118,8 @@ class CircosPlot(Plot):
             
             # Set up the scale bar
             if sector.size > minor_interval:
-                outer_track.xticks_by_interval(major_tick_interval, label_formatter=lambda v: f"{v / divisor:.0f} {unit}")
+                outer_track.xticks_by_interval(major_tick_interval, label_formatter=lambda v: f"{v / divisor:.0f} {unit}",
+                                               show_endlabel=False)
                 outer_track.xticks_by_interval(minor_interval, tick_length=1, show_label=False)
             currentPosition -= (CircosPlot.OUTER_HEIGHT + CircosPlot.TRACK_GAP)
             
@@ -958,18 +1134,39 @@ class CircosPlot(Plot):
             # Store the column of tracks
             self.axs.append(column)
         
-        self.axs = np.column_stack(self.axs)
+        self.axs = np.column_stack(self.axs) # gives [nrow, ncol] shape
+    
+    def plot(self):
+        # Initialise the circos figure object
+        seqid2size = {
+            f"{contigID}:{start}-{end}" if not reverse else f"{contigID}:{end}-{start}": (start, end)
+            for contigID, start, end, reverse in self.regions
+        }
+        self.circos = Circos(seqid2size, space = 0 if len(seqid2size) == 1 else 2,
+                             start=10) # leave space for y ticks
+        
+        # Establish axes for each region/sector
+        self._set_axs(self)
+        
         self.rowNum = -1 # to keep track of the current row/track number
     
     def savefig(self, outputFileName):
         fig = self.circos.plotfig()
-        _ = self.circos.ax.legend(
-            handles=self.handles,
-            bbox_to_anchor=(0.5, 0.5),
-            loc="center",
-            ncols=2, ## TBD: check how this looks
-        )
+        # _ = self.circos.ax.legend(
+        #     handles=self.handles,
+        #     bbox_to_anchor=(0.5, 0.5),
+        #     loc="center",
+        #     ncols=2, ## TBD: check how this looks
+        # )
         fig.savefig(outputFileName, dpi=300)
+    
+    @property
+    def trackHeight(self):
+        return (100 - (
+            (CircosPlot.TRACK_GAP * self.nrow) +
+            (100 - CircosPlot.START_POSITION) +
+            CircosPlot.CENTRE_SPACE)
+        ) / self.nrow # height of each track
     
     def set_col_labels(self, labels):
         '''
@@ -995,13 +1192,38 @@ class CircosPlot(Plot):
         '''
         if self.axs is None:
             raise ValueError("Call .start_plotting() before setting column labels")
-        if len(labels) != self.nrow:
-            raise ValueError(f"Number of labels ({len(labels)}) does not match number of rows ({self.nrow})")
+        # if len(labels) != self.nrow:
+        #     raise ValueError(f"Number of labels ({len(labels)}) does not match number of rows ({self.nrow})")
         
-        self.handles = [
-            Patch(color=CircosPlot.COLOURS[i], label=x)
-            for i, x in enumerate(labels)
-        ]
+        # self.handles = [
+        #     Patch(color=CircosPlot.COLOURS[i], label=x)
+        #     for i, x in enumerate(labels)
+        # ]
+        ####
+        # line_handles = [
+        #     Line2D([], [], color="red", label="Line 01"),
+        #     Line2D([], [], color="blue", label="Line 02"),
+        #     Line2D([], [], color="green", label="Line 03"),
+        # ]
+        # line_legend = circos.ax.legend(
+        #     handles=line_handles,
+        #     bbox_to_anchor=(0.93, 1.02),
+        #     fontsize=8,
+        #     title="Lines",
+        #     handlelength=2,
+        # )
+        # circos.ax.add_artist(line_legend)
+        
+        #ED_COLOURS
+    
+    def _format_y_ticks(self, maxY):
+        yticks = np.linspace(0, maxY, CircosPlot.NUM_Y_TICKS)
+        if maxY < 1:
+            yticks = [ round(x, 2) for x in yticks ]
+        else:
+            yticks = [ int(x) for x in yticks ]
+        ylabels = [ str(x) for x in yticks ]
+        return yticks, ylabels
     
     def plot_linescatter(self, scatterNCLS, lineNCLS,
                          linewidth=1, dotsize=3):
@@ -1031,6 +1253,10 @@ class CircosPlot(Plot):
                 x, smoothedY = self.line(lineNCLS, contigID, start, end)
                 if smoothedY.size != 0:
                     maxY = max(maxY, max(smoothedY))
+        
+        # Add y-axis
+        yticks, ylabels = self._format_y_ticks(maxY)
+        self.axs[self.rowNum, 0].yticks(yticks, ylabels, vmin=0, vmax=maxY, side="left")
         
         # Plot each region
         for colNum, (contigID, start, end, reverse) in enumerate(self.regions):
@@ -1072,6 +1298,10 @@ class CircosPlot(Plot):
                 x, y = self.histogram(windowedNCLS, contigID, start, end)
                 if y.size != 0:
                     maxY = max(maxY, max(y))
+        
+        # Add y-axis
+        yticks, ylabels = self._format_y_ticks(maxY)
+        self.axs[self.rowNum, 0].yticks(yticks, ylabels, vmin=0, vmax=maxY, side="left")
         
         # Plot each region
         for colNum, (contigID, start, end, reverse) in enumerate(self.regions):
@@ -1126,6 +1356,9 @@ class CircosPlot(Plot):
             self.start_plotting()
         self.rowNum += 1 # increment row number for plotting
         
+        if samples != [] and samples != None:
+            self.samples = samples
+        
         # Get the maximum Y value across all regions
         maxY = 0
         for contigID, start, end, reverse in self.regions:
@@ -1136,6 +1369,10 @@ class CircosPlot(Plot):
                     maxY = max(maxY, np.percentile(bulkData["median"], 90)) # 90th percentile to trim outliers
         if maxY == 0:
             maxY = 1 # this can occur if all values are 0
+        
+        # Add y-axis
+        yticks, ylabels = self._format_y_ticks(maxY)
+        self.axs[self.rowNum, 0].yticks(yticks, ylabels, vmin=0, vmax=maxY, side="left")
         
         # Plot each region
         for colNum, (contigID, start, end, reverse) in enumerate(self.regions):
@@ -1207,7 +1444,8 @@ class CircosPlot(Plot):
                 # Plot the line
                 self.axs[self.rowNum, colNum].line(
                     bulkData["x"], y, vmax=maxY, 
-                    color=lineColour, linestyle=lineType, linewidth=linewidth)
+                    color=lineColour, linestyle=lineType,
+                    linewidth=linewidth, zorder=2)
     
     def __repr__(self):
         return f"CircosPlot(resultTypes={self.resultTypes}, measurementTypes={self.measurementTypes}, plotTypes={self.plotTypes})"

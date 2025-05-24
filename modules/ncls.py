@@ -9,6 +9,7 @@ class WindowedNCLS:
         
         self.numPositions = 0
         self.longestContig = 0
+        self.isWindowedNCLS = True # allows easy type checking
     
     @property
     def contigs(self):

@@ -242,12 +242,11 @@ def parse_ber_to_windowed_ncls(berFileName, balancedAccuracy=True):
     '''
     Parameters:
         berFileName -- a file name indicating the location of the BER windows file
+        balancedAccuracy -- (OPTIONAL); a boolean indicating whether to convert the
+                            BER to balanced accuracy (default is True)
     Returns:
         windowedNCLS -- a WindowedNCLS object containing statistical values indexed
                         by chromosome and position
-        balancedAccuracy -- (OPTIONAL); a boolean indicating whether to convert the
-                            BER to balanced accuracy (default is True)
-        
     '''
     EXPECTED_HEADER = ["chrom", "pos", "BER"]
     

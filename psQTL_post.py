@@ -272,66 +272,29 @@ def main():
 def pmain(args, locations, dataDict):
     # Establish plotting object
     if args.plotStyle == "horizontal":
-        plotter = HorizontalPlot(args.resultTypes, args.measurementTypes, args.plotTypes, args.regions,
-                                 args.wmaSize, args.width, args.height)
-        plotter.start_plotting()
+        plotter = HorizontalPlot(args.regions,
+            callED=dataDict["call"]["ed"] if "call" in dataDict and "ed" in dataDict["call"] else None,
+            depthED=dataDict["depth"]["ed"] if "depth" in dataDict and "ed" in dataDict["depth"] else None,
+            callSPLSDA=(dataDict["call"]["selected"], dataDict["call"]["ber"]) \
+                if "call" in dataDict and "selected" in dataDict["call"] else None,
+            depthSPLSDA=(dataDict["depth"]["selected"], dataDict["depth"]["ber"]) \
+                if "depth" in dataDict and "selected" in dataDict["depth"] else None,
+            coverageNCLSDict=dataDict["depth"]["ncls"] if "depth" in dataDict and "ncls" in dataDict["depth"] else None,
+            annotationGFF3=args.gff3Obj if "genes" in args.plotTypes else None,
+            power=args.power, wmaSize=args.wmaSize, width=args.width, height=args.height)
+        plotter.plot(args.plotTypes, args.outputFileName)
     elif args.plotStyle == "circos":
-        plotter = CircosPlot(args.resultTypes, args.measurementTypes, args.plotTypes, args.regions,
-                             args.wmaSize, args.width, args.height)
-        plotter.start_plotting()
-    
-    rowLabels = []
-    colLabels = []
-    
-    # Generate plots grouped by plotTypes > resultTypes > measurementTypes
-    alreadyPlottedScatter = False
-    for pType in args.plotTypes:
-        # Plot a line and/or scatter plot
-        if pType in ["line", "scatter"] and not alreadyPlottedScatter:
-            alreadyPlottedScatter = True
-            for rType in args.resultTypes:
-                for mType in args.measurementTypes:
-                    # Get the data for the plot
-                    if mType == "ed":
-                        if rType == "call":
-                            scatterNCLS = dataDict["call"]["ed"]
-                            lineNCLS = dataDict["call"]["ed"]
-                        elif rType == "depth" and mType == "ed":
-                            scatterNCLS = dataDict["depth"]["ed"]
-                            lineNCLS = dataDict["depth"]["ed"]
-                        rowLabels.append(f"$ED^{args.power}$")
-                    elif mType == "splsda":
-                        if rType == "call" and mType == "splsda":
-                            scatterNCLS = dataDict["call"]["selected"]
-                            lineNCLS = dataDict["call"]["ber"]
-                        elif rType == "depth" and mType == "splsda":
-                            scatterNCLS = dataDict["depth"]["selected"]
-                            lineNCLS = dataDict["depth"]["ber"]
-                        rowLabels.append("$BA$") 
-                    # Plug data into the plotting function
-                    "Plotter is capable of determining if the plot should have line and/or scatter data"
-                    plotter.plot_linescatter(scatterNCLS, lineNCLS)
-        # Plot coverage data
-        elif pType == "coverage":
-            coverageNCLS = dataDict["depth"]["ncls"]
-            plotter.plot_coverage(coverageNCLS, args.sampleCoverage)
-            rowLabels.append("Median-normalised coverage")
-        # Plot gene locations
-        elif pType == "genes":
-            plotter.plot_genes(args.gff3Obj)
-            rowLabels.append("Representative models")
-    
-    # Format column labels
-    colLabels = [f"{region[0]}:{region[1]}-{region[2]}" if region[3] == False
-                 else f"{region[0]}:{region[2]}-{region[1]}" # if reversed
-                 for region in args.regions]
-    
-    # Set the row and column labels
-    plotter.set_row_labels(rowLabels)
-    plotter.set_col_labels(colLabels)
-    
-    # Write plot to file
-    plotter.savefig(args.outputFileName)
+        plotter = CircosPlot(args.regions,
+            callED=dataDict["call"]["ed"] if "call" in dataDict and "ed" in dataDict["call"] else None,
+            depthED=dataDict["depth"]["ed"] if "depth" in dataDict and "ed" in dataDict["depth"] else None,
+            callSPLSDA=(dataDict["call"]["selected"], dataDict["call"]["ber"]) \
+                if "call" in dataDict and "selected" in dataDict["call"] else None,
+            depthSPLSDA=(dataDict["depth"]["selected"], dataDict["depth"]["ber"]) \
+                if "depth" in dataDict and "selected" in dataDict["depth"] else None,
+            coverageNCLSDict=dataDict["depth"]["ncls"] if "depth" in dataDict and "ncls" in dataDict["depth"] else None,
+            annotationGFF3=args.gff3Obj if "genes" in args.plotTypes else None,
+            power=args.power, wmaSize=args.wmaSize, width=args.width, height=args.height)
+        plotter.plot(args.plotTypes, args.outputFileName)
     
     print("Plotting complete!")
 
