@@ -139,7 +139,7 @@ class Plot:
         self.rowNum = None
     
     def plot(self):
-        raise NotImplementedError("start_plotting() must be implemented in subclasses")
+        raise NotImplementedError("plot() must be implemented in subclasses")
     
     @property
     def callED(self):
@@ -513,7 +513,7 @@ class Plot:
         return coverageData
     
     def __repr__(self):
-        return f"Plot(resultTypes={self.resultTypes}, measurementTypes={self.measurementTypes}, plotTypes={self.plotTypes})"
+        return f"Plot(...)" # TBD
 
 class HorizontalPlot(Plot):
     YLIM_HEADSPACE = 0.1 # proportion of ylim to add to the top of the plot
@@ -582,14 +582,16 @@ class HorizontalPlot(Plot):
                                       self.callED if "line" in plotTypes else None)
                 self.rowLabels.append(f"SNP $ED^{self.power}$")
             if self.callSPLSDA != None:
-                self.plot_linescatter(self.callSPLSDA[0], self.callSPLSDA[1])
+                self.plot_linescatter(self.callSPLSDA[0],
+                                      self.callSPLSDA[1])
                 self.rowLabels.append(f"SNP $BA$")
             if self.depthED != None:
                 self.plot_linescatter(self.depthED if "scatter" in plotTypes else None,
                                       self.depthED if "line" in plotTypes else None)
                 self.rowLabels.append(f"Depth $ED^{self.power}$")
             if self.depthSPLSDA != None:
-                self.plot_linescatter(self.depthSPLSDA[0], self.depthSPLSDA[1])
+                self.plot_linescatter(self.depthSPLSDA[0],
+                                      self.depthSPLSDA[1])
                 self.rowLabels.append(f"Depth $BA$")
         if self.coverageNCLSDict != None:
             self.plot_coverage(self.coverageNCLSDict, self.coverageSamples)
@@ -812,7 +814,7 @@ class HorizontalPlot(Plot):
                         if exonStart < exonEnd # this occurs if the exon exists outside of the specified region
                     ],
                     (laneNum+HorizontalPlot.SPACING, 1-HorizontalPlot.SPACING),
-                    facecolors="dodgerblue", edgecolor="black",
+                    facecolors="dodgerblue", edgecolor="black", linewidth=0.5,
                     zorder=2 # above gene directionality
                 )
                 
@@ -832,7 +834,7 @@ class HorizontalPlot(Plot):
                             if cdsStart < cdsEnd # this occurs if the exon exists outside of the specified region
                         ],
                         (laneNum+HorizontalPlot.SPACING, 1-HorizontalPlot.SPACING),
-                        facecolors="coral", edgecolor="black",
+                        facecolors="coral", edgecolor="black", linewidth=0.5,
                         zorder=3 # above exon boxes and gene directionality
                     )
                 
@@ -1014,10 +1016,8 @@ class HorizontalPlot(Plot):
         
         # Set legend
         legendLabels = ["bulk1", "bulk2"] + samples # samples can be []
-        self.axs[self.rowNum, colNum].legend(legendLabels, # colNum is the last column
-                                        loc="center left",
-                                        bbox_to_anchor=(1, 0.5),
-                                        ncol=1)
+        self.axs[self.rowNum, colNum].legend( # colNum is the last column
+            legendLabels, loc="center left", bbox_to_anchor=(1, 0.5), ncol=1)
     
     def scalebar(self, colNum, start, end):
         '''
@@ -1033,7 +1033,7 @@ class HorizontalPlot(Plot):
         self.axs[self.rowNum, colNum].set_xlabel("Chromosome position", weight="bold") 
     
     def __repr__(self):
-        return f"HorizontalPlot(resultTypes={self.resultTypes}, measurementTypes={self.measurementTypes}, plotTypes={self.plotTypes})"
+        return f"HorizontalPlot(...)" # TBD
 
 class CircosPlot(Plot):
     START_POSITION = 95
@@ -1136,7 +1136,23 @@ class CircosPlot(Plot):
         
         self.axs = np.column_stack(self.axs) # gives [nrow, ncol] shape
     
-    def plot(self):
+    def plot(self, plotTypes, outputFileName):
+        '''
+        Initialises a circos plot with axes for plotting. Method is not called
+        immediately to allow for customisation of optional attributes especially
+        the figure width and height if not set during object initialisation.
+        
+        Parameters:
+            plotTypes -- a list of strings indicating the types of plots to create
+            outputFileName -- a string indicating the file name to save the plot to
+        '''
+        # Validate plot types
+        for plotType in plotTypes:
+            if plotType not in Plot.PLOT_TYPES:
+                raise ValueError(f"Invalid plot type '{plotType}'; must be one of {Plot.PLOT_TYPES}")
+        if len(set(plotTypes)) != len(plotTypes):
+            raise ValueError("plotTypes must not contain duplicate values")
+        
         # Initialise the circos figure object
         seqid2size = {
             f"{contigID}:{start}-{end}" if not reverse else f"{contigID}:{end}-{start}": (start, end)
@@ -1145,19 +1161,52 @@ class CircosPlot(Plot):
         self.circos = Circos(seqid2size, space = 0 if len(seqid2size) == 1 else 2,
                              start=10) # leave space for y ticks
         
-        # Establish axes for each region/sector
-        self._set_axs(self)
-        
+        # Establish axes for each region/column and track/row
+        self._set_axs()
         self.rowNum = -1 # to keep track of the current row/track number
-    
-    def savefig(self, outputFileName):
+        
+        # Establish column labels
+        self.colLabels = [f"{region[0]}:{region[1]}-{region[2]}" if region[3] == False
+                          else f"{region[0]}:{region[2]}-{region[1]}" # if reversed
+                          for region in self.regions]
+        for label, sector in zip(self.colLabels, self.circos.sectors):
+            sector.text(label, size=10)
+        
+        # Init values for storing data during iteration
+        self.rowLabels = []
+        self.rowNum = -1 # to keep track of the current row number
+        
+        # Build the plot
+        if "line" in plotTypes or "scatter" in plotTypes:
+            if self.callED != None:
+                self.plot_linescatter(self.callED if "scatter" in plotTypes else None,
+                                      self.callED if "line" in plotTypes else None)
+                self.rowLabels.append(f"SNP $ED^{self.power}$")
+            if self.callSPLSDA != None:
+                self.plot_linescatter(self.callSPLSDA[0],
+                                      self.callSPLSDA[1])
+                self.rowLabels.append(f"SNP $BA$")
+            if self.depthED != None:
+                self.plot_linescatter(self.depthED if "scatter" in plotTypes else None,
+                                      self.depthED if "line" in plotTypes else None)
+                self.rowLabels.append(f"Depth $ED^{self.power}$")
+            if self.depthSPLSDA != None:
+                self.plot_linescatter(self.depthSPLSDA[0],
+                                      self.depthSPLSDA[1])
+                self.rowLabels.append(f"Depth $BA$")
+        if self.coverageNCLSDict != None:
+            self.plot_coverage(self.coverageNCLSDict, self.coverageSamples)
+            self.rowLabels.append("Median-normalised coverage")
+        if self.annotationGFF3 != None:
+            self.plot_genes(self.annotationGFF3)
+            self.rowLabels.append("Gene annotations")
+        
+        # Set row labels
+        #for ax, label in zip(self.axs[:,0], self.rowLabels):
+        #    ax.set_ylabel(label)
+        
+        # Save the figure
         fig = self.circos.plotfig()
-        # _ = self.circos.ax.legend(
-        #     handles=self.handles,
-        #     bbox_to_anchor=(0.5, 0.5),
-        #     loc="center",
-        #     ncols=2, ## TBD: check how this looks
-        # )
         fig.savefig(outputFileName, dpi=300)
     
     @property
@@ -1167,21 +1216,6 @@ class CircosPlot(Plot):
             (100 - CircosPlot.START_POSITION) +
             CircosPlot.CENTRE_SPACE)
         ) / self.nrow # height of each track
-    
-    def set_col_labels(self, labels):
-        '''
-        Sets the column labels for the plot.
-        
-        Parameters:
-            labels -- a list of strings indicating the labels for each column
-        '''
-        if self.axs is None:
-            raise ValueError("Call .start_plotting() before setting column labels")
-        if len(labels) != self.ncol:
-            raise ValueError(f"Number of labels ({len(labels)}) does not match number of columns ({self.ncol})")
-        
-        for label, sector in zip(labels, self.circos.sectors): ## TBD: make sure ordering is stable
-            sector.text(label, size=10)
     
     def set_row_labels(self, labels):
         '''
@@ -1245,11 +1279,11 @@ class CircosPlot(Plot):
         # Derive y limits from the maximum Y value across all regions
         maxY = 0 # to set y limits at end
         for colNum, (contigID, start, end, reverse) in enumerate(self.regions):
-            if "scatter" in self.plotTypes and contigID in scatterNCLS.contigs:
+            if scatterNCLS != None and contigID in scatterNCLS.contigs:
                 x, y = self.scatter(scatterNCLS, contigID, start, end)
                 if y.size != 0:
                     maxY = max(maxY, max(y))
-            if "line" in self.plotTypes and contigID in lineNCLS.contigs:
+            if lineNCLS != None and contigID in lineNCLS.contigs:
                 x, smoothedY = self.line(lineNCLS, contigID, start, end)
                 if smoothedY.size != 0:
                     maxY = max(maxY, max(smoothedY))
@@ -1261,7 +1295,7 @@ class CircosPlot(Plot):
         # Plot each region
         for colNum, (contigID, start, end, reverse) in enumerate(self.regions):
             # Plot scatter (if applicable)
-            if "scatter" in self.plotTypes and contigID in scatterNCLS.contigs:
+            if scatterNCLS != None and contigID in scatterNCLS.contigs:
                 x, y = self.scatter(scatterNCLS, contigID, start, end)
                 #x = CircosPlot.adjustX(x, start, reverse) ## TBD: implement this
                 self.axs[self.rowNum, colNum].scatter(np.clip(x, start, end), y, vmax=maxY,
@@ -1270,7 +1304,7 @@ class CircosPlot(Plot):
                                                       zorder=0)
             
             # Plot line (if applicable)
-            if "line" in self.plotTypes and contigID in lineNCLS.contigs:
+            if lineNCLS != None and contigID in lineNCLS.contigs:
                 x, smoothedY = self.line(lineNCLS, contigID, start, end)
                 smoothedY = smoothedY.to_numpy()
                 #x = CircosPlot.adjustX(x, start, reverse) ## TBD: implement this
@@ -1448,4 +1482,4 @@ class CircosPlot(Plot):
                     linewidth=linewidth, zorder=2)
     
     def __repr__(self):
-        return f"CircosPlot(resultTypes={self.resultTypes}, measurementTypes={self.measurementTypes}, plotTypes={self.plotTypes})"
+        return f"CircosPlot(...)" # TBD
