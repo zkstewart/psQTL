@@ -1427,7 +1427,6 @@ class CircosPlot(Plot):
             # Plot scatter (if applicable)
             if scatterNCLS != None and contigID in scatterNCLS.contigs:
                 x, y = self.scatter(scatterNCLS, contigID, start, end)
-                #x = CircosPlot.adjustX(x, start, reverse) ## TBD: implement this
                 if y.size != 0:
                     self.axs[self.rowNum, colNum].scatter(np.clip(x, start, end), y, vmax=maxY,
                                                           color=colours[1],
@@ -1440,7 +1439,6 @@ class CircosPlot(Plot):
             if lineNCLS != None and contigID in lineNCLS.contigs:
                 x, smoothedY = self.line(lineNCLS, contigID, start, end)
                 smoothedY = smoothedY.to_numpy()
-                #x = CircosPlot.adjustX(x, start, reverse) ## TBD: implement this
                 if smoothedY.size != 0:
                     self.axs[self.rowNum, colNum].line(np.clip(x, start, end), smoothedY, vmax=maxY,
                                                        color=colours[0],

@@ -218,12 +218,20 @@ def validate_regions(args, lengthsDict):
             # Validate start position
             if start < 0:
                 raise ValueError(f"--region start position '{start}' is < 0!")
+            if start == end:
+                raise ValueError(f"--region start position '{start}' is equal to end position '{end}'!")
             
             # Detect reverse orientation and swap start/end if necessary
             reverse = False
-            if start >= end:
-                start, end = end, start
-                reverse = True
+            if start > end:
+                # Prevent reverse orientation if plotStyle == "circos"
+                if args.plotStyle == "circos":
+                    raise ValueError(f"--region '{contigID, start, end}' cannot be in reverse orientation " + 
+                                    "with '-s circos'; only '-s horizontal' plot style can plot in reverse.")
+                # Otherwise, swap start and end
+                else:
+                    start, end = end, start
+                    reverse = True
             
             # Validate end position
             if end > lengthsDict[contigID]:
