@@ -645,7 +645,8 @@ class HorizontalPlot(Plot):
                                       applyWMA=False, # no WMA for BA values
                                       lineLabel=f"$BA$",
                                       scatterLabel=f"Selected SNP",
-                                      scatterShape="D")
+                                      scatterShape="D",
+                                      lineZorder=0, scatterZorder=1) # make selected SNPs more visible
                 self.rowLabels.append(f"SNP $BA$")
             if self.depthED != None:
                 self.plot_linescatter(self.depthED if "scatter" in plotTypes else None,
@@ -661,7 +662,8 @@ class HorizontalPlot(Plot):
                                       applyWMA=False, # no WMA for BA values
                                       lineLabel=f"$BA$",
                                       scatterLabel=f"Selected CNV",
-                                      scatterShape="D")
+                                      scatterShape="D",
+                                      lineZorder=0, scatterZorder=1)
                 self.rowLabels.append(f"CNV $BA$")
         if self.coverageNCLSDict != None:
             self.plot_coverage(self.coverageNCLSDict, self.coverageSamples)
@@ -679,7 +681,7 @@ class HorizontalPlot(Plot):
     
     def plot_linescatter(self, scatterNCLS, lineNCLS, colours, applyWMA=True,
                          lineLabel="WMA", scatterLabel="Values", scatterShape="o",
-                         linewidth=1, dotsize=3):
+                         lineZorder=1, scatterZorder=0, linewidth=1, dotsize=3):
         '''
         Plots the data for a line or scatter plot.
         
@@ -702,6 +704,10 @@ class HorizontalPlot(Plot):
                             points; default is "Values"
             scatterShape -- (OPTIONAL) a string indicating the shape of the scatter
                             points; default is "o" for standard dots
+            lineZorder -- (OPTIONAL) an integer indicating the z-order of the line;
+                          default is 1
+            scatterZorder -- (OPTIONAL) an integer indicating the z-order of the scatter
+                             points; default is 0
             linewidth -- (OPTIONAL) an integer indicating the width of the line;
                          default is 1
             dotsize -- (OPTIONAL) an integer indicating the size of the scatter
@@ -735,7 +741,7 @@ class HorizontalPlot(Plot):
                 if y.size != 0:
                     self.axs[self.rowNum, colNum].scatter(x, y, color=colours[1], alpha=0.5,
                                                           s=dotsize, marker=scatterShape,
-                                                          zorder=0,
+                                                          zorder=scatterZorder,
                                                           label=scatterLabel)
                     maxY = max(maxY, max(y))
             
@@ -746,7 +752,7 @@ class HorizontalPlot(Plot):
                 if smoothedY.size != 0:
                     self.axs[self.rowNum, colNum].plot(x, smoothedY, color=colours[0],
                                                        linewidth=linewidth,
-                                                       zorder=1,
+                                                       zorder=lineZorder,
                                                        label=lineLabel)
                     maxY = max(maxY, max(smoothedY))
             
@@ -1138,10 +1144,12 @@ class HorizontalPlot(Plot):
                (f", power={self.power}, wmaSize={self.wmaSize}, width={self.width}, height={self.height})")
 
 class CircosPlot(Plot):
+    # Aesthetic constants
     START_POSITION = 95
     TRACK_GAP = 3
     OUTER_HEIGHT = 0.3
     CENTRE_SPACE = 20
+    AXIS_SPACE = 10
     LEGEND_POSITIONS = [
         (-0.05, 1.02), # top left
         (0.89, 1.02), # top right
@@ -1169,6 +1177,7 @@ class CircosPlot(Plot):
     NUM_MAJOR_TICKS = 5 # number of major ticks to aim for on the scale bar
     NUM_Y_TICKS = 3 # number of y ticks to aim for on each track
     STANDARD_DIMENSION = 8
+    
     def __init__(self, regions,
                  callED=None, depthED=None,
                  callSPLSDA=None, depthSPLSDA=None,
@@ -1260,6 +1269,25 @@ class CircosPlot(Plot):
         
         self._annotationGFF3 = value
     
+    @property
+    def axisSpace(self):
+        if self._axisSpace is None:
+            return CircosPlot.AXIS_SPACE
+        return self._axisSpace
+    
+    @axisSpace.setter
+    def axisSpace(self, value):
+        if value == None:
+            self._axisSpace = None
+            return
+        else:
+            if not isinstance(value, int):
+                raise TypeError("axisSpace must be an integer")
+            if value < 0:
+                raise ValueError(f"axisSpace must be >= 0")
+            
+            self._axisSpace = value
+    
     def _set_axs(self):
         "Enables us to use a similar interface to the HorizontalPlot class for plotting to specific [row,col] indices"
         self.axs = []
@@ -1318,11 +1346,11 @@ class CircosPlot(Plot):
         
         # Initialise the circos figure object
         seqid2size = {
-            f"{contigID}:{start}-{end}" if not reverse else f"{contigID}:{end}-{start}": (start, end)
+            f"{contigID}:{start}-{end}": (start, end) # reversed plotting is not supported in Circos
             for contigID, start, end, reverse in self.regions
         }
         self.circos = Circos(seqid2size, space = 0 if len(seqid2size) == 1 else 2,
-                             end=350) # leave space for y ticks
+                             end=360-self.axisSpace) # leave space for y ticks
         
         # Establish axes for each region/column and track/row
         self._set_axs()
@@ -1355,7 +1383,8 @@ class CircosPlot(Plot):
                                       applyWMA=False, # no WMA for BA values
                                       lineLabel=f"$BA$",
                                       scatterLabel=f"Selected SNP/CNV",
-                                      scatterShape="D")
+                                      scatterShape="D",
+                                      lineZorder=0, scatterZorder=1) # make selected SNPs more visible
                 self.rowLabels.append(f"SNP $BA$")
             if self.depthED != None:
                 self.plot_linescatter(self.depthED if "scatter" in plotTypes else None,
@@ -1371,7 +1400,8 @@ class CircosPlot(Plot):
                                       applyWMA=False, # no WMA for BA values
                                       lineLabel=f"$BA$",
                                       scatterLabel=f"Selected SNP/CNV",
-                                      scatterShape="D")
+                                      scatterShape="D",
+                                      lineZorder=0, scatterZorder=1)
                 self.rowLabels.append(f"CNV $BA$")
         if self.coverageNCLSDict != None:
             self.plot_coverage(self.coverageNCLSDict, self.coverageSamples)
@@ -1448,8 +1478,6 @@ class CircosPlot(Plot):
             Patch(label=f"{i+1}: {label}")
             for i, label in enumerate(self.rowLabels)
         ]
-        
-        # Add the row labels legend to the circos plot
         legendTitle = "Rows"
         rowLabelLegend = self.circos.ax.legend(
             handles=self.rowHandles,
@@ -1494,25 +1522,33 @@ class CircosPlot(Plot):
     
     def plot_linescatter(self, scatterNCLS, lineNCLS, colours, applyWMA=True,
                          lineLabel="WMA", scatterLabel="Values", scatterShape="o",
-                         linewidth=1, dotsize=3):
+                         lineZorder=1, scatterZorder=0, linewidth=1, dotsize=3):
         '''
         Plots the data for a line or scatter plot.
         
         Parameters:
             scatterNCLS -- a WindowedNCLS object with statistical values
                             queryable by contigID and start/end positions;
-                            used for scatter plots
+                            used for scatter plots OR None if not plotting
+                            scatter points
             lineNCLS -- a WindowedNCLS object with statistical values
                         queryable by contigID and start/end positions;
-                        used for line plots
+                        used for line plots OR None if not plotting
+                        a line
             colours -- a list of two colours to use for the line (first) and scatter
                        points (second)
+            applyWMA -- (OPTIONAL) a boolean indicating whether to apply WMA
+                        smoothing to the line; default is True
             lineLabel -- (OPTIONAL) a string indicating the label for the line;
                           default is "WMA"
             scatterLabel -- (OPTIONAL) a string indicating the label for the scatter
                             points; default is "Values"
             scatterShape -- (OPTIONAL) a string indicating the shape of the scatter
                             points; default is "o" for standard dots
+            lineZorder -- (OPTIONAL) an integer indicating the z-order of the line;
+                          default is 1
+            scatterZorder -- (OPTIONAL) an integer indicating the z-order of the scatter
+                             points; default is 0
             linewidth -- (OPTIONAL) an integer indicating the width of the line;
                          default is 1
             dotsize -- (OPTIONAL) an integer indicating the size of the scatter
@@ -1548,7 +1584,7 @@ class CircosPlot(Plot):
                     self.axs[self.rowNum, colNum].scatter(np.clip(x, start, end), y, vmax=maxY,
                                                           color=colours[1],
                                                           s=dotsize, alpha=0.5, marker=scatterShape,
-                                                          zorder=0,
+                                                          zorder=scatterZorder,
                                                           label=scatterLabel)
                     self.linescatterHandles.append([colours[1], scatterLabel, scatterShape])
             
@@ -1560,7 +1596,7 @@ class CircosPlot(Plot):
                     self.axs[self.rowNum, colNum].line(np.clip(x, start, end), smoothedY, vmax=maxY,
                                                        color=colours[0],
                                                        linewidth=linewidth,
-                                                       zorder=1,
+                                                       zorder=lineZorder,
                                                        label=lineLabel)
                     self.linescatterHandles.append([colours[0], lineLabel, "line"])
     

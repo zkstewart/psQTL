@@ -164,7 +164,13 @@ def main():
                          (default: calculated internally with 5 per plot type for horizontal
                          or a flat value of 8 for circos)""",
                          default=None)
-    
+    pparser.add_argument("--space", dest="axisSpace",
+                         type=int,
+                         required=False,
+                         help="""CIRCOS PLOT: Optionally, specify the space (in degrees)
+                         to allow for the Y-axis labels in the top centre of the plot
+                         (default: 10)""",
+                         default=10)
     # Report-subparser arguments
     rparser.add_argument("-a", dest="annotationGFF3",
                          required=True,
@@ -296,6 +302,7 @@ def pmain(args, locations, dataDict):
             coverageNCLSDict=dataDict["depth"]["ncls"] if "depth" in dataDict and "ncls" in dataDict["depth"] else None,
             annotationGFF3=args.gff3Obj if "genes" in args.plotTypes else None,
             power=args.power, wmaSize=args.wmaSize, width=args.width, height=args.height)
+        plotter.axisSpace = args.axisSpace
         plotter.plot(args.plotTypes, args.outputFileName)
     print("Plotting complete!")
 

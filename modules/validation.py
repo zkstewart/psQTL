@@ -129,7 +129,7 @@ def validate_post_args(args):
                 raise FileNotFoundError(f"'call' ED file '{locations.variantEdFile}' does not exist!")
             if not os.path.isfile(locations.variantEdFile + ".ok"):
                 raise FileNotFoundError(f"'call' ED file '{locations.variantEdFile}' does not have a '.ok' flag!")
-            
+        
         if "splsda" in args.measurementTypes:
             if not os.path.isfile(locations.variantSplsdaSelectedFile):
                 raise FileNotFoundError(f"sPLS-DA file for 'call' selected features '{locations.variantSplsdaSelectedFile}' does not exist!")
@@ -167,6 +167,10 @@ def validate_post_args(args):
         raise ValueError(f"--power value '{args.power}' must be >= 1!")
     if args.missingFilter < 0 or args.missingFilter > 1:
         raise ValueError(f"--missing value '{args.missingFilter}' must be between 0 and 1!")
+    if args.axisSpace < 0:
+        raise ValueError(f"--axisSpace value '{args.axisSpace}' must be >= 0!")
+    if args.axisSpace >= 360:
+        raise ValueError(f"--axisSpace value '{args.axisSpace}' must be < 360!")
     
     # Validate annotation GFF3 file
     if args.annotationGFF3 != None:
