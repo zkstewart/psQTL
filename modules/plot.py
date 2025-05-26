@@ -13,6 +13,7 @@ SAMPLE_AESTHETICS = [["#000000", "dotted"], ["#002D7E", "dashed"], ["#ECE45A", "
 LINESCATTER_COLOURS = [["#2166ac", "#b2182b"], # blue to red, for ED measurements
                        ["#762a83", "#1b7837"]]  # purple to green, for BA measurements
 COVERAGE_COLOURS = ["#004488", "#ddaa33"] # set aside to ensure contrast of colours
+GENE_COLOURS = ["coral", "dodgerblue"]
 NUM_SAMPLE_LINES = len(SAMPLE_AESTHETICS) # for validation
 
 def bin_values(values, start, end, binSize, binThreshold):
@@ -514,7 +515,7 @@ class Plot:
         return coverageData
     
     def __repr__(self):
-        return f"Plot(...)" # TBD
+        return f"Plot(<inherit me please>)"
 
 class HorizontalPlot(Plot):
     YLIM_HEADSPACE = 0.1 # proportion of ylim to add to the top of the plot
@@ -851,7 +852,7 @@ class HorizontalPlot(Plot):
                         if exonStart < exonEnd # this occurs if the exon exists outside of the specified region
                     ],
                     (laneNum+HorizontalPlot.SPACING, 1-HorizontalPlot.SPACING),
-                    facecolors="dodgerblue", edgecolor="black", linewidth=0.5,
+                    facecolors=GENE_COLOURS[1], edgecolor="black", linewidth=0.5,
                     zorder=2 # above gene directionality
                 )
                 
@@ -871,7 +872,7 @@ class HorizontalPlot(Plot):
                             if cdsStart < cdsEnd # this occurs if the exon exists outside of the specified region
                         ],
                         (laneNum+HorizontalPlot.SPACING, 1-HorizontalPlot.SPACING),
-                        facecolors="coral", edgecolor="black", linewidth=0.5,
+                        facecolors=GENE_COLOURS[0], edgecolor="black", linewidth=0.5,
                         zorder=3 # above exon boxes and gene directionality
                     )
                 
@@ -1070,17 +1071,26 @@ class HorizontalPlot(Plot):
         self.axs[self.rowNum, colNum].set_xlabel("Chromosome position", weight="bold") 
     
     def __repr__(self):
-        return f"HorizontalPlot(...)" # TBD
+        return (f"HorizontalPlot(regions={self.regions}" ) + \
+               (", callED=" + "True" if self.callED is not None else "False") + \
+               (", depthED=" + "True" if self.depthED is not None else "False") + \
+               (", callSPLSDA=" + "True" if self.callSPLSDA is not None else "False") + \
+               (", depthSPLSDA=" + "True" if self.depthSPLSDA is not None else "False") + \
+               (", coverage=" + "True" if self.coverageNCLSDict is not None else "False") + \
+               (", genes=" + "True" if self.annotationGFF3 is not None else "False") + \
+               (f", power={self.power}, wmaSize={self.wmaSize}, width={self.width}, height={self.height})")
 
 class CircosPlot(Plot):
     START_POSITION = 95
     TRACK_GAP = 3
     OUTER_HEIGHT = 0.3
     CENTRE_SPACE = 20
-    COLOURS = ["#cc6677", "#332288", "#ddcc77", # Paul Tol muted colour palette
-               "#117733", "#88ccee", "#882255",
-               "#44aa99", "#999933", "#aa4499",
-               "#dddddd"] # 10 colours as 10 rows are the max that psQTL_post can produce
+    LEGEND_POSITIONS = [
+        (-0.05, 1.02), # top left
+        (0.89, 1.02), # top right
+        (-0.05, 0.05) # bottom left
+    ]
+    ROW_LABEL_POSITION = (0.87, 0) # bottom right; reserved for row labels
     INTERVALS = {
         1: [1, "bp"], # 1 bp
         10: [1, "bp"], # 10 bp
@@ -1115,7 +1125,6 @@ class CircosPlot(Plot):
         # Figure-related parameters (not to be set by user)
         self.axs = None
         self.rowNum = None
-        self.samples = None # used during legend formatting; set by plot_coverage()
     
     @property
     def annotationGFF3(self):
@@ -1199,7 +1208,7 @@ class CircosPlot(Plot):
             for contigID, start, end, reverse in self.regions
         }
         self.circos = Circos(seqid2size, space = 0 if len(seqid2size) == 1 else 2,
-                             start=10) # leave space for y ticks
+                             end=350) # leave space for y ticks
         
         # Establish axes for each region/column and track/row
         self._set_axs()
@@ -1250,16 +1259,17 @@ class CircosPlot(Plot):
                 self.rowLabels.append(f"CNV $BA$")
         if self.coverageNCLSDict != None:
             self.plot_coverage(self.coverageNCLSDict, self.coverageSamples)
-            self.rowLabels.append("Median-normalised coverage")
+            self.rowLabels.append("Coverage")
         if self.annotationGFF3 != None:
             self.plot_genes(self.annotationGFF3)
-            self.rowLabels.append("Gene annotations")
+            self.rowLabels.append("Genes")
         
         # Create the figure object
         "Necessary prior to legend addition"
         fig = self.circos.plotfig()
         
         # Set line/scatter legend
+        numLegends = 0
         if len(self.linescatterHandles) > 0:
             # Remove duplicates from the handles list
             linescatterHandles = []
@@ -1276,23 +1286,66 @@ class CircosPlot(Plot):
             ]
             
             # Add the line/scatter legend to the circos plot
-            legendTitle = "Lines" if "line" in plotTypes else "" + \
-                          "/" if "line" in plotTypes and "scatter" in plotTypes else "" + \
-                          "Points" if "scatter" in plotTypes else ""
+            hasED = self.callED != None or self.depthED != None
+            hasSPLSDA = self.callSPLSDA != None or self.depthSPLSDA != None
+            legendTitle = ("ED" if hasED else "") + \
+                          ("/" if (hasED and hasSPLSDA) else "") + \
+                          ("BA" if hasSPLSDA else "")
             linescatterLegend = self.circos.ax.legend(
                 handles=self.linescatterHandles,
-                bbox_to_anchor=(0.89, 1.02),
+                bbox_to_anchor=CircosPlot.LEGEND_POSITIONS[numLegends],
                 fontsize=8,
-                title="Lines" if "line" in plotTypes else "",
-                handlelength=2,
+                title=legendTitle,
+                handlelength=2
             )
             self.circos.ax.add_artist(linescatterLegend)
+            numLegends += 1
         
         # Set coverage legend
-        ## TBD
+        if len(self.coverageHandles) > 0:
+            # Remove duplicates from the handles list
+            coverageHandles = []
+            for colour, label, shape in self.coverageHandles:
+                if (colour, label, shape) not in coverageHandles:
+                    coverageHandles.append((colour, label, shape))
+            
+            # Convert to Line2D handles for legend
+            self.coverageHandles = [
+                Line2D([], [], color=colour, label=label, linewidth=1, ls=shape)
+                for colour, label, shape in coverageHandles
+            ]
+            
+            # Add the coverage legend to the circos plot
+            legendTitle = "Median-norm\nCoverage"
+            coverageLegend = self.circos.ax.legend(
+                handles=self.coverageHandles,
+                bbox_to_anchor=CircosPlot.LEGEND_POSITIONS[numLegends],
+                fontsize=8,
+                title=legendTitle,
+                handlelength=2
+            )
+            self.circos.ax.add_artist(coverageLegend)
+            numLegends += 1
         
         # Set row annotations
-        ## TBD
+        self.rowHandles = [
+            Patch(label=f"{i+1}: {label}")
+            for i, label in enumerate(self.rowLabels)
+        ]
+        
+        # Add the row labels legend to the circos plot
+        legendTitle = "Rows"
+        rowLabelLegend = self.circos.ax.legend(
+            handles=self.rowHandles,
+            bbox_to_anchor=CircosPlot.ROW_LABEL_POSITION,
+            fontsize=6,
+            title_fontsize=8,
+            title=legendTitle,
+            handlelength=0, handletextpad=0, # hide the handles
+            alignment="left" if len(self.rowHandles) == 1 else "center",
+            ncols=2
+        )
+        self.circos.ax.add_artist(rowLabelLegend)
         
         # Save the figure
         fig.savefig(outputFileName, dpi=300)
@@ -1304,39 +1357,6 @@ class CircosPlot(Plot):
             (100 - CircosPlot.START_POSITION) +
             CircosPlot.CENTRE_SPACE)
         ) / self.nrow # height of each track
-    
-    def set_row_labels(self, labels):
-        '''
-        Sets the row labels for the plot.
-        
-        Parameters:
-            labels -- a list of strings indicating the labels for each row
-        '''
-        if self.axs is None:
-            raise ValueError("Call .start_plotting() before setting column labels")
-        # if len(labels) != self.nrow:
-        #     raise ValueError(f"Number of labels ({len(labels)}) does not match number of rows ({self.nrow})")
-        
-        # self.handles = [
-        #     Patch(color=CircosPlot.COLOURS[i], label=x)
-        #     for i, x in enumerate(labels)
-        # ]
-        ####
-        # line_handles = [
-        #     Line2D([], [], color="red", label="Line 01"),
-        #     Line2D([], [], color="blue", label="Line 02"),
-        #     Line2D([], [], color="green", label="Line 03"),
-        # ]
-        # line_legend = circos.ax.legend(
-        #     handles=line_handles,
-        #     bbox_to_anchor=(0.93, 1.02),
-        #     fontsize=8,
-        #     title="Lines",
-        #     handlelength=2,
-        # )
-        # circos.ax.add_artist(line_legend)
-        
-        #ED_COLOURS
     
     def _format_y_ticks(self, maxY):
         def truncate(value, decimals):
@@ -1459,7 +1479,7 @@ class CircosPlot(Plot):
                 x, y = self.histogram(windowedNCLS, contigID, start, end)
                 self.axs[self.rowNum, colNum].bar(np.clip(x, start, end), y, vmax=maxY,
                                                   width=self.binSize,
-                                                  color=CircosPlot.COLOURS[self.rowNum],
+                                                  color="grey",
                                                   align="edge")
     
     def plot_genes(self, gff3Obj):
@@ -1483,7 +1503,7 @@ class CircosPlot(Plot):
                     if featureEnd > start and featureStart < end:
                         self.axs[self.rowNum, colNum].genomic_features(
                             [feature], plotstyle="arrow",
-                            fc=CircosPlot.COLOURS[self.rowNum])
+                            fc=GENE_COLOURS[0])
     
     def plot_coverage(self, depthNCLSDict, samples,
                       linewidth=1):
@@ -1505,9 +1525,6 @@ class CircosPlot(Plot):
         if self.axs is None:
             self.start_plotting()
         self.rowNum += 1 # increment row number for plotting
-        
-        if samples != [] and samples != None:
-            self.samples = samples
         
         # Get the maximum Y value across all regions
         maxY = 0
@@ -1568,14 +1585,17 @@ class CircosPlot(Plot):
                     bulkData["x"], bulkData["q1"], bulkData["q3"], vmax=maxY,
                     alpha = 0.5, color=COVERAGE_COLOURS[0] if bulk == "bulk1" else COVERAGE_COLOURS[1],
                     label="_nolegend_", zorder=0)
-                
                 self.axs[self.rowNum, colNum].line(
                     bulkData["x"], bulkData["median"], vmax=maxY,
                     color=COVERAGE_COLOURS[0] if bulk == "bulk1" else COVERAGE_COLOURS[1],
                     linewidth=linewidth, zorder=1)
+                
+                self.coverageHandles.append([COVERAGE_COLOURS[0] if bulk == "bulk1" else COVERAGE_COLOURS[1],
+                                             "Bulk 1" if bulk == "bulk1" else "Bulk 2", "solid"])
             
             # Plot individual samples
             for sampleIndex, sample in enumerate(samples):
+                print(f"Plotting sample '{sample}' for region '{contigID, start, end}'")
                 "x can be reused from the bulk plot"
                 y = coverageData[sample]
                 
@@ -1596,6 +1616,14 @@ class CircosPlot(Plot):
                     bulkData["x"], y, vmax=maxY, 
                     color=lineColour, linestyle=lineType,
                     linewidth=linewidth, zorder=2)
+                self.coverageHandles.append([lineColour, sample, lineType])
     
     def __repr__(self):
-        return f"CircosPlot(...)" # TBD
+        return (f"CircosPlot(regions={self.regions}" ) + \
+               (", callED=" + "True" if self.callED is not None else "False") + \
+               (", depthED=" + "True" if self.depthED is not None else "False") + \
+               (", callSPLSDA=" + "True" if self.callSPLSDA is not None else "False") + \
+               (", depthSPLSDA=" + "True" if self.depthSPLSDA is not None else "False") + \
+               (", coverage=" + "True" if self.coverageNCLSDict is not None else "False") + \
+               (", genes=" + "True" if self.annotationGFF3 is not None else "False") + \
+               (f", power={self.power}, wmaSize={self.wmaSize}, width={self.width}, height={self.height})")

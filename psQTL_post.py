@@ -295,7 +295,6 @@ def pmain(args, locations, dataDict):
             annotationGFF3=args.gff3Obj if "genes" in args.plotTypes else None,
             power=args.power, wmaSize=args.wmaSize, width=args.width, height=args.height)
         plotter.plot(args.plotTypes, args.outputFileName)
-    
     print("Plotting complete!")
 
 def rmain(args, locations, dataDict):
