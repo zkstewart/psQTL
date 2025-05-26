@@ -16,6 +16,8 @@ COVERAGE_COLOURS = ["#004488", "#ddaa33"] # set aside to ensure contrast of colo
 GENE_COLOURS = ["coral", "dodgerblue"]
 NUM_SAMPLE_LINES = len(SAMPLE_AESTHETICS) # for validation
 
+SMOOTHING_BUFFER = 100000 # buffer to apply to the start and end positions for smoothing
+
 def bin_values(values, start, end, binSize, binThreshold):
     '''
     Parameters:
@@ -68,7 +70,7 @@ def WMA(s, period):
     except:
         "len(sw)==1 causes this error"
         return None
-    return pd.Series(sw)
+    return sw
 
 class Plot:
     RESULT_TYPES = ["depth", "call"]
@@ -370,9 +372,11 @@ class Plot:
         
         return x, y
     
-    def line(self, windowedNCLS, contigID, start, end):
+    def line(self, windowedNCLS, contigID, start, end, applyWMA=True, buffer=0):
         '''
-        Returns data suited for line plotting of WindowedNCLS values.
+        Returns data suited for line plotting of WindowedNCLS values. Extends or
+        truncates the line to match the start and end positions, applying
+        weighted moving average (WMA) smoothing if requested.
         
         Parameters:
             windowedNCLS -- a WindowedNCLS object with statistical values
@@ -380,17 +384,65 @@ class Plot:
             contigID -- a string indicating the contig ID
             start -- an integer indicating the start position of the region
             end -- an integer indicating the end position of the region
+            applyWMA -- (OPTIONAL) a boolean indicating whether to apply WMA
+                        smoothing to the line; default is True
+            buffer -- (OPTIONAL) an integer indicating a buffer length to
+                      apply to the start and end positions for smoothing
+                      and avoiding line truncation; default is 0
         Returns:
             x -- a numpy array of the x values (positions)
             smoothedY -- a pandas Series of the smoothed y values (statical
                          value) values OR the original y values if smoothing
                          was not possible (i.e., not enough data points)
         '''
-        x, y = self.scatter(windowedNCLS, contigID, start, end)
-        smoothedY = WMA(y, self.wmaSize)
-        if smoothedY is None:
-            print(f"WARNING: region '{contigID, start, end}' has too few data points to apply WMA smoothing")
+        x, y = self.scatter(windowedNCLS, contigID, start-buffer, end+buffer)
+        if applyWMA:
+            smoothedY = WMA(y, self.wmaSize)
+            if smoothedY is None:
+                print(f"WARNING: region '{contigID, start, end}' has too few data points to apply WMA smoothing")
+                smoothedY = y
+        else:
             smoothedY = y
+        
+        # Locate the start and end indices in the x array
+        xstart = 0
+        while x[xstart] < start:
+            xstart += 1
+        
+        xend = len(x) - 1
+        while xend > 0 and x[xend] > end:
+            xend -= 1
+        
+        # Prepend values
+        if x[xstart] > start: # if we need to extend the line backwards
+            xprepend = [start]
+            if xstart > 0:
+                slope = (smoothedY[xstart-1] - smoothedY[xstart]) / (x[xstart] - x[xstart-1]) # y/unit change as we go back
+                diff = slope * (x[xstart] - start) # slope * num of units to go back
+                yprepend = [smoothedY[xstart] + diff]
+            else:
+                yprepend = [smoothedY[xstart]] # just project the first value
+        else: # if x[xstart] == start; x[xstart] can never be < start because of how np.searchsorted works
+            xprepend = []
+            yprepend = []
+        
+        # Append values
+        if x[xend] < end: # if we need to extend the line forwards
+            xappend = [end]
+            if xend+1 < len(x):
+                slope = (smoothedY[xend+1] - smoothedY[xend]) / (x[xend+1] - x[xend]) # y/unit change as we go forward
+                diff = slope * (end - x[xend]) # slope * num of units to go forward
+                yappend = [smoothedY[xend] + diff]
+            else:
+                yappend = [smoothedY[xend]] # just project the last value
+        else: # if x[xend] == end; x[xend] can never be > end because of the while loop above
+            xappend = []
+            yappend = []
+        
+        # Generate the new x and smoothedY arrays
+        x = np.concatenate((xprepend, x[xstart:xend+1], xappend))
+        smoothedY = np.concatenate((yprepend, smoothedY[xstart:xend+1], yappend))
+        
         return x, smoothedY
     
     def histogram(self, windowedNCLS, contigID, start, end):
@@ -590,7 +642,8 @@ class HorizontalPlot(Plot):
                 self.plot_linescatter(self.callSPLSDA[0],
                                       self.callSPLSDA[1],
                                       LINESCATTER_COLOURS[1],
-                                      lineLabel=f"WMA $BA$",
+                                      applyWMA=False, # no WMA for BA values
+                                      lineLabel=f"$BA$",
                                       scatterLabel=f"Selected SNP",
                                       scatterShape="D")
                 self.rowLabels.append(f"SNP $BA$")
@@ -605,7 +658,8 @@ class HorizontalPlot(Plot):
                 self.plot_linescatter(self.depthSPLSDA[0],
                                       self.depthSPLSDA[1],
                                       LINESCATTER_COLOURS[1],
-                                      lineLabel=f"WMA $BA$",
+                                      applyWMA=False, # no WMA for BA values
+                                      lineLabel=f"$BA$",
                                       scatterLabel=f"Selected CNV",
                                       scatterShape="D")
                 self.rowLabels.append(f"CNV $BA$")
@@ -623,7 +677,7 @@ class HorizontalPlot(Plot):
         # Save the figure
         self.fig.savefig(outputFileName, bbox_inches="tight")
     
-    def plot_linescatter(self, scatterNCLS, lineNCLS, colours,
+    def plot_linescatter(self, scatterNCLS, lineNCLS, colours, applyWMA=True,
                          lineLabel="WMA", scatterLabel="Values", scatterShape="o",
                          linewidth=1, dotsize=3):
         '''
@@ -640,6 +694,8 @@ class HorizontalPlot(Plot):
                         a line
             colours -- a list of two colours to use for the line (first) and scatter
                        points (second)
+            applyWMA -- (OPTIONAL) a boolean indicating whether to apply WMA
+                        smoothing to the line; default is True
             lineLabel -- (OPTIONAL) a string indicating the label for the line;
                           default is "WMA"
             scatterLabel -- (OPTIONAL) a string indicating the label for the scatter
@@ -685,7 +741,8 @@ class HorizontalPlot(Plot):
             
             # Plot line (if applicable)
             if lineNCLS != None and contigID in lineNCLS.contigs:
-                x, smoothedY = self.line(lineNCLS, contigID, start, end)
+                x, smoothedY = self.line(lineNCLS, contigID, start, end,
+                                         applyWMA=applyWMA, buffer=SMOOTHING_BUFFER)
                 if smoothedY.size != 0:
                     self.axs[self.rowNum, colNum].plot(x, smoothedY, color=colours[0],
                                                        linewidth=linewidth,
@@ -1238,7 +1295,8 @@ class CircosPlot(Plot):
                 self.plot_linescatter(self.callSPLSDA[0],
                                       self.callSPLSDA[1],
                                       LINESCATTER_COLOURS[1],
-                                      lineLabel=f"WMA $BA$",
+                                      applyWMA=False, # no WMA for BA values
+                                      lineLabel=f"$BA$",
                                       scatterLabel=f"Selected SNP/CNV",
                                       scatterShape="D")
                 self.rowLabels.append(f"SNP $BA$")
@@ -1253,7 +1311,8 @@ class CircosPlot(Plot):
                 self.plot_linescatter(self.depthSPLSDA[0],
                                       self.depthSPLSDA[1],
                                       LINESCATTER_COLOURS[1],
-                                      lineLabel=f"WMA $BA$",
+                                      applyWMA=False, # no WMA for BA values
+                                      lineLabel=f"$BA$",
                                       scatterLabel=f"Selected SNP/CNV",
                                       scatterShape="D")
                 self.rowLabels.append(f"CNV $BA$")
@@ -1376,7 +1435,7 @@ class CircosPlot(Plot):
         ylabels = [ str(x) for x in yticks ]
         return yticks, ylabels
     
-    def plot_linescatter(self, scatterNCLS, lineNCLS, colours,
+    def plot_linescatter(self, scatterNCLS, lineNCLS, colours, applyWMA=True,
                          lineLabel="WMA", scatterLabel="Values", scatterShape="o",
                          linewidth=1, dotsize=3):
         '''
@@ -1414,7 +1473,8 @@ class CircosPlot(Plot):
                 if y.size != 0:
                     maxY = max(maxY, max(y))
             if lineNCLS != None and contigID in lineNCLS.contigs:
-                x, smoothedY = self.line(lineNCLS, contigID, start, end)
+                x, smoothedY = self.line(lineNCLS, contigID, start, end,
+                                         applyWMA=applyWMA, buffer=SMOOTHING_BUFFER)
                 if smoothedY.size != 0:
                     maxY = max(maxY, max(smoothedY))
         
@@ -1437,8 +1497,8 @@ class CircosPlot(Plot):
             
             # Plot line (if applicable)
             if lineNCLS != None and contigID in lineNCLS.contigs:
-                x, smoothedY = self.line(lineNCLS, contigID, start, end)
-                smoothedY = smoothedY.to_numpy()
+                x, smoothedY = self.line(lineNCLS, contigID, start, end,
+                                         applyWMA=applyWMA, buffer=SMOOTHING_BUFFER)
                 if smoothedY.size != 0:
                     self.axs[self.rowNum, colNum].line(np.clip(x, start, end), smoothedY, vmax=maxY,
                                                        color=colours[0],
