@@ -1168,7 +1168,7 @@ class CircosPlot(Plot):
     }
     NUM_MAJOR_TICKS = 5 # number of major ticks to aim for on the scale bar
     NUM_Y_TICKS = 3 # number of y ticks to aim for on each track
-    
+    STANDARD_DIMENSION = 8
     def __init__(self, regions,
                  callED=None, depthED=None,
                  callSPLSDA=None, depthSPLSDA=None,
@@ -1182,6 +1182,63 @@ class CircosPlot(Plot):
         # Figure-related parameters (not to be set by user)
         self.axs = None
         self.rowNum = None
+    
+    @property
+    def width(self):
+        if self._width is None:
+            return CircosPlot.STANDARD_DIMENSION
+        return self._width
+    
+    @width.setter
+    def width(self, value):
+        if value == None:
+            self._width = None
+            return
+        else:
+            if not isinstance(value, int):
+                raise TypeError("width must be an integer")
+            if value < 1:
+                raise ValueError(f"width must be >= 1")
+            
+            self._width = value
+    
+    @property
+    def height(self):
+        if self._height is None:
+            return CircosPlot.STANDARD_DIMENSION
+        return self._height
+    
+    @height.setter
+    def height(self, value):
+        if value == None:
+            self._height = None
+            return
+        else:
+            if not isinstance(value, int):
+                raise TypeError("height must be an integer")
+            if value < 1:
+                raise ValueError(f"height must be >= 1")
+
+            self._height = value
+    
+    @property
+    def height(self):
+        if self._height is None:
+            return Plot.STANDARD_DIMENSION * self.nrow
+        return self._height
+    
+    @height.setter
+    def height(self, value):
+        if value == None:
+            self._height = None
+            return
+        else:
+            if not isinstance(value, int):
+                raise TypeError("height must be an integer")
+            if value < 1:
+                raise ValueError(f"height must be >= 1")
+
+            self._height = value
     
     @property
     def annotationGFF3(self):
@@ -1325,7 +1382,7 @@ class CircosPlot(Plot):
         
         # Create the figure object
         "Necessary prior to legend addition"
-        fig = self.circos.plotfig()
+        fig = self.circos.plotfig(figsize=(self.width, self.height))
         
         # Set line/scatter legend
         numLegends = 0

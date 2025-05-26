@@ -154,13 +154,15 @@ def main():
                          type=int,
                          required=False,
                          help="""Optionally, specify the total output plot width
-                         (default: calculated internally with 5 per region)""",
+                         (default: calculated internally with 5 per region for horizontal
+                         or a flat value of 8 for circos)""",
                          default=None)
     pparser.add_argument("--height", dest="height",
                          type=int,
                          required=False,
                          help="""Optionally, specify the output plot height
-                         (default: calculated internally with 5 per plot type)""",
+                         (default: calculated internally with 5 per plot type for horizontal
+                         or a flat value of 8 for circos)""",
                          default=None)
     
     # Report-subparser arguments

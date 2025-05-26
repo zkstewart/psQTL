@@ -299,6 +299,12 @@ def validate_p(args):
         if args.height < 1:
             raise ValueError(f"--height value '{args.height}' must be >= 1!")
     
+    # Alert user to Circos dimensions logic
+    if args.plotStyle == "circos":
+        if (args.width != None and args.height != None) and args.width != args.height:
+            print(f"# Note: Circos plotting enforces square dimensions, so width and height " +
+                  f"will be set to the smallest value provided i.e., '{min(args.width, args.height)}'.")
+    
     # Validate plot types
     if len(set(args.plotTypes)) != len(args.plotTypes):
         raise ValueError(f"-p must not contain duplicate plot types!")
