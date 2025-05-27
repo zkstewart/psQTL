@@ -296,8 +296,8 @@ def pmain(args, locations, dataDict):
                 if "call" in dataDict and "integrated" in dataDict["call"] else None,
             coverageNCLSDict=dataDict["depth"]["ncls"] if "depth" in dataDict and "ncls" in dataDict["depth"] else None,
             annotationGFF3=args.gff3Obj if "genes" in args.plotTypes else None,
-            power=args.power, wmaSize=args.wmaSize, coverageSamples=args.coverageSamples,
-            width=args.width, height=args.height)
+            power=args.power, wmaSize=args.wmaSize, width=args.width, height=args.height,
+            coverageSamples=args.coverageSamples if "coverage" in args.plotTypes else None)
         plotter.plot(args.plotTypes, args.outputFileName)
     elif args.plotStyle == "circos":
         plotter = CircosPlot(args.regions,
@@ -311,8 +311,8 @@ def pmain(args, locations, dataDict):
                 if "call" in dataDict and "integrated" in dataDict["call"] else None,
             coverageNCLSDict=dataDict["depth"]["ncls"] if "depth" in dataDict and "ncls" in dataDict["depth"] else None,
             annotationGFF3=args.gff3Obj if "genes" in args.plotTypes else None,
-            power=args.power, wmaSize=args.wmaSize, coverageSamples=args.coverageSamples,
-            width=args.width, height=args.height)
+            power=args.power, wmaSize=args.wmaSize, width=args.width, height=args.height,
+            coverageSamples=args.coverageSamples if "coverage" in args.plotTypes else None)
         plotter.axisSpace = args.axisSpace
         plotter.plot(args.plotTypes, args.outputFileName)
     print("Plotting complete!")
