@@ -143,7 +143,7 @@ def main():
                          values to consider during weighted moving average
                          calculation (default: 5)""",
                          default=5)
-    pparser.add_argument("--sampleCoverage", dest="sampleCoverage",
+    pparser.add_argument("--coverageSamples", dest="coverageSamples",
                          required=False,
                          nargs="+",
                          help="""COVERAGE PLOT: Optionally, specify one or more samples
@@ -296,7 +296,8 @@ def pmain(args, locations, dataDict):
                 if "call" in dataDict and "integrated" in dataDict["call"] else None,
             coverageNCLSDict=dataDict["depth"]["ncls"] if "depth" in dataDict and "ncls" in dataDict["depth"] else None,
             annotationGFF3=args.gff3Obj if "genes" in args.plotTypes else None,
-            power=args.power, wmaSize=args.wmaSize, width=args.width, height=args.height)
+            power=args.power, wmaSize=args.wmaSize, coverageSamples=args.coverageSamples,
+            width=args.width, height=args.height)
         plotter.plot(args.plotTypes, args.outputFileName)
     elif args.plotStyle == "circos":
         plotter = CircosPlot(args.regions,
@@ -310,7 +311,8 @@ def pmain(args, locations, dataDict):
                 if "call" in dataDict and "integrated" in dataDict["call"] else None,
             coverageNCLSDict=dataDict["depth"]["ncls"] if "depth" in dataDict and "ncls" in dataDict["depth"] else None,
             annotationGFF3=args.gff3Obj if "genes" in args.plotTypes else None,
-            power=args.power, wmaSize=args.wmaSize, width=args.width, height=args.height)
+            power=args.power, wmaSize=args.wmaSize, coverageSamples=args.coverageSamples,
+            width=args.width, height=args.height)
         plotter.axisSpace = args.axisSpace
         plotter.plot(args.plotTypes, args.outputFileName)
     print("Plotting complete!")

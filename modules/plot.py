@@ -3,6 +3,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
+from Bio.SeqFeature import SimpleLocation, ExactPosition
 from pycirclize import Circos
 from matplotlib.patches import Patch
 from matplotlib.lines import Line2D
@@ -1273,12 +1274,18 @@ class CircosPlot(Plot):
     OUTER_HEIGHT = 0.3
     CENTRE_SPACE = 20
     AXIS_SPACE = 10
+    
+    TOP=1.05
+    LEFT=-0.1
+    BOTTOM=-0.05
+    RIGHT=1.1
     LEGEND_POSITIONS = [
-        (-0.05, 1.02), # top left
-        (0.89, 1.02), # top right
-        (-0.05, 0.05) # bottom left
+        (LEFT, TOP, "upper left"), # top left
+        (RIGHT, TOP, "upper right"), # top right
+        (LEFT, BOTTOM, "lower left") # bottom left
     ]
-    ROW_LABEL_POSITION = (0.87, 0) # bottom right; reserved for row labels
+    ROW_LABEL_POSITION = (RIGHT, BOTTOM, "lower right") # bottom right; reserved for row labels
+    
     INTERVALS = {
         1: [1, "bp"], # 1 bp
         10: [1, "bp"], # 10 bp
@@ -1566,7 +1573,8 @@ class CircosPlot(Plot):
                           ("BA" if hasSPLSDA else "")
             linescatterLegend = self.circos.ax.legend(
                 handles=self.linescatterHandles,
-                bbox_to_anchor=CircosPlot.LEGEND_POSITIONS[numLegends],
+                bbox_to_anchor=CircosPlot.LEGEND_POSITIONS[numLegends][0:2],
+                loc=CircosPlot.LEGEND_POSITIONS[numLegends][2],
                 fontsize=8,
                 title=legendTitle,
                 handlelength=2
@@ -1592,7 +1600,8 @@ class CircosPlot(Plot):
             legendTitle = "Median-norm\nCoverage"
             coverageLegend = self.circos.ax.legend(
                 handles=self.coverageHandles,
-                bbox_to_anchor=CircosPlot.LEGEND_POSITIONS[numLegends],
+                bbox_to_anchor=CircosPlot.LEGEND_POSITIONS[numLegends][0:2],
+                loc=CircosPlot.LEGEND_POSITIONS[numLegends][2],
                 fontsize=8,
                 title=legendTitle,
                 handlelength=2
@@ -1608,7 +1617,8 @@ class CircosPlot(Plot):
         legendTitle = "Rows"
         rowLabelLegend = self.circos.ax.legend(
             handles=self.rowHandles,
-            bbox_to_anchor=CircosPlot.ROW_LABEL_POSITION,
+            bbox_to_anchor=CircosPlot.ROW_LABEL_POSITION[0:2],
+            loc=CircosPlot.ROW_LABEL_POSITION[2],
             fontsize=6,
             title_fontsize=8,
             title=legendTitle,
@@ -1809,6 +1819,16 @@ class CircosPlot(Plot):
                     featureEnd = feature.location.end.real
                     # Check if the feature is within the region
                     if featureEnd > start and featureStart < end:
+                        # Truncate feature to prevent plotting outside the region
+                        if featureStart < start or featureEnd > end:
+                            newStart = max(start, featureStart)
+                            newEnd = min(end, featureEnd)
+                            feature.location = SimpleLocation(
+                                ExactPosition(newStart),
+                                ExactPosition(newEnd),
+                                strand=feature.location.strand
+                            )
+                        # Plot the feature
                         self.axs[self.rowNum, colNum].genomic_features(
                             [feature], plotstyle="arrow",
                             fc=GENE_COLOURS[0])
@@ -1903,7 +1923,6 @@ class CircosPlot(Plot):
             
             # Plot individual samples
             for sampleIndex, sample in enumerate(samples):
-                print(f"Plotting sample '{sample}' for region '{contigID, start, end}'")
                 "x can be reused from the bulk plot"
                 y = coverageData[sample]
                 

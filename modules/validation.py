@@ -327,11 +327,11 @@ def validate_p(args):
     
     # Validate samples for coverage plot
     if "coverage" in args.plotTypes:
-        for sampleID in args.sampleCoverage:
+        for sampleID in args.coverageSamples:
             if not sampleID in args.metadataDict["bulk1"] + args.metadataDict["bulk2"]:
-                raise ValueError(f"Sample '{sampleID}' specified in --sampleCoverage not found in metadata!")
-        if len(args.sampleCoverage) > NUM_SAMPLE_LINES:
-            raise ValueError(f"Cannot plot more than {NUM_SAMPLE_LINES} samples using --sampleCoverage (for clarity reasons)!")
+                raise ValueError(f"Sample '{sampleID}' specified in --coverageSamples not found in metadata!")
+        if len(args.coverageSamples) > NUM_SAMPLE_LINES:
+            raise ValueError(f"Cannot plot more than {NUM_SAMPLE_LINES} samples using --coverageSamples (for clarity reasons)!")
     
     # Validate argument logic
     if "coverage" in args.plotTypes and not "depth" in args.resultTypes:
