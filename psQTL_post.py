@@ -15,7 +15,8 @@ from modules.validation import validate_post_args, validate_regions, validate_de
                                validate_p, validate_r
 from modules.depth import parse_bins_as_dict, normalise_coverage_dict, convert_dict_to_depthncls
 from modules.ed import parse_ed_as_dict, convert_dict_to_windowed_ncls
-from modules.splsda import parse_selected_to_windowed_ncls, parse_ber_to_windowed_ncls
+from modules.splsda import parse_selected_to_windowed_ncls, parse_ber_to_windowed_ncls, \
+                           parse_integrated_to_windowed_ncls
 from modules.plot import HorizontalPlot, CircosPlot
 from modules.reporting import report_genes, report_depth
 from _version import __version__
@@ -232,7 +233,6 @@ def main():
             # Parse the Sparse Partial Least Squares Discriminant Analysis data
             dataDict["call"]["selected"] = parse_selected_to_windowed_ncls(locations.variantSplsdaSelectedFile)
             dataDict["call"]["ber"], dataDict["call"]["ber_windowSize"] = parse_ber_to_windowed_ncls(locations.variantSplsdaBerFile)
-    
     if "depth" in args.resultTypes:
         dataDict["depth"] = {}
         if "ed" in args.measurementTypes:
@@ -260,6 +260,11 @@ def main():
             # Parse the Sparse Partial Least Squares Discriminant Analysis data
             dataDict["depth"]["selected"] = parse_selected_to_windowed_ncls(locations.deletionSplsdaSelectedFile)
             dataDict["depth"]["ber"], dataDict["depth"]["ber_windowSize"] = parse_ber_to_windowed_ncls(locations.deletionSplsdaBerFile)
+    if "call" in args.resultTypes and "depth" in args.resultTypes:
+        if "splsda" in args.measurementTypes:
+            # Parse the integrated Sparse Partial Least Squares Discriminant Analysis data
+            dataDict["call"]["integrated"], dataDict["depth"]["integrated"] = parse_integrated_to_windowed_ncls(
+                locations.integrativeSplsdaSelectedFile)
     
     # Parse depth data if necessary
     if "coverage" in args.plotTypes and "depth" in args.resultTypes:
@@ -287,6 +292,8 @@ def pmain(args, locations, dataDict):
                 if "call" in dataDict and "selected" in dataDict["call"] else None,
             depthSPLSDA=(dataDict["depth"]["selected"], dataDict["depth"]["ber"]) \
                 if "depth" in dataDict and "selected" in dataDict["depth"] else None,
+            integratedSPLSDA=(dataDict["call"]["integrated"], dataDict["depth"]["integrated"]) \
+                if "call" in dataDict and "integrated" in dataDict["call"] else None,
             coverageNCLSDict=dataDict["depth"]["ncls"] if "depth" in dataDict and "ncls" in dataDict["depth"] else None,
             annotationGFF3=args.gff3Obj if "genes" in args.plotTypes else None,
             power=args.power, wmaSize=args.wmaSize, width=args.width, height=args.height)
@@ -299,6 +306,8 @@ def pmain(args, locations, dataDict):
                 if "call" in dataDict and "selected" in dataDict["call"] else None,
             depthSPLSDA=(dataDict["depth"]["selected"], dataDict["depth"]["ber"]) \
                 if "depth" in dataDict and "selected" in dataDict["depth"] else None,
+            integratedSPLSDA=(dataDict["call"]["integrated"], dataDict["depth"]["integrated"]) \
+                if "call" in dataDict and "integrated" in dataDict["call"] else None,
             coverageNCLSDict=dataDict["depth"]["ncls"] if "depth" in dataDict and "ncls" in dataDict["depth"] else None,
             annotationGFF3=args.gff3Obj if "genes" in args.plotTypes else None,
             power=args.power, wmaSize=args.wmaSize, width=args.width, height=args.height)

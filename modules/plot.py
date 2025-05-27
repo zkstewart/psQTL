@@ -12,6 +12,7 @@ from .gff3 import GFF3
 SAMPLE_AESTHETICS = [["#000000", "dotted"], ["#002D7E", "dashed"], ["#ECE45A", "dashdot"]]
 LINESCATTER_COLOURS = [["#2166ac", "#b2182b"], # blue to red, for ED measurements
                        ["#762a83", "#1b7837"]]  # purple to green, for BA measurements
+INTEGRATED_AESTHETICS = ["#ffee99", "*", "Integrated feature"] # light yellow with star marker for integrated sPLSDA
 COVERAGE_COLOURS = ["#004488", "#ddaa33"] # set aside to ensure contrast of colours
 GENE_COLOURS = ["coral", "dodgerblue"]
 NUM_SAMPLE_LINES = len(SAMPLE_AESTHETICS) # for validation
@@ -79,7 +80,7 @@ class Plot:
     STANDARD_DIMENSION = 5
     def __init__(self, regions,
                  callED=None, depthED=None,
-                 callSPLSDA=None, depthSPLSDA=None,
+                 callSPLSDA=None, depthSPLSDA=None, integratedSPLSDA=None,
                  coverageNCLSDict=None, coverageSamples=None,
                  annotationGFF3=None,
                  power=1, wmaSize=5, width=None, height=None):
@@ -97,6 +98,9 @@ class Plot:
                           in windows.
             depthSPLSDA -- a list or tuple of two WindowedNCLS objects indicating 1)
                            selected SNPs and 2) the BA for sPLSDA in windows.
+            integratedSPLSDA -- a WindowedNCLS object with integrated sPLSDA values
+                                indicating the selected SNPs and CNVs when assessing
+                                selected features from 'call' and 'depth simultaneously.
             coverageNCLSDict -- a dictionary with structure like:
                                 {
                                     "bulk1": {
@@ -127,6 +131,7 @@ class Plot:
         self.depthED = depthED
         self.callSPLSDA = callSPLSDA
         self.depthSPLSDA = depthSPLSDA
+        self.integratedSPLSDA = integratedSPLSDA
         self.coverageNCLSDict = coverageNCLSDict
         self.annotationGFF3 = annotationGFF3
         
@@ -206,6 +211,24 @@ class Plot:
             if not hasattr(val, "isWindowedNCLS") or not val.isWindowedNCLS:
                 raise TypeError(f"depthSPLSDA[{i}] must be a WindowedNCLS object")
         self._depthSPLSDA = value
+    
+    @property
+    def integratedSPLSDA(self):
+        return self._integratedSPLSDA
+    
+    @integratedSPLSDA.setter
+    def integratedSPLSDA(self, value):
+        if value is None:
+            self._integratedSPLSDA = None
+            return
+        if not isinstance(value, list) and not isinstance(value, tuple):
+            raise TypeError("integratedSPLSDA must be a list or tuple of WindowedNCLS objects")
+        if not len(value) == 2:
+            raise ValueError("integratedSPLSDA must be a list or tuple of length 2")
+        for i, val in enumerate(value):
+            if not hasattr(val, "isWindowedNCLS") or not val.isWindowedNCLS:
+                raise TypeError(f"integratedSPLSDA[{i}] must be a WindowedNCLS object")
+        self._integratedSPLSDA = value
     
     @property
     def coverageNCLSDict(self):
@@ -575,11 +598,11 @@ class HorizontalPlot(Plot):
     
     def __init__(self, regions,
                  callED=None, depthED=None,
-                 callSPLSDA=None, depthSPLSDA=None,
+                 callSPLSDA=None, depthSPLSDA=None, integratedSPLSDA=None,
                  coverageNCLSDict=None, coverageSamples=None,
                  annotationGFF3=None,
                  power=1, wmaSize=5, width=None, height=None):
-        super().__init__(regions, callED, depthED, callSPLSDA, depthSPLSDA,
+        super().__init__(regions, callED, depthED, callSPLSDA, depthSPLSDA, integratedSPLSDA,
                          coverageNCLSDict, coverageSamples, annotationGFF3,
                          power, wmaSize, width, height)
     @property
@@ -646,7 +669,8 @@ class HorizontalPlot(Plot):
                                       lineLabel=f"$BA$",
                                       scatterLabel=f"Selected SNP",
                                       scatterShape="D",
-                                      lineZorder=0, scatterZorder=1) # make selected SNPs more visible
+                                      lineZorder=0, scatterZorder=1, # make selected SNPs more visible
+                                      integratedNCLS=self.integratedSPLSDA[0] if self.integratedSPLSDA != None else None)
                 self.rowLabels.append(f"SNP $BA$")
             if self.depthED != None:
                 self.plot_linescatter(self.depthED if "scatter" in plotTypes else None,
@@ -663,7 +687,8 @@ class HorizontalPlot(Plot):
                                       lineLabel=f"$BA$",
                                       scatterLabel=f"Selected CNV",
                                       scatterShape="D",
-                                      lineZorder=0, scatterZorder=1)
+                                      lineZorder=0, scatterZorder=1,
+                                      integratedNCLS=self.integratedSPLSDA[1] if self.integratedSPLSDA != None else None)
                 self.rowLabels.append(f"CNV $BA$")
         if self.coverageNCLSDict != None:
             self.plot_coverage(self.coverageNCLSDict, self.coverageSamples)
@@ -681,7 +706,8 @@ class HorizontalPlot(Plot):
     
     def plot_linescatter(self, scatterNCLS, lineNCLS, colours, applyWMA=True,
                          lineLabel="WMA", scatterLabel="Values", scatterShape="o",
-                         lineZorder=1, scatterZorder=0, linewidth=1, dotsize=3):
+                         lineZorder=1, scatterZorder=0, linewidth=1, dotsize=3,
+                         integratedNCLS=None):
         '''
         Plots the data for a line or scatter plot.
         
@@ -712,6 +738,11 @@ class HorizontalPlot(Plot):
                          default is 1
             dotsize -- (OPTIONAL) an integer indicating the size of the scatter
                         points; default is 3
+            integratedNCLS -- (OPTIONAL) a WindowedNCLS object with integrated sPLSDA
+                              values indicating the selected SNPs and CNVs when assessing
+                              selected features from 'call' and 'depth' simultaneously;
+                              used for scatter plots OR None if not plotting integrated
+                              values
         '''
         # Validate that one of either scatterNCLS or lineNCLS is provided
         if scatterNCLS is None and lineNCLS is None:
@@ -755,6 +786,15 @@ class HorizontalPlot(Plot):
                                                        zorder=lineZorder,
                                                        label=lineLabel)
                     maxY = max(maxY, max(smoothedY))
+            
+            # Plot integrated sPLSDA values (if applicable)
+            if integratedNCLS is not None and contigID in integratedNCLS.contigs:
+                x, y = self.scatter(integratedNCLS, contigID, start, end)
+                if y.size != 0:
+                    self.axs[self.rowNum, colNum].scatter(x, y, color=INTEGRATED_AESTHETICS[0], alpha=1,
+                                                          s=dotsize, marker=INTEGRATED_AESTHETICS[1],
+                                                          zorder=2, # integrated points are on top
+                                                          label=INTEGRATED_AESTHETICS[2])
             
             # Set up scale bar if this is the last row
             if plotScaleBar == True:
@@ -1180,7 +1220,7 @@ class CircosPlot(Plot):
     
     def __init__(self, regions,
                  callED=None, depthED=None,
-                 callSPLSDA=None, depthSPLSDA=None,
+                 callSPLSDA=None, depthSPLSDA=None, integratedSPLSDA=None,
                  coverageNCLSDict=None, coverageSamples=None,
                  annotationGFF3=None,
                  power=1, wmaSize=5, width=None, height=None):
@@ -1384,7 +1424,8 @@ class CircosPlot(Plot):
                                       lineLabel=f"$BA$",
                                       scatterLabel=f"Selected SNP/CNV",
                                       scatterShape="D",
-                                      lineZorder=0, scatterZorder=1) # make selected SNPs more visible
+                                      lineZorder=0, scatterZorder=1, # make selected SNPs more visible
+                                      integratedNCLS=self.integratedSPLSDA[0] if self.integratedSPLSDA != None else None)
                 self.rowLabels.append(f"SNP $BA$")
             if self.depthED != None:
                 self.plot_linescatter(self.depthED if "scatter" in plotTypes else None,
@@ -1401,7 +1442,8 @@ class CircosPlot(Plot):
                                       lineLabel=f"$BA$",
                                       scatterLabel=f"Selected SNP/CNV",
                                       scatterShape="D",
-                                      lineZorder=0, scatterZorder=1)
+                                      lineZorder=0, scatterZorder=1,
+                                      integratedNCLS=self.integratedSPLSDA[1] if self.integratedSPLSDA != None else None)
                 self.rowLabels.append(f"CNV $BA$")
         if self.coverageNCLSDict != None:
             self.plot_coverage(self.coverageNCLSDict, self.coverageSamples)
@@ -1522,7 +1564,8 @@ class CircosPlot(Plot):
     
     def plot_linescatter(self, scatterNCLS, lineNCLS, colours, applyWMA=True,
                          lineLabel="WMA", scatterLabel="Values", scatterShape="o",
-                         lineZorder=1, scatterZorder=0, linewidth=1, dotsize=3):
+                         lineZorder=1, scatterZorder=0, linewidth=1, dotsize=3,
+                         integratedNCLS=None):
         '''
         Plots the data for a line or scatter plot.
         
@@ -1553,6 +1596,11 @@ class CircosPlot(Plot):
                          default is 1
             dotsize -- (OPTIONAL) an integer indicating the size of the scatter
                         points; default is 3
+            integratedNCLS -- (OPTIONAL) a WindowedNCLS object with integrated sPLSDA
+                              values indicating the selected SNPs and CNVs when assessing
+                              selected features from 'call' and 'depth' simultaneously;
+                              used for scatter plots OR None if not plotting integrated
+                              values
         '''
         if self.axs is None:
             self.start_plotting()
@@ -1599,6 +1647,16 @@ class CircosPlot(Plot):
                                                        zorder=lineZorder,
                                                        label=lineLabel)
                     self.linescatterHandles.append([colours[0], lineLabel, "line"])
+            
+            # Plot integrated sPLSDA values (if applicable)
+            if integratedNCLS is not None and contigID in integratedNCLS.contigs:
+                x, y = self.scatter(integratedNCLS, contigID, start, end)
+                if y.size != 0:
+                    self.axs[self.rowNum, colNum].scatter(x, y, color=INTEGRATED_AESTHETICS[0], alpha=1,
+                                                          s=dotsize, marker=INTEGRATED_AESTHETICS[1],
+                                                          zorder=2, # integrated points are on top
+                                                          label=INTEGRATED_AESTHETICS[2])
+                    self.linescatterHandles.append([INTEGRATED_AESTHETICS[0], INTEGRATED_AESTHETICS[2], INTEGRATED_AESTHETICS[1]])
     
     def plot_histogram(self, windowedNCLS):
         '''

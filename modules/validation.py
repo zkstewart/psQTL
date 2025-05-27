@@ -157,6 +157,10 @@ def validate_post_args(args):
                 raise FileNotFoundError(f"sPLS-DA file for 'depth' Balanced Error Rate '{locations.deletionSplsdaBerFile}' does not exist!")
             if not os.path.isfile(locations.deletionSplsdaBerFile + ".ok"):
                 raise FileNotFoundError(f"sPLS-DA file for 'depth' Balanced Error Rate '{locations.deletionSplsdaBerFile}' does not have a '.ok' flag!")
+    if "call" in args.resultTypes and "depth" in args.resultTypes:
+        if "splsda" in args.measurementTypes:
+            if not os.path.isfile(locations.integrativeSplsdaSelectedFile):
+                raise FileNotFoundError(f"Integrated sPLS-DA file '{locations.integrativeSplsdaSelectedFile}' does not exist!")
     
     # Validate genome FASTA file
     if not os.path.isfile(args.genomeFasta):

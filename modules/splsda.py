@@ -238,6 +238,68 @@ def parse_selected_to_windowed_ncls(selectedFileName):
     
     return windowedNCLS
 
+def parse_integrated_to_windowed_ncls(selectedFileName):
+    '''
+    Parameters:
+        selectedFileName -- a file name indicating the location of the selected variants file
+    Returns:
+        nclsList -- a list of two WindowedNCLS objects:
+            callWindowedNCLS -- a WindowedNCLS object containing statistical values indexed by chromosome
+                                and position specifically for call variants that were selected
+            depthWindowedNCLS -- a WindowedNCLS object containing statistical values indexed by chromosome
+                                and position specifically for depth variants that were selected
+    '''
+    EXPECTED_HEADER = ["chrom", "pos", "stability", "abs_loading", "direction"]
+    
+    # Parse the selected file
+    featureDict = {}
+    with open(selectedFileName, "r") as fileIn:
+        # Read and validate the header
+        header = fileIn.readline().strip().split("\t")
+        if header != EXPECTED_HEADER:
+            raise ValueError(f"Invalid header in file '{selectedFileName}', should be: {EXPECTED_HEADER}")
+        
+        # Store each line in the windowedNCLS object
+        for line in fileIn:
+            # Parse relevant details
+            chrom, pos, featuretype, stability, abs_loading, direction = line.strip().split("\t")
+            try:
+                pos = int(pos)
+            except:
+                raise ValueError(f"Position '{pos}' is not an integer in file '{selectedFileName}'")
+            try:
+                stability = float(stability)
+            except:
+                raise ValueError(f"Stability '{stability}' is not a float in file '{selectedFileName}'")
+            try:
+                abs_loading = float(abs_loading)
+            except:
+                raise ValueError(f"abs_loading '{abs_loading}' is not a float in file '{selectedFileName}'")
+            
+            # Compute the stability*abs_loading value
+            statProduct = stability * abs_loading
+            
+            # Store the values in the dictionary
+            featureDict.setdefault(featuretype, {})
+            
+            if chrom not in featureDict[featuretype]:
+                featureDict[featuretype][chrom] = [[], []]
+            featureDict[featuretype][chrom][0].append(pos)
+            featureDict[featuretype][chrom][1].append(statProduct)
+    
+    # Convert the dictionary to a WindowedNCLS object
+    nclsList = []
+    for featuretype in ["call", "depth"]: # ensure ordering; we always have at least one of each type
+        statDict = featureDict[featuretype]
+        windowedNCLS = WindowedNCLS(windowSize=0)
+        for chrom, value in statDict.items():
+            positions = np.array(value[0])
+            statsValues = np.array(value[1])
+            windowedNCLS.add(chrom, positions, statsValues)
+        nclsList.append(windowedNCLS)
+    
+    return nclsList
+
 def parse_ber_to_windowed_ncls(berFileName, balancedAccuracy=True):
     '''
     Parameters:

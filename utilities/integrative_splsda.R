@@ -121,8 +121,8 @@ if (callEmphasis == min(callEmphasis, balance, depthEmphasis))
   callIndex <- length(list.keepX$call)
   depthIndex <- 1
   previousBest <- callEmphasis
-  while ((depthIndex < length(list.keepX$depth) & depthIndex > 1) &
-         (callIndex < length(list.keepX$call) & callIndex > 1))
+  while ((depthIndex < length(list.keepX$depth) & depthIndex >= 1) &
+         (callIndex <= length(list.keepX$call) & callIndex > 1))
   {
     callValue <- list.keepX$call[callIndex]
     depthValue <- list.keepX$depth[depthIndex]
@@ -187,8 +187,8 @@ if (callEmphasis == min(callEmphasis, balance, depthEmphasis))
   depthIndex = ceiling(length(list.keepX$depth) / 2)
   previousBest <- balance
   
-  while ((depthIndex < length(list.keepX$depth) & depthIndex > 1) &
-         (callIndex < length(list.keepX$call) & callIndex > 1))
+  while ((depthIndex <= length(list.keepX$depth) & depthIndex >= 1) &
+         (callIndex <= length(list.keepX$call) & callIndex >= 1))
   {
     callValue <- list.keepX$call[callIndex]
     depthValue <- list.keepX$depth[depthIndex]
@@ -196,20 +196,26 @@ if (callEmphasis == min(callEmphasis, balance, depthEmphasis))
     # Generate down values
     newDepthDownValue <- list.keepX$depth[depthIndex - 1]
     newDepthDown <- errors[paste0(callValue, "_", newDepthDownValue),]
+    if (is.na(newDepthDown)) { newDepthDown <- 0.5 }
     
     newCallDownValue <- list.keepX$call[callIndex - 1]
     newCallDown <- errors[paste0(newCallDownValue, "_", depthValue),]
+    if (is.na(newCallDown)) { newCallDown <- 0.5 }
     
     newBothDown <- errors[paste0(newCallDownValue, "_", newDepthDownValue),]
+    if (is.na(newBothDown)) { newBothDown <- 0.5 }
     
     # Generate up values
     newDepthUpValue <- list.keepX$depth[depthIndex + 1]
     newDepthUp <- errors[paste0(callValue, "_", newDepthUpValue),]
+    if (is.na(newDepthUp)) { newDepthUp <- 0.5 }
     
     newCallUpValue <- list.keepX$call[callIndex + 1]
     newCallUp <- errors[paste0(newCallUpValue, "_", depthValue),]
+    if (is.na(newCallUp)) { newCallUp <- 0.5 }
     
     newBothUp <- errors[paste0(newCallUpValue, "_", newDepthUpValue),]
+    if (is.na(newBothUp)) { newBothUp <- 0.5 }
     
     # Go down if we find something better OR equivalent
     if (newBothDown <= previousBest) {
@@ -277,8 +283,8 @@ if (callEmphasis == min(callEmphasis, balance, depthEmphasis))
   callIndex = 1
   depthIndex = length(list.keepX$depth)
   previousBest <- depthEmphasis
-  while ((depthIndex < length(list.keepX$depth) & depthIndex > 1) &
-         (callIndex < length(list.keepX$call) & callIndex > 1))
+  while ((depthIndex <= length(list.keepX$depth) & depthIndex > 1) &
+         (callIndex < length(list.keepX$call) & callIndex >= 1))
   {
     callValue <- list.keepX$call[callIndex]
     depthValue <- list.keepX$depth[depthIndex]
