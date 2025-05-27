@@ -309,9 +309,15 @@ def validate_p(args):
     
     # Alert user to Circos dimensions logic
     if args.plotStyle == "circos":
-        if (args.width != None and args.height != None) and args.width != args.height:
-            print(f"# Note: Circos plotting enforces square dimensions, so width and height " +
-                  f"will be set to the smallest value provided i.e., '{min(args.width, args.height)}'.")
+        if (args.width != None and args.height != None):
+            if args.width != 8 or args.height != 8:
+                print("# Note: psQTL is not yet equipped to handle non-default width or height while maintaining " +
+                      "clarity, so width and height will be set to 8.")
+                args.width = 8
+                args.height = 8
+            if args.width != args.height:
+                print(f"# Note: Circos plotting enforces square dimensions, so width and height " +
+                    f"will be set to the smallest value provided i.e., '{min(args.width, args.height)}'.")
     
     # Validate plot types
     if len(set(args.plotTypes)) != len(args.plotTypes):

@@ -11,8 +11,9 @@ from .gff3 import GFF3
 
 SAMPLE_AESTHETICS = [["#000000", "dotted"], ["#002D7E", "dashed"], ["#ECE45A", "dashdot"]]
 LINESCATTER_COLOURS = [["#2166ac", "#b2182b"], # blue to red, for ED measurements
-                       ["#762a83", "#1b7837"]]  # purple to green, for BA measurements
-INTEGRATED_AESTHETICS = ["#ffee99", "*", "Integrated feature"] # light yellow with star marker for integrated sPLSDA
+                       ["#762a83", "#e7b745"]]  # purple to yellow, for BA measurements
+INTEGRATED_AESTHETICS = ["#1b7837", "D", "Integrated SNP/CNV"] # green with diamond marker for integrated sPLSDA
+SPLSDA_DOTSIZE = 15 # size of the dots for sPLSDA selected SNPs/CNVs
 COVERAGE_COLOURS = ["#004488", "#ddaa33"] # set aside to ensure contrast of colours
 GENE_COLOURS = ["coral", "dodgerblue"]
 NUM_SAMPLE_LINES = len(SAMPLE_AESTHETICS) # for validation
@@ -371,7 +372,66 @@ class Plot:
 
             self._height = value
     
-    def scatter(self, windowedNCLS, contigID, start, end):
+    @staticmethod
+    def match_scatter_to_line(x, y, positions):
+        '''
+        Return the y value at a given position on the line defined by x and y.
+        Assumes that x is sorted, and that any given position will be within the
+        range of x.
+        
+        Parameters:
+            x -- a numpy array of x values (positions); must be sorted!
+            y -- a numpy array of y values (statistical values); must match x length
+            position -- a list or numpy array of X positions to match to the line
+        Returns:
+            matchedY -- a numpy array y values corresponding to the Y values
+                        we expect to see at the given positions
+        '''
+        if len(x) != len(y):
+            raise ValueError("x and y must have the same length")
+        if len(x) < 2:
+            raise ValueError("x and y must have at least two values to interpolate")
+        
+        matchedY = []
+        for position in positions:
+            # Locate the nearest index in x to the position
+            xindex = np.searchsorted(x, position)
+            xvalue = x[xindex]
+            
+            # If the position is outside the range of x, raise an error
+            if xvalue < position or xindex == len(x):
+                raise ValueError(f"Position {position} is outside the range of x values")
+            
+            # If the position is exactly at an x value, store the corresponding y value
+            if xvalue == position:
+                matchedY.append(y[xindex])
+                continue
+            
+            # If the position is between two x values, interpolate to find the y value
+            xprev, xnext = x[xindex - 1], x[xindex]
+            yprev, ynext = y[xindex - 1], y[xindex]
+            matchedY.append(Plot.interpolate(xprev, xnext, yprev, ynext, position))
+        return matchedY
+    
+    @staticmethod
+    def interpolate(xprev, xnext, yprev, ynext, position):
+        '''
+        Calculate the slope between two points (xprev, yprev) and (xnext, ynext)
+        and return the interpolated y value at a given position.
+        
+        Parameters:
+            xprev -- the x value of the previous point
+            xnext -- the x value of the next point
+            yprev -- the y value of the previous point
+            ynext -- the y value of the next point
+            position -- the x value at which to interpolate the y value
+        Returns:
+            y -- the interpolated y value at the given position
+        '''
+        slope = (ynext - yprev) / (xnext - xprev)
+        return yprev + (slope * (position - xprev))
+    
+    def scatter(self, windowedNCLS, contigID, start, end, clipped=True):
         '''
         Returns data suited for scatter plotting of WindowedNCLS values.
         
@@ -381,6 +441,11 @@ class Plot:
             contigID -- a string indicating the contig ID
             start -- an integer indicating the start position of the region
             end -- an integer indicating the end position of the region
+            clipped -- (OPTIONAL) a boolean indicating whether to clip the
+                       start and end positions to the nearest available
+                       positions within the start->end range. Relevant
+                       when the NCLS has been generated with a window size
+                       greater than 0. Default is True.
         Returns:
             x -- a numpy array of the x values (positions)
             y -- a numpy array of the y values (statistical values)
@@ -388,6 +453,8 @@ class Plot:
         regionValues = windowedNCLS.find_overlap(contigID, start, end)
         x, y = [], []
         for pos, _, ed in regionValues:
+            if clipped and (pos < start or pos > end):
+                continue
             x.append(pos)
             y.append(ed)
         x = np.array(x)
@@ -418,7 +485,7 @@ class Plot:
                          value) values OR the original y values if smoothing
                          was not possible (i.e., not enough data points)
         '''
-        x, y = self.scatter(windowedNCLS, contigID, start-buffer, end+buffer)
+        x, y = self.scatter(windowedNCLS, contigID, start-buffer, end+buffer, clipped=False)
         if applyWMA:
             smoothedY = WMA(y, self.wmaSize)
             if smoothedY is None:
@@ -440,9 +507,9 @@ class Plot:
         if x[xstart] > start: # if we need to extend the line backwards
             xprepend = [start]
             if xstart > 0:
-                slope = (smoothedY[xstart-1] - smoothedY[xstart]) / (x[xstart] - x[xstart-1]) # y/unit change as we go back
-                diff = slope * (x[xstart] - start) # slope * num of units to go back
-                yprepend = [smoothedY[xstart] + diff]
+                xprev, xnext = x[xstart - 1], x[xstart]
+                yprev, ynext = y[xstart - 1], y[xstart]
+                yprepend = [Plot.interpolate(xprev, xnext, yprev, ynext, start)]
             else:
                 yprepend = [smoothedY[xstart]] # just project the first value
         else: # if x[xstart] == start; x[xstart] can never be < start because of how np.searchsorted works
@@ -453,9 +520,9 @@ class Plot:
         if x[xend] < end: # if we need to extend the line forwards
             xappend = [end]
             if xend+1 < len(x):
-                slope = (smoothedY[xend+1] - smoothedY[xend]) / (x[xend+1] - x[xend]) # y/unit change as we go forward
-                diff = slope * (end - x[xend]) # slope * num of units to go forward
-                yappend = [smoothedY[xend] + diff]
+                xprev, xnext = x[xend], x[xend + 1]
+                yprev, ynext = y[xend], y[xend + 1]
+                yappend = [Plot.interpolate(xprev, xnext, yprev, ynext, end)]
             else:
                 yappend = [smoothedY[xend]] # just project the last value
         else: # if x[xend] == end; x[xend] can never be > end because of the while loop above
@@ -605,6 +672,7 @@ class HorizontalPlot(Plot):
         super().__init__(regions, callED, depthED, callSPLSDA, depthSPLSDA, integratedSPLSDA,
                          coverageNCLSDict, coverageSamples, annotationGFF3,
                          power, wmaSize, width, height)
+    
     @property
     def annotationGFF3(self):
         return self._annotationGFF3
@@ -668,8 +736,9 @@ class HorizontalPlot(Plot):
                                       applyWMA=False, # no WMA for BA values
                                       lineLabel=f"$BA$",
                                       scatterLabel=f"Selected SNP",
-                                      scatterShape="D",
+                                      scatterShape="D", scatterFollowsLine=True, # Y values different to ED or BA
                                       lineZorder=0, scatterZorder=1, # make selected SNPs more visible
+                                      dotsize=SPLSDA_DOTSIZE, dotAlpha=1, # make selected SNPs more visible
                                       integratedNCLS=self.integratedSPLSDA[0] if self.integratedSPLSDA != None else None)
                 self.rowLabels.append(f"SNP $BA$")
             if self.depthED != None:
@@ -686,8 +755,9 @@ class HorizontalPlot(Plot):
                                       applyWMA=False, # no WMA for BA values
                                       lineLabel=f"$BA$",
                                       scatterLabel=f"Selected CNV",
-                                      scatterShape="D",
-                                      lineZorder=0, scatterZorder=1,
+                                      scatterShape="D", scatterFollowsLine=True,
+                                      lineZorder=0, scatterZorder=1, # make selected CNVs more visible
+                                      dotsize=SPLSDA_DOTSIZE, dotAlpha=1, # make selected CNVs more visible
                                       integratedNCLS=self.integratedSPLSDA[1] if self.integratedSPLSDA != None else None)
                 self.rowLabels.append(f"CNV $BA$")
         if self.coverageNCLSDict != None:
@@ -706,8 +776,9 @@ class HorizontalPlot(Plot):
     
     def plot_linescatter(self, scatterNCLS, lineNCLS, colours, applyWMA=True,
                          lineLabel="WMA", scatterLabel="Values", scatterShape="o",
-                         lineZorder=1, scatterZorder=0, linewidth=1, dotsize=3,
-                         integratedNCLS=None):
+                         lineZorder=1, scatterZorder=0, linewidth=1,
+                         dotsize=3, dotAlpha=0.5,
+                         integratedNCLS=None, scatterFollowsLine=False):
         '''
         Plots the data for a line or scatter plot.
         
@@ -738,11 +809,15 @@ class HorizontalPlot(Plot):
                          default is 1
             dotsize -- (OPTIONAL) an integer indicating the size of the scatter
                         points; default is 3
+            dotAlpha -- (OPTIONAL) a float indicating the alpha value for the scatter
+                        points; default is 0.5
             integratedNCLS -- (OPTIONAL) a WindowedNCLS object with integrated sPLSDA
                               values indicating the selected SNPs and CNVs when assessing
                               selected features from 'call' and 'depth' simultaneously;
                               used for scatter plots OR None if not plotting integrated
                               values
+            scatterFollowsLine -- (OPTIONAL) a boolean indicating whether the scatter y values
+                                should follow the line y values; default is False.
         '''
         # Validate that one of either scatterNCLS or lineNCLS is provided
         if scatterNCLS is None and lineNCLS is None:
@@ -766,20 +841,10 @@ class HorizontalPlot(Plot):
             if colNum > 0:
                 self.axs[self.rowNum, colNum].set_yticklabels([])
             
-            # Plot scatter (if applicable)
-            if scatterNCLS != None and contigID in scatterNCLS.contigs:
-                x, y = self.scatter(scatterNCLS, contigID, start, end)
-                if y.size != 0:
-                    self.axs[self.rowNum, colNum].scatter(x, y, color=colours[1], alpha=0.5,
-                                                          s=dotsize, marker=scatterShape,
-                                                          zorder=scatterZorder,
-                                                          label=scatterLabel)
-                    maxY = max(maxY, max(y))
-            
             # Plot line (if applicable)
             if lineNCLS != None and contigID in lineNCLS.contigs:
-                x, smoothedY = self.line(lineNCLS, contigID, start, end,
-                                         applyWMA=applyWMA, buffer=SMOOTHING_BUFFER)
+                lineX, smoothedY = self.line(lineNCLS, contigID, start, end,
+                                             applyWMA=applyWMA, buffer=SMOOTHING_BUFFER)
                 if smoothedY.size != 0:
                     self.axs[self.rowNum, colNum].plot(x, smoothedY, color=colours[0],
                                                        linewidth=linewidth,
@@ -787,12 +852,30 @@ class HorizontalPlot(Plot):
                                                        label=lineLabel)
                     maxY = max(maxY, max(smoothedY))
             
+            # Plot scatter (if applicable)
+            if scatterNCLS != None and contigID in scatterNCLS.contigs:
+                x, y = self.scatter(scatterNCLS, contigID, start, end)
+                if y.size != 0:
+                    if scatterFollowsLine:
+                        if lineNCLS == None:
+                            raise ValueError("scatterFollowsLine is True but no lineNCLS provided; cannot interpolate scatter points")
+                        y = Plot.match_scatter_to_line(lineX, smoothedY, x)
+                    self.axs[self.rowNum, colNum].scatter(x, y, color=colours[1], alpha=dotAlpha,
+                                                          s=dotsize, marker=scatterShape,
+                                                          zorder=scatterZorder,
+                                                          label=scatterLabel)
+                    maxY = max(maxY, max(y))
+            
             # Plot integrated sPLSDA values (if applicable)
             if integratedNCLS is not None and contigID in integratedNCLS.contigs:
                 x, y = self.scatter(integratedNCLS, contigID, start, end)
                 if y.size != 0:
-                    self.axs[self.rowNum, colNum].scatter(x, y, color=INTEGRATED_AESTHETICS[0], alpha=1,
-                                                          s=dotsize, marker=INTEGRATED_AESTHETICS[1],
+                    if scatterFollowsLine:
+                        if lineNCLS == None:
+                            raise ValueError("scatterFollowsLine is True but no lineNCLS provided; cannot interpolate scatter points")
+                        y = Plot.match_scatter_to_line(lineX, smoothedY, x)
+                    self.axs[self.rowNum, colNum].scatter(x, y, color=INTEGRATED_AESTHETICS[0], alpha=1, # alpha always 1
+                                                          s=dotsize+1, marker=INTEGRATED_AESTHETICS[1],
                                                           zorder=2, # integrated points are on top
                                                           label=INTEGRATED_AESTHETICS[2])
             
@@ -1224,7 +1307,7 @@ class CircosPlot(Plot):
                  coverageNCLSDict=None, coverageSamples=None,
                  annotationGFF3=None,
                  power=1, wmaSize=5, width=None, height=None):
-        super().__init__(regions, callED, depthED, callSPLSDA, depthSPLSDA,
+        super().__init__(regions, callED, depthED, callSPLSDA, depthSPLSDA, integratedSPLSDA,
                          coverageNCLSDict, coverageSamples, annotationGFF3,
                          power, wmaSize, width, height)
         
@@ -1423,8 +1506,9 @@ class CircosPlot(Plot):
                                       applyWMA=False, # no WMA for BA values
                                       lineLabel=f"$BA$",
                                       scatterLabel=f"Selected SNP/CNV",
-                                      scatterShape="D",
+                                      scatterShape="D", scatterFollowsLine=True, # Y values different to ED or BA
                                       lineZorder=0, scatterZorder=1, # make selected SNPs more visible
+                                      dotsize=SPLSDA_DOTSIZE, dotAlpha=1, # make selected SNPs more visible
                                       integratedNCLS=self.integratedSPLSDA[0] if self.integratedSPLSDA != None else None)
                 self.rowLabels.append(f"SNP $BA$")
             if self.depthED != None:
@@ -1441,8 +1525,9 @@ class CircosPlot(Plot):
                                       applyWMA=False, # no WMA for BA values
                                       lineLabel=f"$BA$",
                                       scatterLabel=f"Selected SNP/CNV",
-                                      scatterShape="D",
-                                      lineZorder=0, scatterZorder=1,
+                                      scatterShape="D", scatterFollowsLine=True,
+                                      lineZorder=0, scatterZorder=1, # make selected CNVs more visible
+                                      dotsize=SPLSDA_DOTSIZE, dotAlpha=1, # make selected CNVs more visible
                                       integratedNCLS=self.integratedSPLSDA[1] if self.integratedSPLSDA != None else None)
                 self.rowLabels.append(f"CNV $BA$")
         if self.coverageNCLSDict != None:
@@ -1564,8 +1649,9 @@ class CircosPlot(Plot):
     
     def plot_linescatter(self, scatterNCLS, lineNCLS, colours, applyWMA=True,
                          lineLabel="WMA", scatterLabel="Values", scatterShape="o",
-                         lineZorder=1, scatterZorder=0, linewidth=1, dotsize=3,
-                         integratedNCLS=None):
+                         lineZorder=1, scatterZorder=0, linewidth=1,
+                         dotsize=3, dotAlpha=0.5,
+                         integratedNCLS=None, scatterFollowsLine=False):
         '''
         Plots the data for a line or scatter plot.
         
@@ -1596,11 +1682,15 @@ class CircosPlot(Plot):
                          default is 1
             dotsize -- (OPTIONAL) an integer indicating the size of the scatter
                         points; default is 3
+            dotAlpha -- (OPTIONAL) a float indicating the alpha value for the scatter
+                        points; default is 0.5
             integratedNCLS -- (OPTIONAL) a WindowedNCLS object with integrated sPLSDA
                               values indicating the selected SNPs and CNVs when assessing
                               selected features from 'call' and 'depth' simultaneously;
                               used for scatter plots OR None if not plotting integrated
                               values
+            scatterFollowsLine -- (OPTIONAL) a boolean indicating whether the scatter y values
+                                should follow the line y values; default is False.
         '''
         if self.axs is None:
             self.start_plotting()
@@ -1611,7 +1701,7 @@ class CircosPlot(Plot):
         for colNum, (contigID, start, end, reverse) in enumerate(self.regions):
             if scatterNCLS != None and contigID in scatterNCLS.contigs:
                 x, y = self.scatter(scatterNCLS, contigID, start, end)
-                if y.size != 0:
+                if y.size != 0 and not scatterFollowsLine:
                     maxY = max(maxY, max(y))
             if lineNCLS != None and contigID in lineNCLS.contigs:
                 x, smoothedY = self.line(lineNCLS, contigID, start, end,
@@ -1625,35 +1715,44 @@ class CircosPlot(Plot):
         
         # Plot each region
         for colNum, (contigID, start, end, reverse) in enumerate(self.regions):
-            # Plot scatter (if applicable)
-            if scatterNCLS != None and contigID in scatterNCLS.contigs:
-                x, y = self.scatter(scatterNCLS, contigID, start, end)
-                if y.size != 0:
-                    self.axs[self.rowNum, colNum].scatter(np.clip(x, start, end), y, vmax=maxY,
-                                                          color=colours[1],
-                                                          s=dotsize, alpha=0.5, marker=scatterShape,
-                                                          zorder=scatterZorder,
-                                                          label=scatterLabel)
-                    self.linescatterHandles.append([colours[1], scatterLabel, scatterShape])
-            
             # Plot line (if applicable)
             if lineNCLS != None and contigID in lineNCLS.contigs:
-                x, smoothedY = self.line(lineNCLS, contigID, start, end,
-                                         applyWMA=applyWMA, buffer=SMOOTHING_BUFFER)
+                lineX, smoothedY = self.line(lineNCLS, contigID, start, end,
+                                             applyWMA=applyWMA, buffer=SMOOTHING_BUFFER)
                 if smoothedY.size != 0:
-                    self.axs[self.rowNum, colNum].line(np.clip(x, start, end), smoothedY, vmax=maxY,
+                    self.axs[self.rowNum, colNum].line(lineX, smoothedY, vmax=maxY,
                                                        color=colours[0],
                                                        linewidth=linewidth,
                                                        zorder=lineZorder,
                                                        label=lineLabel)
                     self.linescatterHandles.append([colours[0], lineLabel, "line"])
             
+            # Plot scatter (if applicable)
+            if scatterNCLS != None and contigID in scatterNCLS.contigs:
+                x, y = self.scatter(scatterNCLS, contigID, start, end)
+                if y.size != 0:
+                    if scatterFollowsLine:
+                        if lineNCLS == None:
+                            raise ValueError("scatterFollowsLine is True but no lineNCLS provided; cannot interpolate scatter points")
+                        y = Plot.match_scatter_to_line(lineX, smoothedY, x)
+                    self.axs[self.rowNum, colNum].scatter(x, y, vmax=maxY,
+                                                          color=colours[1],
+                                                          s=dotsize, alpha=dotAlpha, marker=scatterShape,
+                                                          zorder=scatterZorder,
+                                                          label=scatterLabel)
+                    self.linescatterHandles.append([colours[1], scatterLabel, scatterShape])
+            
             # Plot integrated sPLSDA values (if applicable)
             if integratedNCLS is not None and contigID in integratedNCLS.contigs:
                 x, y = self.scatter(integratedNCLS, contigID, start, end)
                 if y.size != 0:
-                    self.axs[self.rowNum, colNum].scatter(x, y, color=INTEGRATED_AESTHETICS[0], alpha=1,
-                                                          s=dotsize, marker=INTEGRATED_AESTHETICS[1],
+                    if scatterFollowsLine:
+                        if lineNCLS == None:
+                            raise ValueError("scatterFollowsLine is True but no lineNCLS provided; cannot interpolate scatter points")
+                        y = Plot.match_scatter_to_line(lineX, smoothedY, x)
+                    self.axs[self.rowNum, colNum].scatter(x, y, vmax=maxY,
+                                                          color=INTEGRATED_AESTHETICS[0], alpha=1, # always alpha=1
+                                                          s=dotsize+1, marker=INTEGRATED_AESTHETICS[1],
                                                           zorder=2, # integrated points are on top
                                                           label=INTEGRATED_AESTHETICS[2])
                     self.linescatterHandles.append([INTEGRATED_AESTHETICS[0], INTEGRATED_AESTHETICS[2], INTEGRATED_AESTHETICS[1]])
