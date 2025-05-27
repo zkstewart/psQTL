@@ -249,7 +249,7 @@ def parse_integrated_to_windowed_ncls(selectedFileName):
             depthWindowedNCLS -- a WindowedNCLS object containing statistical values indexed by chromosome
                                 and position specifically for depth variants that were selected
     '''
-    EXPECTED_HEADER = ["chrom", "pos", "stability", "abs_loading", "direction"]
+    EXPECTED_HEADER = ["chrom", "pos", "type", "stability", "abs_loading", "direction"]
     
     # Parse the selected file
     featureDict = {}

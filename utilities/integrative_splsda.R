@@ -107,10 +107,10 @@ tune.mbplsda <- tune.block.splsda(splsda.X, Y, test.keepX = list.keepX,
 
 # Pick optimal keepX values
 #select.keepX <- tune.mbplsda$choice.keepX # avoid default as it is not a sophisticated method
-errors = as.data.frame(tune.mbplsda$error.rate)
+errors <- as.data.frame(tune.mbplsda$error.rate)
 
-balanceCall = list.keepX$call[ceiling(length(list.keepX$call) / 2)]
-balanceDepth = list.keepX$depth[ceiling(length(list.keepX$depth) / 2)]
+balanceCall <- list.keepX$call[ceiling(length(list.keepX$call) / 2)]
+balanceDepth <- list.keepX$depth[ceiling(length(list.keepX$depth) / 2)]
 
 callEmphasis <- errors[paste0(max(list.keepX$call), "_1"),]
 balance <- errors[paste0(balanceCall, "_", balanceDepth),]
@@ -153,8 +153,12 @@ if (callEmphasis == min(callEmphasis, balance, depthEmphasis))
     
     # Leapfrog down if we haven't find any incremental changes
     leapFrogged <- FALSE
-    for (i in 1:(callIndex-1)) # callIndex must be >1
+    for (i in (callIndex-1):1) # callIndex must be >1
     {
+      if (i==0)
+      {
+        break
+      }
       newCallDownValue <- list.keepX$call[i]
       newCallDown <- errors[paste0(newCallDownValue, "_", depthValue),]
       if (newCallDown <= previousBest) {
@@ -163,8 +167,12 @@ if (callEmphasis == min(callEmphasis, balance, depthEmphasis))
         break
       }
     }
-    for (i in 1:(depthIndex-1))
+    for (i in (depthIndex-1):1)
     {
+      if (i==0)
+      {
+        break
+      }
       newDepthDownValue <- list.keepX$depth[i]
       newDepthDown <- errors[paste0(callValue, "_", newDepthDownValue),]
       if (newDepthDown <= previousBest) {
@@ -183,8 +191,8 @@ if (callEmphasis == min(callEmphasis, balance, depthEmphasis))
   }
 } else if (balance == min(callEmphasis, balance, depthEmphasis))
 {
-  callIndex = ceiling(length(list.keepX$call) / 2)
-  depthIndex = ceiling(length(list.keepX$depth) / 2)
+  callIndex <- ceiling(length(list.keepX$call) / 2)
+  depthIndex <- ceiling(length(list.keepX$depth) / 2)
   previousBest <- balance
   
   while ((depthIndex <= length(list.keepX$depth) & depthIndex >= 1) &
@@ -251,8 +259,12 @@ if (callEmphasis == min(callEmphasis, balance, depthEmphasis))
     
     # Leapfrog down if we haven't find any incremental changes
     leapFrogged <- FALSE
-    for (i in 1:(callIndex-1)) # callIndex must be >1
+    for (i in (callIndex-1):1) # callIndex must be >1
     {
+      if (i==0)
+      {
+        break
+      }
       newCallDownValue <- list.keepX$call[i]
       newCallDown <- errors[paste0(newCallDownValue, "_", depthValue),]
       if (newCallDown <= previousBest) {
@@ -261,8 +273,12 @@ if (callEmphasis == min(callEmphasis, balance, depthEmphasis))
         break
       }
     }
-    for (i in 1:(depthIndex-1))
+    for (i in (depthIndex-1):1)
     {
+      if (i==0)
+      {
+        break
+      }
       newDepthDownValue <- list.keepX$depth[i]
       newDepthDown <- errors[paste0(callValue, "_", newDepthDownValue),]
       if (newDepthDown <= previousBest) {
@@ -280,8 +296,8 @@ if (callEmphasis == min(callEmphasis, balance, depthEmphasis))
     break
   }
 } else {
-  callIndex = 1
-  depthIndex = length(list.keepX$depth)
+  callIndex <- 1
+  depthIndex <- length(list.keepX$depth)
   previousBest <- depthEmphasis
   while ((depthIndex <= length(list.keepX$depth) & depthIndex > 1) &
          (callIndex < length(list.keepX$call) & callIndex >= 1))
@@ -315,8 +331,12 @@ if (callEmphasis == min(callEmphasis, balance, depthEmphasis))
     
     # Leapfrog down if we haven't find any incremental changes
     leapFrogged <- FALSE
-    for (i in 1:(depthIndex-1))
+    for (i in (depthIndex-1):1)
     {
+      if (i==0)
+      {
+        break
+      }
       newDepthDownValue <- list.keepX$depth[i]
       newDepthDown <- errors[paste0(callValue, "_", newDepthDownValue),]
       if (newDepthDown <= previousBest) {
@@ -325,8 +345,12 @@ if (callEmphasis == min(callEmphasis, balance, depthEmphasis))
         break
       }
     }
-    for (i in 1:(callIndex-1))
+    for (i in (callIndex-1):1)
     {
+      if (i==0)
+      {
+        break
+      }
       newCallDownValue <- list.keepX$call[i]
       newCallDown <- errors[paste0(newCallDownValue, "_", depthValue),]
       if (newCallDown <= previousBest) {
@@ -356,71 +380,45 @@ final.mbsplsda <- block.splsda(splsda.X, Y, keepX = select.keepX,
                                ncomp = 1, design = design,
                                scale = FALSE,
                                max.iter = args$maxiters)
-# perf.final.mbsplsda <- perf(final.mbsplsda,
-#                             folds = 2, validation = "Mfold",
-#                             nrepeat = args$nrepeat,
-#                             BPPARAM = BPPARAM)
-if (ncol(final.mbsplsda$X) <= 5) {
-    perf.final.mbsplsda <- perf(final.mbsplsda,
-                                validation = "loo", ## TBD: what happens with stability?
-                                BPPARAM = BPPARAM)
-} else {
-    perf.final.mbsplsda <- perf(final.mbsplsda,
-                                folds = 2, validation = "Mfold",
-                                nrepeat = args$nrepeat,
-                                BPPARAM = BPPARAM)
-}
+perf.final.mbsplsda <- perf(final.mbsplsda,
+                            validation = "loo",
+                            BPPARAM = BPPARAM)
+
+# Tabulate loadings values
+loadings.call <- selectVar(final.mbsplsda, comp = 1)$call$value
+loadings.depth <- selectVar(final.mbsplsda, comp = 1)$depth$value
 
 # Tabulate stability values
-select.name.call <- selectVar(final.mbsplsda, comp = 1)$call$name
-select.name.depth <- selectVar(final.mbsplsda, comp = 1)$depth$name
-select.name <- c(select.name.call, select.name.depth)
+stability.call <- as.data.frame(perf.final.mbsplsda$features$stable$nrep1$call$comp1)
+rownames(stability.call) <- stability.call$Var1
 
-stability.table.call <- data.frame("features" = select.name.call)
-stability.table.depth <- data.frame("features" = select.name.depth)
-for (i in 1:args$nrepeat)
-{
-  stability.rep <- perf.final.mbsplsda$features$stable[[paste0("nrep", i)]]
-  stability.call <- stability.rep$call$comp1
-  stability.depth <- stability.rep$depth$comp1
-  
-  stability.table.call[[paste0("nrep", i)]] <- stability.call[match(stability.table.call$features, names(stability.call))]
-  stability.table.depth[[paste0("nrep", i)]] <- stability.depth[match(stability.table.depth$features, names(stability.depth))]
-}
-stability.table.call$Freq <- rowMeans(stability.table.call[,seq(2, args$nrepeat+1)], na.rm=TRUE)
-stability.table.call$type <- "call"
-stability.table.depth$Freq <- rowMeans(stability.table.depth[,seq(2, args$nrepeat+1)], na.rm=TRUE)
-stability.table.depth$type <- "depth"
+stability.depth <- as.data.frame(perf.final.mbsplsda$features$stable$nrep1$depth$comp1)
+rownames(stability.depth) <- stability.depth$Var1
 
-stability.table <- rbind(stability.table.call, stability.table.depth)
-rownames(stability.table) <- stability.table$features
-stability.table <- stability.table[,c("Freq", "type"),drop=FALSE]
+# Format call and depth values
+stability.call <- stability.call[match(rownames(loadings.call), rownames(stability.call)),,drop=FALSE]
+stability.call <- na.omit(stability.call)
+loadings.call <- loadings.call[rownames(loadings.call) %in% rownames(stability.call),,drop=FALSE]
+values.call <- cbind(stability.call, loadings.call)
+values.call$type <- "call"
 
-stability.table <- stability.table[order(stability.table$Freq, decreasing = TRUE),,drop=FALSE]
+stability.depth <- stability.depth[match(rownames(loadings.depth), rownames(stability.depth)),,drop=FALSE]
+stability.depth <- na.omit(stability.depth)
+loadings.depth <- loadings.depth[rownames(loadings.depth) %in% rownames(stability.depth),,drop=FALSE]
+values.depth <- cbind(stability.depth, loadings.depth)
+values.depth$type <- "depth"
 
-# Obtain loadings
-mbsplsda.loadings.call <- as.data.frame(final.mbsplsda$loadings$call[,1,drop=FALSE])
-mbsplsda.loadings.call <- mbsplsda.loadings.call[abs(rowSums(mbsplsda.loadings.call)) > 0,,drop=FALSE]
-mbsplsda.loadings.call$type <- "call"
-
-mbsplsda.loadings.depth <- as.data.frame(final.mbsplsda$loadings$depth[,1,drop=FALSE])
-mbsplsda.loadings.depth <- mbsplsda.loadings.depth[abs(rowSums(mbsplsda.loadings.depth)) > 0,,drop=FALSE]
-mbsplsda.loadings.depth$type <- "depth"
-
-mbsplsda.loadings <- rbind(mbsplsda.loadings.call, mbsplsda.loadings.depth)
+# Join loading and stability values
+feature.details.table <- rbind(values.call, values.depth)
 
 # Reformat loading values for ease of interpretation
-mbsplsda.loadings$direction <- ifelse(mbsplsda.loadings$comp1 > 0, "right", "left")
-mbsplsda.loadings$comp1 <- abs(mbsplsda.loadings$comp1)
-
-# Match loadings order to stability values
-mbsplsda.loadings <- mbsplsda.loadings[match(rownames(stability.table), rownames(mbsplsda.loadings)),,drop=FALSE]
-
-# Join stability and loading values
-feature.details.table <- cbind(stability.table, mbsplsda.loadings)
+feature.details.table$direction <- ifelse(feature.details.table$value.var > 0, "right", "left")
+feature.details.table$value.var <- abs(feature.details.table$value.var)
 feature.details.table[c("chrom", "pos")] <- do.call(rbind, strsplit(rownames(feature.details.table), "_(?=[^_]+$)", perl=TRUE))
-feature.details.table <- feature.details.table[,c("chrom", "pos", "type", "Freq", "comp1", "direction")]
+
+feature.details.table <- feature.details.table[,c("chrom", "pos", "type", "Freq", "value.var", "direction")]
 colnames(feature.details.table) <- c("chrom", "pos", "type", "stability", "abs_loading", "direction")
+feature.details.table <- feature.details.table[order(feature.details.table$stability, decreasing = TRUE),,drop=FALSE]
 
 # Write selected variants to file
 write.table(feature.details.table, file=args$o, sep="\t", row.names=FALSE, quote=FALSE)
