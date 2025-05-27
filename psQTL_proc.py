@@ -109,7 +109,7 @@ def main():
                          required=False,
                          help="""Optionally, specify the Minor Allele Frequency to filter
                          variants by prior to sPLS-DA analysis (recommended: 0.05;
-                         equivalent to 5% MAF)""",
+                         equivalent to 5 percent MAF)""",
                          default=0.05)
     sparser.add_argument("--ber", dest="berFilter",
                          type=float,
