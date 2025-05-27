@@ -1629,7 +1629,7 @@ class CircosPlot(Plot):
         self.circos.ax.add_artist(rowLabelLegend)
         
         # Save the figure
-        fig.savefig(outputFileName, dpi=300)
+        fig.savefig(outputFileName, dpi=300, pad_inches=1.5)
     
     @property
     def trackHeight(self):
