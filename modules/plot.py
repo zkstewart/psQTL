@@ -828,8 +828,6 @@ class HorizontalPlot(Plot):
         if colours is None or len(colours) != 2:
             raise ValueError("colours must be a list of two colours")
         
-        if self.fig is None:
-            self.start_plotting()
         self.rowNum += 1 # increment row number for plotting
         plotScaleBar = self.rowNum+1 == self.nrow # set up scale bar if this is the last row
         
@@ -847,7 +845,7 @@ class HorizontalPlot(Plot):
                 lineX, smoothedY = self.line(lineNCLS, contigID, start, end,
                                              applyWMA=applyWMA, buffer=SMOOTHING_BUFFER)
                 if smoothedY.size != 0:
-                    self.axs[self.rowNum, colNum].plot(x, smoothedY, color=colours[0],
+                    self.axs[self.rowNum, colNum].plot(lineX, smoothedY, color=colours[0],
                                                        linewidth=linewidth,
                                                        zorder=lineZorder,
                                                        label=lineLabel)
@@ -913,8 +911,6 @@ class HorizontalPlot(Plot):
             windowedNCLS -- a WindowedNCLS object with statistical values
                             queryable by contigID and start/end positions
         '''
-        if self.fig is None:
-            self.start_plotting()
         self.rowNum += 1 # increment row number for plotting
         plotScaleBar = self.rowNum+1 == self.nrow # set up scale bar if this is the last row
         
@@ -964,8 +960,6 @@ class HorizontalPlot(Plot):
         Parameters:
             gff3Obj -- a GFF3 class object from gff3.py in this repository
         '''
-        if self.fig is None:
-            self.start_plotting()
         self.rowNum += 1 # increment row number for plotting
         plotScaleBar = self.rowNum+1 == self.nrow # set up scale bar if this is the last row
         
@@ -1152,8 +1146,6 @@ class HorizontalPlot(Plot):
                        lines for
             linewidth -- OPTIONAL; an integer value indicating the width of the line plot (default=1)
         '''
-        if self.fig is None:
-            self.start_plotting()
         self.rowNum += 1 # increment row number for plotting
         plotScaleBar = self.rowNum+1 == self.nrow # set up scale bar if this is the last row
         
@@ -1702,8 +1694,14 @@ class CircosPlot(Plot):
             scatterFollowsLine -- (OPTIONAL) a boolean indicating whether the scatter y values
                                 should follow the line y values; default is False.
         '''
-        if self.axs is None:
-            self.start_plotting()
+        # Validate that one of either scatterNCLS or lineNCLS is provided
+        if scatterNCLS is None and lineNCLS is None:
+            raise ValueError("At least one of scatterNCLS or lineNCLS must be provided")
+        
+        # Validate that colours is a list of two colours
+        if colours is None or len(colours) != 2:
+            raise ValueError("colours must be a list of two colours")
+        
         self.rowNum += 1 # increment row number for plotting
         
         # Derive y limits from the maximum Y value across all regions
@@ -1775,8 +1773,6 @@ class CircosPlot(Plot):
             windowedNCLS -- a WindowedNCLS object with statistical values
                             queryable by contigID and start/end positions
         '''
-        if self.axs is None:
-            self.start_plotting()
         self.rowNum += 1 # increment row number for plotting
         
         # Get the maximum Y value across all regions
@@ -1808,8 +1804,6 @@ class CircosPlot(Plot):
             gff3Obj -- a Gff().get_seqid2features(feature_tyoe=None) instance
                        from pyCirclize
         '''
-        if self.axs is None:
-            self.start_plotting()
         self.rowNum += 1 # increment row number for plotting
         
         for colNum, (contigID, start, end, reverse) in enumerate(self.regions):
@@ -1850,8 +1844,6 @@ class CircosPlot(Plot):
                        lines for
             linewidth -- OPTIONAL; an integer value indicating the width of the line plot (default=1)
         '''
-        if self.axs is None:
-            self.start_plotting()
         self.rowNum += 1 # increment row number for plotting
         
         # Get the maximum Y value across all regions

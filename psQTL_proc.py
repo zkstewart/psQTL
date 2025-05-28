@@ -83,12 +83,14 @@ def main():
     sparser.set_defaults(func=smain)
     
     # ED-subparser arguments
-    eparser.add_argument("--ignoreIdentical", dest="ignoreIdentical",
+    eparser.add_argument("--considerIdentical", dest="considerIdentical",
                          required=False,
                          action="store_true",
-                         help="""Optionally, provide this flag if you'd like variants where
-                         both bulks are identical to be ignored; this can occur when both bulks
-                         have the same variant with respect to the reference genome""",
+                         help="""Optionally, provide this flag to prevent filtration of
+                         variants where both bulks' genotypes are identical; this can
+                         occur when both bulks have the same variant with respect to
+                         the reference genome. Not recommended unless you have a
+                         specific reason to do so.""",
                          default=False)
     
     # sPLS-DA-subparser arguments
@@ -161,9 +163,10 @@ def emain(args, metadataDict, locations):
     if "depth" in args.inputType:
         depth_ed(args, metadataDict, locations)
 
-def call_ed(args, metadataDict, locations):    
+def call_ed(args, metadataDict, locations):
     if not os.path.isfile(locations.variantEdFile + ".ok"):
-        generate_ed_file(args.vcfFile, metadataDict, locations.variantEdFile, args.ignoreIdentical)
+        generate_ed_file(args.vcfFile, metadataDict, locations.variantEdFile,
+                         not args.considerIdentical) # negate the flag to ignore identical
         open(locations.variantEdFile + ".ok", "w").close() # touch a .ok file to indicate success
     else:
         raise FileExistsError(f"Euclidean distance file '{locations.variantEdFile}' already has a .ok file; " +

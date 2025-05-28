@@ -123,7 +123,7 @@ def validate_post_args(args):
         args.metadataDict = parse_metadata(args.metadataFile)
     
     # Locate and validate input files
-    if "call" in args.resultTypes:
+    if "call" in args.inputType:
         if "ed" in args.measurementTypes:
             if not os.path.isfile(locations.variantEdFile):
                 raise FileNotFoundError(f"'call' ED file '{locations.variantEdFile}' does not exist!")
@@ -157,7 +157,7 @@ def validate_post_args(args):
                 raise FileNotFoundError(f"sPLS-DA file for 'depth' Balanced Error Rate '{locations.deletionSplsdaBerFile}' does not exist!")
             if not os.path.isfile(locations.deletionSplsdaBerFile + ".ok"):
                 raise FileNotFoundError(f"sPLS-DA file for 'depth' Balanced Error Rate '{locations.deletionSplsdaBerFile}' does not have a '.ok' flag!")
-    if "call" in args.resultTypes and "depth" in args.resultTypes:
+    if "call" in args.inputType and "depth" in args.inputType:
         if "splsda" in args.measurementTypes:
             if not os.path.isfile(locations.integrativeSplsdaSelectedFile):
                 raise FileNotFoundError(f"Integrated sPLS-DA file '{locations.integrativeSplsdaSelectedFile}' does not exist!")
@@ -334,8 +334,8 @@ def validate_p(args):
             raise ValueError(f"Cannot plot more than {NUM_SAMPLE_LINES} samples using --coverageSamples (for clarity reasons)!")
     
     # Validate argument logic
-    if "coverage" in args.plotTypes and not "depth" in args.resultTypes:
-        raise ValueError(f"Cannot specify '-p coverage' without also specifying '-r depth'!")
+    if "coverage" in args.plotTypes and not "depth" in args.inputType:
+        raise ValueError(f"Cannot specify '-p coverage' without also specifying '-i depth'!")
     
     # Validate output file suffix
     if not (args.outputFileName.endswith(".pdf") or args.outputFileName.endswith(".png") or args.outputFileName.endswith(".svg")):

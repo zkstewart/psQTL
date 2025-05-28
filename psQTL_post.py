@@ -53,12 +53,12 @@ def main():
     p.add_argument("-f", dest="genomeFasta",
                    required=True,
                    help="Specify the location of the genome FASTA file")
-    p.add_argument("-r", dest="resultTypes",
+    p.add_argument("-i", dest="inputType",
                    required=True,
                    nargs="+",
                    choices=["call", "depth"],
-                   help="""Specify whether you are analysing the results from variant 'call's
-                   and/or 'depth' predictions of deleted regions""")
+                   help="""Specify one or both of 'call' and 'depth' to indicate which
+                   types of results to process.""")
     p.add_argument("-m", dest="measurementTypes",
                    required=True,
                    nargs="+",
@@ -207,7 +207,7 @@ def main():
     
     # Parse result and measurement type data
     dataDict = {}
-    if "call" in args.resultTypes:
+    if "call" in args.inputType:
         dataDict["call"] = {}
         if "ed" in args.measurementTypes:
             # Parse the Euclidean distance data
@@ -233,7 +233,7 @@ def main():
             # Parse the Sparse Partial Least Squares Discriminant Analysis data
             dataDict["call"]["selected"] = parse_selected_to_windowed_ncls(locations.variantSplsdaSelectedFile)
             dataDict["call"]["ber"], dataDict["call"]["ber_windowSize"] = parse_ber_to_windowed_ncls(locations.variantSplsdaBerFile)
-    if "depth" in args.resultTypes:
+    if "depth" in args.inputType:
         dataDict["depth"] = {}
         if "ed" in args.measurementTypes:
             # Parse the Euclidean distance data
@@ -260,14 +260,14 @@ def main():
             # Parse the Sparse Partial Least Squares Discriminant Analysis data
             dataDict["depth"]["selected"] = parse_selected_to_windowed_ncls(locations.deletionSplsdaSelectedFile)
             dataDict["depth"]["ber"], dataDict["depth"]["ber_windowSize"] = parse_ber_to_windowed_ncls(locations.deletionSplsdaBerFile)
-    if "call" in args.resultTypes and "depth" in args.resultTypes:
+    if "call" in args.inputType and "depth" in args.inputType:
         if "splsda" in args.measurementTypes:
             # Parse the integrated Sparse Partial Least Squares Discriminant Analysis data
             dataDict["call"]["integrated"], dataDict["depth"]["integrated"] = parse_integrated_to_windowed_ncls(
                 locations.integrativeSplsdaSelectedFile)
     
     # Parse depth data if necessary
-    if "coverage" in args.plotTypes and "depth" in args.resultTypes:
+    if "coverage" in args.plotTypes and "depth" in args.inputType:
         depthFileDict = validate_depth_files(locations.depthDir, args.metadataDict, args.windowSize)
         coverageDict = parse_bins_as_dict(depthFileDict, args.windowSize)
         normalise_coverage_dict(coverageDict)
@@ -318,10 +318,11 @@ def pmain(args, locations, dataDict):
     print("Plotting complete!")
 
 def rmain(args, locations, dataDict):
-    if args.resultTypes == "depth":
-        report_depth(edNCLS, args.gff3Obj, args.regions, args.outputFileName, args.radiusSize)
-    else:
-        report_genes(edNCLS, args.gff3Obj, args.regions, args.outputFileName, args.radiusSize)
+    raise NotImplementedError("Reporting functionality requires updates to work again; thanks for your patience!")
+    # if args.inputType == "depth":
+    #     report_depth(edNCLS, args.gff3Obj, args.regions, args.outputFileName, args.radiusSize)
+    # else:
+    #     report_genes(edNCLS, args.gff3Obj, args.regions, args.outputFileName, args.radiusSize)
     
     print("Reporting complete!")
 

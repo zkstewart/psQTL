@@ -170,11 +170,11 @@ def main():
     print("Program completed successfully!")
 
 def pmain(args, deltaNCLS, lengthsDict):
-    args.resultTypes = ["call"]
+    args.inputType = ["call"]
     args.measurementTypes = ["ed"]
     
     # Establish plotting object
-    plotter = HorizontalPlot(args.resultTypes, args.measurementTypes, args.plotTypes, args.regions,
+    plotter = HorizontalPlot(args.inputType, args.measurementTypes, args.plotTypes, args.regions,
                              args.wmaSize, args.binSize, args.binThreshold,
                              args.width, args.height)
     plotter.start_plotting()
@@ -182,7 +182,7 @@ def pmain(args, deltaNCLS, lengthsDict):
     rowLabels = []
     colLabels = []
     
-    # Generate plots grouped by plotTypes > resultTypes > measurementTypes
+    # Generate plots grouped by plotTypes > inputType > measurementTypes
     alreadyPlottedScatter = False
     for pType in args.plotTypes:
         # Plot a line and/or scatter plot

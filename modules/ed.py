@@ -58,7 +58,7 @@ def calculate_snp_ed(b1Gt, b2Gt):
         # Return the values
         return numAllelesB1, numAllelesB2, edist
 
-def parse_vcf_for_ed(vcfFile, metadataDict, ignoreIdentical=False):
+def parse_vcf_for_ed(vcfFile, metadataDict, ignoreIdentical=True):
     '''
     Parameters:
         vcfFile -- a string pointing to the VCF or VCF-like file to parse
@@ -67,8 +67,10 @@ def parse_vcf_for_ed(vcfFile, metadataDict, ignoreIdentical=False):
                             "bulk1": set([ "sample1", "sample2", ... ]),
                             "bulk2": set([ "sample3", "sample4", ... ])
                         }
-        ignoreIdentical -- OPTIONAL; a boolean indicating whether to ignore
-                           identical non-reference alleles shared by all samples
+        ignoreIdentical -- (OPTIONAL) a boolean indicating whether to ignore
+                           identical non-reference alleles shared by all samples;
+                           default is True, which means that identical non-reference
+                           alleles will be ignored
     Yields:
         contig -- the contig name for the variant
         pos -- the position of the variant
