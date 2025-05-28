@@ -1,17 +1,10 @@
 # Table of Contents
 - [Getting started](#getting-started)
-- [Introduction](#introduction)
-  - [Traditional bulked segregant analysis](#traditional-bulked-segregant-analysis)
-  - [Per-sample segregant analysis](#per-sample-segregant-analysis)
-  - [What psQTL does](#what-psqtl-does)
 - [Installation](#installation)
-- [How to use](#how-to-use)
-  - [Formatting a metadata file](#formatting-a-metadata-file)
-  - [Calling variants](#calling-variants)
-  - [Predicting deletions](#predicting-deletions)
-  - [Plotting results](#plotting-results)
-  - [Reporting gene proximity](#reporting-gene-proximity)
-- [A typical analysis pipeline](#a-typical-analysis-pipeline)
+  - [Obtaining psQTL](#obtaining-psQTL)
+  - [Prerequisites](#prerequisites)
+  - [Installation suggestions](#installation-suggestions)
+- [How to use psQTL](#how-to-use-psQTL)
 - [How to cite](#how-to-cite)
 
 # Getting started
