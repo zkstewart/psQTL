@@ -7,55 +7,12 @@
 import os, argparse, sys, gzip
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-from modules.parameters import ParameterCache
+from modules.validation import validate_proc_args, validate_c, validate_d, validate_s
 from modules.parsing import parse_metadata
 from modules.ed import parse_vcf_for_ed
+from modules.splsda import validate_r_exists, validate_r_packages_installation, \
+    recode_vcf, run_windowed_splsda, run_integrative_splsda
 from _version import __version__
-
-def validate_args(args):
-    # Validate working directory
-    args.workingDirectory = os.path.abspath(args.workingDirectory)
-    if not os.path.isdir(args.workingDirectory):
-        raise FileNotFoundError(f"-d working directory '{args.workingDirectory}' is not a directory!")
-    
-    # Validate cache existence & merge into args
-    paramsCache = ParameterCache(args.workingDirectory)
-    paramsCache.merge(args) # raises FileNotFoundError if cache does not exist
-    
-    # Validate metadata file
-    if args.metadataFile == None:
-        raise FileNotFoundError("Working directory has not been initialised with a metadata file!")
-    elif not os.path.isfile(args.metadataFile):
-            raise FileNotFoundError(f"Metadata file '{args.metadataFile}' was identified in " +
-                                    "the parameters cache, but it doesn't exist or is not a file!")
-
-def validate_c(args):
-    '''
-    Params cache should have been merged into args before calling this function.
-    '''
-    # Choose which VCF file to use
-    args.vcfFile = args.filteredVcfFile if args.filteredVcfFile != None else args.vcfFile
-    
-    # Validate VCF file
-    if args.vcfFile == None:
-        raise FileNotFoundError("Working directory has not been initialised with a VCF file!")
-    else:
-        args.vcfFile = os.path.abspath(args.vcfFile)
-        if not os.path.isfile(args.vcfFile):
-            raise FileNotFoundError(f"VCF file '{args.vcfFile}' was identified in " +
-                                    "the parameters cache, but it doesn't exist or is not a file!")
-
-def validate_d(args):
-    '''
-    Params cache should have been merged into args before calling this function.
-    '''
-    if args.deletionFile == None:
-        raise FileNotFoundError("Working directory has not been initialised with a deletion file!")
-    else:
-        args.deletionFile = os.path.abspath(args.deletionFile)
-        if not os.path.isfile(args.deletionFile):
-            raise FileNotFoundError(f"Deletion file '{args.deletionFile}' was identified in " +
-                                    "the parameters cache, but it doesn't exist or is not a file!")
 
 def generate_ed_file(vcfFile, metadataDict, outputFileName, ignoreIdentical):
     '''
@@ -80,7 +37,6 @@ def generate_ed_file(vcfFile, metadataDict, outputFileName, ignoreIdentical):
             # Write content line
             fileOut.write(f"{contig}\t{pos}\t{variant}\t{numAllelesB1}\t" + \
                             f"{numAllelesB2}\t{euclideanDist}\n")
-    open(outputFileName + ".ok", "w").close() # touch a .ok file to indicate success
 
 def main():
     usage = """%(prog)s processes VCF or VCF-like files to calculate Euclidean distance values
@@ -95,6 +51,12 @@ def main():
     p.add_argument("-d", dest="workingDirectory",
                     required=True,
                     help="Specify the location where the analysis is being performed")
+    p.add_argument("-i", dest="inputType",
+                   required=True,
+                   nargs="+",
+                   choices=["call", "depth"],
+                   help="""Specify one or both of 'call' and 'depth' to indicate which
+                   types of variants to process.""")
     p.add_argument("-v", "--version",
                    action="version",
                    version="psQTL_proc.py {version}".format(version=__version__))
@@ -108,70 +70,216 @@ def main():
     subparsers = subParentParser.add_subparsers(dest="mode",
                                                 required=True)
     
-    cparser = subparsers.add_parser("call",
+    eparser = subparsers.add_parser("ed",
                                     parents=[p],
                                     add_help=False,
-                                    help="Analyse variant calls in the VCF file")
-    cparser.set_defaults(func=cmain)
+                                    help="Compute Euclidean distance of call and/or depth variants")
+    eparser.set_defaults(func=emain)
     
-    dparser = subparsers.add_parser("depth",
+    sparser = subparsers.add_parser("splsda",
                                     parents=[p],
                                     add_help=False,
-                                    help="Analyse depth-predicted deletions in the VCF-like file")
-    dparser.set_defaults(func=dmain)
+                                    help="Compute local sPLS-DA of call and/or depth variants")
+    sparser.set_defaults(func=smain)
     
-    # Call-subparser arguments
-    cparser.add_argument("--ignoreIdentical", dest="ignoreIdentical",
+    # ED-subparser arguments
+    eparser.add_argument("--considerIdentical", dest="considerIdentical",
                          required=False,
                          action="store_true",
-                         help="""Optionally, provide this flag if you'd like variants where
-                         both bulks are identical to be ignored; this can occur when both bulks
-                         have the same variant with respect to the reference genome""",
+                         help="""Optionally, provide this flag to prevent filtration of
+                         variants where both bulks' genotypes are identical; this can
+                         occur when both bulks have the same variant with respect to
+                         the reference genome. Not recommended unless you have a
+                         specific reason to do so.""",
                          default=False)
     
-    # Depth-subparser arguments
-    # N/A
+    # sPLS-DA-subparser arguments
+    sparser.add_argument("--threads", dest="threads",
+                         type=int,
+                         required=False,
+                         help="""Optionally, specify the number of threads to use when running
+                         sPLS-DA analyses (default: 1)""",
+                         default=1)
+    sparser.add_argument("--windowSize", dest="splsdaWindowSize",
+                         type=int,
+                         required=False,
+                         help="""Optionally, specify the window size that sPLS-DA will
+                         be run within (recommended: 100000)""",
+                         default=100000)
+    sparser.add_argument("--maf", dest="mafFilter",
+                         type=float,
+                         required=False,
+                         help="""Optionally, specify the Minor Allele Frequency to filter
+                         variants by prior to sPLS-DA analysis (recommended: 0.05;
+                         equivalent to 5 percent MAF)""",
+                         default=0.05)
+    sparser.add_argument("--ber", dest="berFilter",
+                         type=float,
+                         required=False,
+                         help="""Optionally, specify the Balanced Error Rate to select
+                         variants during sPLS-DA analysis (recommended: 0.4)""",
+                         default=0.4)
+    sparser.add_argument("--maxiters", dest="maxIterations",
+                         type=int,
+                         required=False,
+                         help="""Optionally, specify the maximum number of iterations
+                         allowed for sPLS-DA convergence (recommended: 10000)""",
+                         default=10000)
+    sparser.add_argument("--nrepeat", dest="numRepeats",
+                         type=int,
+                         required=False,
+                         help="""Optionally, specify the number of times to repeat
+                         M-fold validation during sPLS-DA optimisation (recommended: 20
+                         (default) or more if you have the time)""",
+                         default=20)
     
     args = subParentParser.parse_args()
-    validate_args(args)
+    locations = validate_proc_args(args)
     
     # Parse metadata file
     metadataDict = parse_metadata(args.metadataFile)
     
     # Split into mode-specific functions
-    if args.mode == "call":
-        print("## psQTL_proc.py - Variant Distances ##")
-        cmain(args, metadataDict)
-    elif args.mode == "depth":
-        print("## psQTL_proc.py - Depth Distances ##")
-        dmain(args, metadataDict)
+    if args.mode == "ed":
+        print("## psQTL_proc.py - Euclidean Distances ##")
+        emain(args, metadataDict, locations)
+    elif args.mode == "splsda":
+        print("## psQTL_proc.py - sPLS-DA ##")
+        smain(args, metadataDict, locations)
     
     # Print completion flag if we reach this point
     print("Program completed successfully!")
 
-def cmain(args, metadataDict):
-    validate_c(args)
-    FINAL_ED_FILE = os.path.join(args.workingDirectory, "psQTL_variants.ed.tsv.gz")
+def emain(args, metadataDict, locations):
+    # Validate input types before proceeding
+    if "call" in args.inputType:
+        validate_c(args)
+    if "depth" in args.inputType:
+        validate_d(args)
     
-    # Generate Euclidean distance file if it doesn't exist
-    if not os.path.isfile(FINAL_ED_FILE + ".ok"):
-        generate_ed_file(args.vcfFile, metadataDict, FINAL_ED_FILE, args.ignoreIdentical)
-    # If the .ok file exists, raise an error
-    else:
-        raise FileExistsError(f"Euclidean distance file '{FINAL_ED_FILE}' already has a .ok file; " +
-                              "move, rename, or delete it before re-running psQTL_proc.py!")
+    # Run the main function for each input type
+    if "call" in args.inputType:
+        call_ed(args, metadataDict, locations)
+    if "depth" in args.inputType:
+        depth_ed(args, metadataDict, locations)
 
-def dmain(args, metadataDict):
-    validate_d(args)
-    FINAL_ED_FILE = os.path.join(args.workingDirectory, "psQTL_depth.ed.tsv.gz")
-    
-    # Generate Euclidean distance file if it doesn't exist
-    if not os.path.isfile(FINAL_ED_FILE + ".ok"):
-        generate_ed_file(args.deletionFile, metadataDict, FINAL_ED_FILE, False) # don't ignore identical
-    # If the .ok file exists, raise an error
+def call_ed(args, metadataDict, locations):
+    if not os.path.isfile(locations.variantEdFile + ".ok"):
+        generate_ed_file(args.vcfFile, metadataDict, locations.variantEdFile,
+                         not args.considerIdentical) # negate the flag to ignore identical
+        open(locations.variantEdFile + ".ok", "w").close() # touch a .ok file to indicate success
     else:
-        raise FileExistsError(f"Euclidean distance file '{FINAL_ED_FILE}' already has a .ok file; " +
+        raise FileExistsError(f"Euclidean distance file '{locations.variantEdFile}' already has a .ok file; " +
                               "move, rename, or delete it before re-running psQTL_proc.py!")
+    print("Variant call ED file generation complete!")
+
+def depth_ed(args, metadataDict, locations):
+    if not os.path.isfile(locations.deletionEdFile + ".ok"):
+        generate_ed_file(args.deletionFile, metadataDict, locations.deletionEdFile, False) # don't ignore identical
+        open(locations.deletionEdFile + ".ok", "w").close() # touch a .ok file to indicate success
+    else:
+        raise FileExistsError(f"Euclidean distance file '{locations.deletionEdFile}' already has a .ok file; " +
+                              "move, rename, or delete it before re-running psQTL_proc.py!")
+    print("Deletion variant ED file generation complete!")
+
+def smain(args, metadataDict, locations):
+    # Validate sPLS-DA arguments
+    validate_s(args)
+    
+    # Validate input types before proceeding
+    if "call" in args.inputType:
+        validate_c(args)
+    if "depth" in args.inputType:
+        validate_d(args)
+    os.makedirs(locations.splsdaDir, exist_ok=True)
+    
+    # Validate that R and necessary packages are available
+    validate_r_exists()
+    validate_r_packages_installation()
+    
+    # Run the main function for each input type
+    if "call" in args.inputType:
+        call_splsda(args, metadataDict, locations)
+    if "depth" in args.inputType:
+        depth_splsda(args, metadataDict, locations)
+    if "call" in args.inputType and "depth" in args.inputType:
+        integrative_splsda(args, metadataDict, locations)
+
+def call_splsda(args, metadataDict, locations):
+    # Encode variant calls for sPLS-DA analysis
+    if (not os.path.isfile(locations.variantRecodedFile)) or (not os.path.isfile(locations.variantRecodedFile + ".ok")):
+        print("# Encoding variant calls for sPLS-DA analysis ...")
+        recode_vcf(args.vcfFile, locations.variantRecodedFile)
+        open(locations.variantRecodedFile + ".ok", "w").close() # touch a .ok file to indicate success
+    else:
+        print("# Variant calls already encoded for sPLS-DA analysis; skipping ...")
+    
+    # Run windowed sPLS-DA for variant calls
+    if (not os.path.isfile(locations.variantSplsdaSelectedFile) or \
+        not os.path.isfile(locations.variantSplsdaSelectedFile + ".ok")) or \
+        (not os.path.isfile(locations.variantSplsdaBerFile) or \
+        not os.path.isfile(locations.variantSplsdaBerFile + ".ok")) or \
+        (not os.path.isfile(locations.variantSplsdaRdataFile) or \
+        not os.path.isfile(locations.variantSplsdaRdataFile + ".ok")):
+            print("# Running windowed sPLS-DA for variant calls ...")
+            run_windowed_splsda(args.metadataFile, locations.variantRecodedFile,
+                                locations.variantSplsdaSelectedFile,
+                                locations.variantSplsdaBerFile,
+                                locations.variantSplsdaRdataFile,
+                                locations.windowedSplsdaRscript,
+                                args.threads, args.splsdaWindowSize, args.berFilter,
+                                args.mafFilter, args.numRepeats, args.maxIterations)
+            open(locations.variantSplsdaSelectedFile + ".ok", "w").close()
+            open(locations.variantSplsdaBerFile + ".ok", "w").close()
+            open(locations.variantSplsdaRdataFile + ".ok", "w").close()
+            print("Variant call sPLS-DA analysis complete!")
+    else:
+        print("# Variant calls already processed for sPLS-DA analysis; skipping ...")
+
+def depth_splsda(args, metadataDict, locations):
+    # Encode deletion variants for sPLS-DA analysis
+    if (not os.path.isfile(locations.variantRecodedFile)) or (not os.path.isfile(locations.variantRecodedFile + ".ok")):
+        print("# Encoding deletion variants for sPLS-DA analysis ...")
+        recode_vcf(args.deletionFile, locations.deletionRecodedFile)
+        open(locations.deletionRecodedFile + ".ok", "w").close() # touch a .ok file to indicate success
+    else:
+        print("# Deletion variants already encoded for sPLS-DA analysis; skipping ...")
+    
+    # Run windowed sPLS-DA for deletion variants
+    if (not os.path.isfile(locations.deletionSplsdaSelectedFile) or \
+        not os.path.isfile(locations.deletionSplsdaSelectedFile + ".ok")) or \
+        (not os.path.isfile(locations.deletionSplsdaBerFile) or \
+        not os.path.isfile(locations.deletionSplsdaBerFile + ".ok")) or \
+        (not os.path.isfile(locations.deletionSplsdaRdataFile) or \
+        not os.path.isfile(locations.deletionSplsdaRdataFile + ".ok")):
+            print("# Running windowed sPLS-DA for deletion variants ...")
+            run_windowed_splsda(args.metadataFile, locations.deletionRecodedFile,
+                                locations.deletionSplsdaSelectedFile,
+                                locations.deletionSplsdaBerFile,
+                                locations.deletionSplsdaRdataFile,
+                                locations.windowedSplsdaRscript,
+                                args.threads, args.splsdaWindowSize, args.berFilter,
+                                args.mafFilter, args.numRepeats, args.maxIterations)
+            open(locations.deletionSplsdaSelectedFile + ".ok", "w").close()
+            open(locations.deletionSplsdaBerFile + ".ok", "w").close()
+            open(locations.deletionSplsdaRdataFile + ".ok", "w").close()
+            print("Deletion variant sPLS-DA analysis complete!")
+    else:
+        print("# Deletion variants already processed for sPLS-DA analysis; skipping ...")
+
+def integrative_splsda(args, metadataDict, locations):
+    # Run integrative sPLS-DA for variant calls
+    if (not os.path.isfile(locations.integrativeSplsdaSelectedFile) or \
+        not os.path.isfile(locations.integrativeSplsdaSelectedFile + ".ok")):
+            print("# Running integration of sPLS-DA for variants and deletions ...")
+            run_integrative_splsda(locations.variantSplsdaRdataFile, locations.deletionSplsdaRdataFile,
+                                   locations.integrativeSplsdaSelectedFile,
+                                   locations.integrativeSplsdaRscript,
+                                   args.threads, args.numRepeats, args.maxIterations)
+            open(locations.integrativeSplsdaSelectedFile + ".ok", "w").close()
+            print("Integrative sPLS-DA analysis complete!")
+    else:
+        print("# Integrative sPLS-DA of variants and deletions already processed; skipping ...")
 
 if __name__ == "__main__":
     main()

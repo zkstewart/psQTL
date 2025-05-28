@@ -1,79 +1,8 @@
 import numpy as np
 from math import sqrt, ceil
-from ncls import NCLS
 
 from .parsing import read_gz_file, vcf_header_to_metadata_validation, parse_vcf_genotypes
-
-class EDNCLS:
-    def __init__(self, windowSize=0):
-        self.ncls = {}
-        self.values = {}
-        self.windowSize = windowSize
-        
-        self.numPositions = 0
-        self.longestContig = 0
-    
-    @property
-    def contigs(self):
-        return list(self.ncls.keys())
-    
-    def add(self, chrom, positions, edValues):
-        '''
-        Parameters:
-            chrom -- a string indicating the chromosome name
-            positions -- a numpy array of integers indicating the positions of the ED values
-            edValues -- a numpy array of floats indicating the ED values
-        '''
-        if chrom in self.ncls:
-            raise ValueError(f"Chromosome '{chrom}' already exists in this EDNCLS object")
-        
-        ends = positions + 1 + self.windowSize
-        self.values[chrom] = edValues
-        
-        self.ncls[chrom] = NCLS(positions, ends, np.arange(len(edValues)))
-        self.numPositions += len(positions)
-        self.longestContig = max(self.longestContig, ends[-1])
-    
-    def find_overlap(self, chrom, start, end):
-        '''
-        Parameters:
-            chrom -- a string indicating the chromosome name
-            start -- an integer indicating the start position of the query; if negative, will
-                     be set to 0 to prevent weird NCLS bug(?)
-            end -- an integer indicating the end position of the query
-        Returns:
-            results -- an iterator of tuples containing the start position, end position, and ED value
-        '''
-        if not chrom in self.ncls:
-            raise KeyError(f"Chromosome '{chrom}' does not exist in this EDNCLS object")
-        return (
-            (windowStart, windowEnd, self.values[chrom][valueIndex])
-            for windowStart, windowEnd, valueIndex in self.ncls[chrom].find_overlap(start if start >= 0 else 0, end)
-        )
-    
-    def find_all(self, chrom):
-        '''
-        Parameters:
-            chrom -- a string indicating the chromosome name
-        Returns:
-            results -- an iterator of tuples containing the start position, end position, and ED value
-        '''
-        if not chrom in self.ncls:
-            raise KeyError(f"Chromosome '{chrom}' does not exist in this EDNCLS object")
-        return (
-            (windowStart, windowEnd, self.values[chrom][valueIndex])
-            for windowStart, windowEnd, valueIndex in self.find_overlap(chrom, 0, self.longestContig+1)
-        )
-    
-    def __contains__(self, value):
-        return value in self.ncls
-    
-    def __repr__(self):
-        return "<EDNCLS object;num_contigs={0};numPositions={1};windowSize={2}>".format(
-            len(self.ncls),
-            self.numPositions,
-            self.windowSize
-        )
+from .ncls import WindowedNCLS
 
 def calculate_snp_ed(b1Gt, b2Gt):
     '''
@@ -129,7 +58,7 @@ def calculate_snp_ed(b1Gt, b2Gt):
         # Return the values
         return numAllelesB1, numAllelesB2, edist
 
-def parse_vcf_for_ed(vcfFile, metadataDict, ignoreIdentical=False):
+def parse_vcf_for_ed(vcfFile, metadataDict, ignoreIdentical=True):
     '''
     Parameters:
         vcfFile -- a string pointing to the VCF or VCF-like file to parse
@@ -138,8 +67,10 @@ def parse_vcf_for_ed(vcfFile, metadataDict, ignoreIdentical=False):
                             "bulk1": set([ "sample1", "sample2", ... ]),
                             "bulk2": set([ "sample3", "sample4", ... ])
                         }
-        ignoreIdentical -- OPTIONAL; a boolean indicating whether to ignore
-                           identical non-reference alleles shared by all samples
+        ignoreIdentical -- (OPTIONAL) a boolean indicating whether to ignore
+                           identical non-reference alleles shared by all samples;
+                           default is True, which means that identical non-reference
+                           alleles will be ignored
     Yields:
         contig -- the contig name for the variant
         pos -- the position of the variant
@@ -297,26 +228,26 @@ def parse_ed_as_dict(edFile, metadataDict, missingFilter=0.5):
                 edDict[chrom][1].append(euclideanDistance)
     return edDict
 
-def convert_dict_to_edncls(edDict, windowSize=0):
+def convert_dict_to_windowed_ncls(statDict, windowSize=0):
     '''
     Parameters:
-        edDict -- a dictionary with structure like:
+        statDict -- a dictionary with structure like:
                   {
-                      "chr1": [[pos1, pos2, ...], [ed1, ed2, ...]],
-                      "chr2": [[pos1, pos2, ...], [ed1, ed2, ...]],
+                      "chr1": [[pos1, pos2, ...], [stat1, stat2, ...]],
+                      "chr2": [[pos1, pos2, ...], [stat1, stat2, ...]],
                       ...
                   }
         windowSize -- OPTIONAL; an integer indicating the size of the window that was used
-                      when generating the depth file that led to the ED file. Default is 0
+                      when generating the depth file that led to the statistics file. Default is 0
                       (no window size) which is intended for use with variant calls, whereas
                       depth deletions should use an actual window size.
     Returns:
-        edNCLS -- an EDNCLS object containing the Euclidean distances indexed by chromosome
-                  and position
+        windowedNCLS -- a WindowedNCLS object containing statistical values indexed by chromosome
+                        and position
     '''
-    edNCLS = EDNCLS(windowSize)
-    for chrom, value in edDict.items():
+    windowedNCLS = WindowedNCLS(windowSize)
+    for chrom, value in statDict.items():
         positions = np.array(value[0])
-        edValues = np.array(value[1])
-        edNCLS.add(chrom, positions, edValues)
-    return edNCLS
+        statsValues = np.array(value[1])
+        windowedNCLS.add(chrom, positions, statsValues)
+    return windowedNCLS

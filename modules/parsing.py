@@ -60,6 +60,9 @@ def parse_metadata(metadataFile):
             else:
                 raise ValueError(f"Metadata file is not tab or comma-delimited; offending line is '{l}'")
             
+            # Strip any junk and Excel quotes
+            sl = [s.strip("\"' ") for s in sl]
+            
             # Parse out relevant information
             try:
                 sample, pop = sl
