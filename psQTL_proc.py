@@ -175,7 +175,7 @@ def call_ed(args, metadataDict, locations):
 
 def depth_ed(args, metadataDict, locations):
     if not os.path.isfile(locations.deletionEdFile + ".ok"):
-        generate_ed_file(args.finalDeletionFile, metadataDict, locations.deletionEdFile, False) # don't ignore identical
+        generate_ed_file(locations.finalDeletionFile, metadataDict, locations.deletionEdFile, False) # don't ignore identical
         open(locations.deletionEdFile + ".ok", "w").close() # touch a .ok file to indicate success
     else:
         raise FileExistsError(f"Euclidean distance file '{locations.deletionEdFile}' already has a .ok file; " +
