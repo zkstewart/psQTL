@@ -265,12 +265,12 @@ def dmain(args, locations):
         samplePairs.append([bamPrefix, binFile])
     
     # Collate binned files into a VCF-like format of deletion calls
-    if (not os.path.isfile(locations.deletionFile)) or (not os.path.isfile(locations.deletionFile + ".ok")):
+    if (not os.path.isfile(locations.finalDeletionFile)) or (not os.path.isfile(locations.finalDeletionFile + ".ok")):
         print("# Generating deletion file...")
-        call_deletions_from_depth(samplePairs, locations.deletionFile, args.windowSize)
-        open(locations.deletionFile + ".ok", "w").close() # touch a .ok file to indicate success
+        call_deletions_from_depth(samplePairs, locations.finalDeletionFile, args.windowSize)
+        open(locations.finalDeletionFile + ".ok", "w").close() # touch a .ok file to indicate success
     else:
-        print(f"# Deletion file '{locations.deletionFile}' exists; skipping ...")
+        print(f"# Deletion file '{locations.finalDeletionFile}' exists; skipping ...")
     
     # Update param cache with (potentially) newly produced deletion file
     paramsCache = ParameterCache(locations.workingDirectory)
