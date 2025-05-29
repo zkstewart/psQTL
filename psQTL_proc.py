@@ -240,7 +240,7 @@ def depth_splsda(args, metadataDict, locations):
     # Encode deletion variants for sPLS-DA analysis
     if (not os.path.isfile(locations.deletionRecodedFile)) or (not os.path.isfile(locations.deletionRecodedFile + ".ok")):
         print("# Encoding deletion variants for sPLS-DA analysis ...")
-        recode_vcf(args.finalDeletionFile, locations.deletionRecodedFile)
+        recode_vcf(locations.finalDeletionFile, locations.deletionRecodedFile)
         open(locations.deletionRecodedFile + ".ok", "w").close() # touch a .ok file to indicate success
     else:
         print("# Deletion variants already encoded for sPLS-DA analysis; skipping ...")
