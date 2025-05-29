@@ -275,7 +275,7 @@ def dmain(args, locations):
     # Update param cache with (potentially) newly produced deletion file
     paramsCache = ParameterCache(locations.workingDirectory)
     paramsCache.load() # reload in case we're running call simultaneously
-    paramsCache.deletionFile = FINAL_DELETION_FILE
+    paramsCache.deletionFile = locations.finalDeletionFile
     paramsCache.windowSize = args.windowSize
     
     print("Depth file generation complete!")
