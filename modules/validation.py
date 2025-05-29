@@ -91,8 +91,8 @@ def validate_d(args):
 
 def validate_s(args):
     # Validate numeric arguments
-    if args.windowSize < 1:
-        raise ValueError(f"--windowSize value '{args.windowSize}' must be >= 1!")
+    if args.splsdaWindowSize < 1:
+        raise ValueError(f"--windowSize value '{args.splsdaWindowSize}' must be >= 1!")
     if args.threads < 1:
         raise ValueError(f"--threads value '{args.threads}' must be >= 1!")
     if args.numRepeats < 1:
