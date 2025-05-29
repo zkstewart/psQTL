@@ -5,6 +5,14 @@ if (!requireNamespace("argparser", quietly=TRUE)) {
 }
 library(argparser)
 
+fix_numeric_first_char <- function(x) {
+  if (grepl("^[[:digit:]]+", x)) {
+    return (paste0("X", x))
+  } else {
+    return (x)
+  }
+}
+
 # Establish parser
 p <- arg_parser("Run PLS-DA in windows across a genome, using sPLS-DA to select features that contribute to the model")
 
@@ -52,6 +60,7 @@ if (mixomicsVersion[2] < 30) {
 
 # Parse metadata file
 metadata.table <- read.table(file=args$m, header=FALSE, sep="\t", stringsAsFactors=FALSE)
+metadata.table$V1 <- lapply(metadata.table$V1, fix_numeric_first_char)
 
 # Read in encoded values
 df <- read.table(gzfile(args$v), header=TRUE, sep="\t", na.strings=".")
@@ -62,6 +71,9 @@ rownames(df) <- make.names(paste0(df$chrom, "_", df$pos), unique=TRUE)
 
 # Order metadata to match VCF rownames
 metadata.table <- metadata.table[match(colnames(df)[! colnames(df) %in% c("chrom", "pos")], metadata.table$V1),]
+
+# Drop any df values we are not analysing [Can occur if user metadata is a subset of VCF samples]
+df <- df[,c("chrom", "pos", unlist(metadata.table$V1))]
 
 # Extract Y variable values
 Y <- metadata.table$V2
