@@ -70,7 +70,7 @@ df <- df[rowSums(df[,! colnames(df) %in% c("chrom", "pos")], na.rm=TRUE)>0,]
 rownames(df) <- make.names(paste0(df$chrom, "_", df$pos), unique=TRUE)
 
 # Drop any df values we are not analysing [Can occur if user metadata is a subset of VCF samples]
-df <- df[,c("chrom", "pos", unlist(metadata.table$V1))] # this also sorts df and metadata equivalently
+df <- df[,c("chrom", "pos", metadata.table$V1)] # this also sorts df and metadata equivalently
 
 # Discover incompatibilities between metadata and encoded VCF
 if ((ncol(df)-2) != nrow(metadata.table)) # -2 to account for c("chrom", "pos")
@@ -191,11 +191,19 @@ if (nrow(selected.X) == 0)
 
 # Tune sPLS-DA to choose number of genomic features
 list.keepX <- c(1:9,  seq(10, 30, 5)) # it is very improbable that more than 30 QTLs exist or can be meaningfully identified
-tune.splsda.test <- tune.splsda(selected.X, Y, test.keepX = list.keepX,
-                                ncomp = 1, folds = 2, validation = 'Mfold',
-                                scale = FALSE,
-                                nrepeat = args$nrepeat, max.iter = args$maxiters,
-                                BPPARAM = BPPARAM)
+if (mixomicsVersion[2] <= 30) {
+    tune.splsda.test <- tune.splsda(selected.X, Y, test.keepX = list.keepX,
+                                    ncomp = 1, folds = 2, validation = 'Mfold',
+                                    scale = FALSE,
+                                    nrepeat = args$nrepeat, max.iter = args$maxiters,
+                                    cpus = args$threads)
+} else {
+    tune.splsda.test <- tune.splsda(selected.X, Y, test.keepX = list.keepX,
+                                    ncomp = 1, folds = 2, validation = 'Mfold',
+                                    scale = FALSE,
+                                    nrepeat = args$nrepeat, max.iter = args$maxiters,
+                                    BPPARAM = BPPARAM)
+}
 ncomp <- 1 # 'tune.splsda.test$choice.ncomp$ncomp' won't be used as a single component is sufficient when discriminating two groups
 select.keepX <- tune.splsda.test$choice.keepX[1:ncomp]
 
@@ -204,10 +212,17 @@ final.splsda <- splsda(selected.X, Y, keepX = select.keepX,
                        ncomp = ncomp,
                        scale = FALSE,
                        max.iter = args$maxiters)
-perf.final.splsda <- perf(final.splsda,
-                          folds = 2, validation = "Mfold",
-                          nrepeat = args$nrepeat,
-                          BPPARAM = BPPARAM)
+if (mixomicsVersion[2] <= 30) {
+    perf.final.splsda <- perf(final.splsda,
+                              folds = 2, validation = "Mfold",
+                              nrepeat = args$nrepeat,
+                              cpus = args$threads)
+} else {
+    perf.final.splsda <- perf(final.splsda,
+                              folds = 2, validation = "Mfold",
+                              nrepeat = args$nrepeat,
+                              BPPARAM = BPPARAM)
+}
 
 # Tabulate stability values
 select.name <- selectVar(final.splsda, comp = 1)$name

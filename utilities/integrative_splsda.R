@@ -380,9 +380,15 @@ final.mbsplsda <- block.splsda(splsda.X, Y, keepX = select.keepX,
                                ncomp = 1, design = design,
                                scale = FALSE,
                                max.iter = args$maxiters)
-perf.final.mbsplsda <- perf(final.mbsplsda,
-                            validation = "loo",
-                            BPPARAM = BPPARAM)
+if (mixomicsVersion[2] <= 30) {
+    perf.final.mbsplsda <- perf(final.mbsplsda,
+                                validation = "loo",
+                                cpus = args$threads)
+} else {
+    perf.final.mbsplsda <- perf(final.mbsplsda,
+                                validation = "loo",
+                                BPPARAM = BPPARAM)
+}
 
 # Tabulate loadings values
 loadings.call <- selectVar(final.mbsplsda, comp = 1)$call$value
