@@ -175,7 +175,7 @@ def call_ed(args, metadataDict, locations):
 
 def depth_ed(args, metadataDict, locations):
     if not os.path.isfile(locations.deletionEdFile + ".ok"):
-        generate_ed_file(args.deletionFile, metadataDict, locations.deletionEdFile, False) # don't ignore identical
+        generate_ed_file(args.finalDeletionFile, metadataDict, locations.deletionEdFile, False) # don't ignore identical
         open(locations.deletionEdFile + ".ok", "w").close() # touch a .ok file to indicate success
     else:
         raise FileExistsError(f"Euclidean distance file '{locations.deletionEdFile}' already has a .ok file; " +
@@ -238,9 +238,9 @@ def call_splsda(args, metadataDict, locations):
 
 def depth_splsda(args, metadataDict, locations):
     # Encode deletion variants for sPLS-DA analysis
-    if (not os.path.isfile(locations.variantRecodedFile)) or (not os.path.isfile(locations.variantRecodedFile + ".ok")):
+    if (not os.path.isfile(locations.deletionRecodedFile)) or (not os.path.isfile(locations.deletionRecodedFile + ".ok")):
         print("# Encoding deletion variants for sPLS-DA analysis ...")
-        recode_vcf(args.deletionFile, locations.deletionRecodedFile)
+        recode_vcf(args.finalDeletionFile, locations.deletionRecodedFile)
         open(locations.deletionRecodedFile + ".ok", "w").close() # touch a .ok file to indicate success
     else:
         print("# Deletion variants already encoded for sPLS-DA analysis; skipping ...")
