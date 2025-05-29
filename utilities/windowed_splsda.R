@@ -60,7 +60,7 @@ if (mixomicsVersion[2] < 30) {
 
 # Parse metadata file
 metadata.table <- read.table(file=args$m, header=FALSE, sep="\t", stringsAsFactors=FALSE)
-metadata.table$V1 <- lapply(metadata.table$V1, fix_numeric_first_char)
+metadata.table$V1 <- unlist(lapply(metadata.table$V1, fix_numeric_first_char))
 
 # Read in encoded values
 df <- read.table(gzfile(args$v), header=TRUE, sep="\t", na.strings=".")
@@ -69,11 +69,14 @@ maf.cutoff <- ceiling((ncol(df) - 2) * args$MAF)
 df <- df[rowSums(df[,! colnames(df) %in% c("chrom", "pos")], na.rm=TRUE)>0,]
 rownames(df) <- make.names(paste0(df$chrom, "_", df$pos), unique=TRUE)
 
-# Order metadata to match VCF rownames
-metadata.table <- metadata.table[match(colnames(df)[! colnames(df) %in% c("chrom", "pos")], metadata.table$V1),]
-
 # Drop any df values we are not analysing [Can occur if user metadata is a subset of VCF samples]
-df <- df[,c("chrom", "pos", unlist(metadata.table$V1))]
+df <- df[,c("chrom", "pos", unlist(metadata.table$V1))] # this also sorts df and metadata equivalently
+
+# Discover incompatibilities between metadata and encoded VCF
+if ((ncol(df)-2) != nrow(metadata.table)) # -2 to account for c("chrom", "pos")
+{
+  stop(paste0("Encoded VCF column names (", paste(colnames(df[3:ncol(df)]), collapse=","), ") do not equal metadata sample labels (", paste(metadata.table$V1, collapse=","), "); incompatibility means sPLS-DA analysis cannot continue"))
+}
 
 # Extract Y variable values
 Y <- metadata.table$V2
@@ -92,12 +95,16 @@ for (chromosome in unique(df$chrom))
     windowStart <- (windowIndex-1) * args$windowSize
     windowEnd <- windowIndex * args$windowSize
     windowDF <- chromDF[chromDF$pos >= windowStart & chromDF$pos < windowEnd,]
+    windowDF <- windowDF[,! colnames(windowDF) %in% c("chrom", "pos"),drop=FALSE]
     
     # Drop any variants with NA values
     windowDF <- na.omit(windowDF)
     
     # Remove duplicate/linked variants
-    windowDF <- windowDF[!duplicated(windowDF[,! colnames(windowDF) %in% c("chrom", "pos")]),]
+    windowDF <- windowDF[!duplicated(windowDF),]
+    
+    # Remove invariant sites
+    windowDF <- windowDF[! rowSums(windowDF) %in% c(0, ncol(windowDF)),,drop=FALSE]
     
     # Store BER=0.5 if insufficient variants are found in this window
     if (nrow(windowDF) < 2)
@@ -107,7 +114,7 @@ for (chromosome in unique(df$chrom))
     }
     
     # Transpose to obtain X value for PLS-DA
-    X <- t(windowDF[, ! colnames(windowDF) %in% c("chrom", "pos")])
+    X <- t(windowDF)
     
     # Run PLS-DA
     window.plsda <- plsda(X, Y,
