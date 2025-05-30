@@ -1,5 +1,6 @@
 import os, shutil, subprocess, gzip
 import numpy as np
+from collections import Counter
 
 from .parsing import read_gz_file
 from .ncls import WindowedNCLS
@@ -79,19 +80,21 @@ def recode_vcf(vcfFile, outputFileName):
             # Identify genotype position
             gtIndex = sl[8].split(":").index("GT")
             
-            # Count the number of alleles to determine major/minor allele
-            ref = 0
-            alt = 0
-            for sampleData in sl[9:]:
-                gt = sampleData.split(":")[gtIndex]
-                for allele in gt.split("/"):
-                    if allele == "0":
-                        ref += 1
-                    elif allele == "1":
-                        alt += 1
-            minor = "0" if alt > ref else "1"
+            # Count the number of alleles to determine major allele
+            alleles = Counter([
+                allele
+                for sampleData in sl[9:]
+                for allele in sampleData.split(":")[gtIndex].split("/")
+                if allele != "."
+            ])
+            mostCommonAlleles = alleles.most_common()
+            majorAlleles = [
+                allele
+                for allele, count in mostCommonAlleles
+                if count == mostCommonAlleles[0][1]
+            ]
             
-            # Encode genotypes
+            # Encode genotype as the number of minor alleles
             encodedLine = [sl[0], sl[1]]
             for sampleData in sl[9:]:
                 gt = sampleData.split(":")[gtIndex]
@@ -99,7 +102,7 @@ def recode_vcf(vcfFile, outputFileName):
                 if "." in gt:
                     encodedGT = "."
                 else:
-                    encodedGT = gt.count(minor)
+                    encodedGT += sum([ 1 for allele in gt.split("/") if not allele in majorAlleles ])
                 encodedLine.append(str(encodedGT))
             
             # Write to output file

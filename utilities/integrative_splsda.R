@@ -383,25 +383,50 @@ final.mbsplsda <- block.splsda(splsda.X, Y, keepX = select.keepX,
                                ncomp = 1, design = design,
                                scale = FALSE,
                                max.iter = args$maxiters)
-if (mixomicsVersion[2] <= 30) {
-    perf.final.mbsplsda <- perf(final.mbsplsda,
-                                validation = "loo",
-                                cpus = args$threads)
-} else {
-    perf.final.mbsplsda <- perf(final.mbsplsda,
-                                validation = "loo",
-                                BPPARAM = BPPARAM)
-}
+tryCatch(
+  {
+    if (mixomicsVersion[2] <= 30) {
+      perf.final.mbsplsda <- perf(final.mbsplsda,
+                                  validation = "loo")
+    } else {
+      perf.final.mbsplsda <- perf(final.mbsplsda,
+                                  validation = "loo")
+    }
+  },
+  error = function(e) {
+    print(paste0("Warning: stability cannot be estimated due to error \"", conditionMessage(e),'"'))
+  }
+)
 
 # Tabulate loadings values
 loadings.call <- selectVar(final.mbsplsda, comp = 1)$call$value
 loadings.depth <- selectVar(final.mbsplsda, comp = 1)$depth$value
 
 # Tabulate stability values
-stability.call <- as.data.frame(perf.final.mbsplsda$features$stable$nrep1$call$comp1)
+stability.call <- tryCatch(
+  {
+    as.data.frame(perf.final.mbsplsda$features$stable$nrep1$call$comp1)
+  },
+  error = function(e) {
+    data.frame(
+      "Var1" = rownames(loadings.call),
+      "Freq" = rep(0, nrow(loadings.call))
+    )
+  }
+)
 rownames(stability.call) <- stability.call$Var1
 
-stability.depth <- as.data.frame(perf.final.mbsplsda$features$stable$nrep1$depth$comp1)
+stability.depth <- tryCatch(
+  {
+    as.data.frame(perf.final.mbsplsda$features$stable$nrep1$depth$comp1)
+  },
+  error = function(e) {
+    data.frame(
+      "Var1" = rownames(loadings.depth),
+      "Freq" = rep(0, nrow(loadings.depth))
+    )
+  }
+)
 rownames(stability.depth) <- stability.depth$Var1
 
 # Format call and depth values
