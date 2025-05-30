@@ -267,7 +267,7 @@ def parse_integrated_to_windowed_ncls(selectedFileName):
             # Parse relevant details
             chrom, pos, featuretype, stability, abs_loading, direction = line.strip().split("\t")
             try:
-                pos = int(pos)
+                pos = int(float(pos))
             except:
                 raise ValueError(f"Position '{pos}' is not an integer in file '{selectedFileName}'")
             try:
@@ -330,7 +330,7 @@ def parse_ber_to_windowed_ncls(berFileName, balancedAccuracy=True):
             # Parse relevant details
             chrom, pos, ber = line.strip().split("\t")
             try:
-                pos = int(pos)
+                pos = int(float(pos))
             except:
                 raise ValueError(f"Position '{pos}' is not an integer in file '{berFileName}'")
             try:
