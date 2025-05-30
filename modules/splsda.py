@@ -211,7 +211,7 @@ def parse_selected_to_windowed_ncls(selectedFileName):
             # Parse relevant details
             chrom, pos, stability, abs_loading, direction = line.strip().split("\t")
             try:
-                pos = int(pos)
+                pos = int(float(pos))
             except:
                 raise ValueError(f"Position '{pos}' is not an integer in file '{selectedFileName}'")
             try:
