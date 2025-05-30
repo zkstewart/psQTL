@@ -35,6 +35,9 @@ if (!requireNamespace("BiocParallel", quietly=TRUE))
     BiocManager::install("BiocParallel")
 library(BiocParallel)
 
+# Identify mixOmics version
+mixomicsVersion = unlist(packageVersion("mixOmics"))
+
 # Set up parallel processing
 if (args$threads == 1) {
   BPPARAM <- BiocParallel::SerialParam()
