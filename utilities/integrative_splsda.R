@@ -403,31 +403,48 @@ loadings.call <- selectVar(final.mbsplsda, comp = 1)$call$value
 loadings.depth <- selectVar(final.mbsplsda, comp = 1)$depth$value
 
 # Tabulate stability values
-stability.call <- tryCatch(
-  {
-    as.data.frame(perf.final.mbsplsda$features$stable$nrep1$call$comp1)
-  },
-  error = function(e) {
-    data.frame(
-      "Var1" = rownames(loadings.call),
-      "Freq" = rep(0, nrow(loadings.call))
-    )
-  }
-)
+if (nrow(loadings.call) == 1)
+{
+  stability.call <- data.frame(
+    "Var1" = rownames(loadings.call),
+    "Freq" = 1
+  )
+} else {
+  stability.call <- tryCatch(
+    {
+      as.data.frame(perf.final.mbsplsda$features$stable$nrep1$call$comp1)
+    },
+    error = function(e) {
+      data.frame(
+        "Var1" = rownames(loadings.call),
+        "Freq" = rep(0, nrow(loadings.call))
+      )
+    }
+  )
+}
 rownames(stability.call) <- stability.call$Var1
 
-stability.depth <- tryCatch(
-  {
-    as.data.frame(perf.final.mbsplsda$features$stable$nrep1$depth$comp1)
-  },
-  error = function(e) {
-    data.frame(
-      "Var1" = rownames(loadings.depth),
-      "Freq" = rep(0, nrow(loadings.depth))
-    )
-  }
-)
+if (nrow(loadings.depth) == 1)
+{
+  stability.depth <- data.frame(
+    "Var1" = rownames(loadings.depth),
+    "Freq" = 1
+  )
+} else {
+  stability.depth <- tryCatch(
+    {
+      as.data.frame(perf.final.mbsplsda$features$stable$nrep1$depth$comp1)
+    },
+    error = function(e) {
+      data.frame(
+        "Var1" = rownames(loadings.depth),
+        "Freq" = rep(0, nrow(loadings.depth))
+      )
+    }
+  )
+}
 rownames(stability.depth) <- stability.depth$Var1
+
 
 # Format call and depth values
 stability.call <- stability.call[match(rownames(loadings.call), rownames(stability.call)),,drop=FALSE]
