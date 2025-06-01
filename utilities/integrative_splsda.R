@@ -384,18 +384,18 @@ final.mbsplsda <- block.splsda(splsda.X, Y, keepX = select.keepX,
                                scale = FALSE,
                                max.iter = args$maxiters)
 tryCatch(
-  {
-    if (mixomicsVersion[2] <= 30) {
-      perf.final.mbsplsda <- perf(final.mbsplsda,
-                                  validation = "loo")
-    } else {
-      perf.final.mbsplsda <- perf(final.mbsplsda,
-                                  validation = "loo")
+    {
+        if (mixomicsVersion[2] <= 30) {
+        perf.final.mbsplsda <- perf(final.mbsplsda,
+                                    validation = "loo")
+        } else {
+        perf.final.mbsplsda <- perf(final.mbsplsda,
+                                    validation = "loo")
+        }
+    },
+    error = function(e) {
+        print(paste0("Warning: stability cannot be estimated due to error \"", conditionMessage(e),'"'))
     }
-  },
-  error = function(e) {
-    print(paste0("Warning: stability cannot be estimated due to error \"", conditionMessage(e),'"'))
-  }
 )
 
 # Tabulate loadings values
@@ -444,7 +444,6 @@ if (nrow(loadings.depth) == 1)
   )
 }
 rownames(stability.depth) <- stability.depth$Var1
-
 
 # Format call and depth values
 stability.call <- stability.call[match(rownames(loadings.call), rownames(stability.call)),,drop=FALSE]
