@@ -130,21 +130,31 @@ for (chromosome in unique(df$chrom))
                           max.iter = args$maxiters)
     
     # Assess model performance
-    if (ncol(window.plsda$X) <= 6) {
-      window.perf <- perf(window.plsda,
-                          validation = "loo")
-    } else {
-      window.perf <- tryCatch(
+    window.perf <- tryCatch(
         {
-           perf(window.plsda,
-                folds = 2, validation = "Mfold", 
-                nrepeat = NREP)
+            if (ncol(window.plsda$X) <= 6)
+            {
+                perf(window.plsda, validation = "loo")
+            } else {
+                tryCatch(
+                    {
+                        perf(window.plsda,
+                             folds = 2, validation = "Mfold", 
+                             nrepeat = NREP)
+                    },
+                    error = function(e) {
+                        perf(window.plsda, validation = "loo")
+                    }
+                )
+            }
         },
         error = function(e) {
-          perf(window.plsda,
-               validation = "loo")
+            NA
         }
-      )
+    )
+    if (is.na(window.perf)) {
+        window.explanation[nrow(window.explanation) + 1,] <- c(chromosome, windowStart, 0.5) # BER=0.5
+        next
     }
     window.ber <- window.perf$error.rate$BER[[1]]
     
