@@ -112,6 +112,13 @@ for (chromosome in unique(df$chrom))
       window.explanation[nrow(window.explanation) + 1,] <- c(chromosome, windowStart, 0.5) # BER=0.5
       next
     }
+
+    # Detect scenario where only 1 variant site exists in a population
+    if (sum(colSums(windowDF) > 0) < 2)
+    {
+      window.explanation[nrow(window.explanation) + 1,] <- c(chromosome, windowStart, 0.5) # BER=0.5
+      next
+    }
     
     # Transpose to obtain X value for PLS-DA
     X <- t(windowDF)
@@ -212,30 +219,56 @@ final.splsda <- splsda(selected.X, Y, keepX = select.keepX,
                        ncomp = ncomp,
                        scale = FALSE,
                        max.iter = args$maxiters)
-if (mixomicsVersion[2] <= 30) {
-    perf.final.splsda <- perf(final.splsda,
-                              folds = 2, validation = "Mfold",
-                              nrepeat = args$nrepeat,
-                              cpus = args$threads)
-} else {
-    perf.final.splsda <- perf(final.splsda,
-                              folds = 2, validation = "Mfold",
-                              nrepeat = args$nrepeat,
-                              BPPARAM = BPPARAM)
-}
-
-# Tabulate stability values
-select.name <- selectVar(final.splsda, comp = 1)$name
-stability.table <- as.data.frame(perf.final.splsda$features$stable$comp1[select.name])
-stability.table <- na.omit(stability.table) # this might not be needed anymore, but is kept for safety
-
-rownames(stability.table) <- stability.table$Var1
-stability.table <- stability.table[,c("Freq"), drop=FALSE]
-stability.table <- stability.table[order(stability.table$Freq, decreasing = TRUE),,drop=FALSE]
+tryCatch(
+    {
+        if (mixomicsVersion[2] <= 30) {
+            perf.final.splsda <- perf(final.splsda,
+                                    folds = 2, validation = "Mfold",
+                                    nrepeat = args$nrepeat,
+                                    cpus = args$threads)
+        } else {
+            perf.final.splsda <- perf(final.splsda,
+                                    folds = 2, validation = "Mfold",
+                                    nrepeat = args$nrepeat,
+                                    BPPARAM = BPPARAM)
+        }
+    },
+    error = function(e) {
+        print(paste0("Warning: stability cannot be estimated due to error \"", conditionMessage(e),'"'))
+    }
+)
 
 # Obtain loadings
 splsda.loadings <- as.data.frame(final.splsda$loadings$X[,1,drop=FALSE])
 splsda.loadings <- splsda.loadings[abs(rowSums(splsda.loadings)) > 0,,drop=FALSE]
+
+# Tabulate stability values
+if (nrow(splsda.loadings) == 1)
+{
+  stability.table <- data.frame(
+    "Var1" = rownames(splsda.loadings),
+    "Freq" = 1
+  )
+} else {
+  stability.table <- tryCatch(
+    {
+      as.data.frame(perf.final.splsda$features$stable$comp1[
+        selectVar(final.splsda, comp = 1)$name])
+    },
+    error = function(e) {
+      data.frame(
+        "Var1" = rownames(splsda.loadings),
+        "Freq" = rep(0, nrow(splsda.loadings))
+      )
+    }
+  )
+}
+stability.table <- na.omit(stability.table) # this might not be needed anymore, but is kept for safety
+rownames(stability.table) <- stability.table$Var1
+
+stability.table <- stability.table[,c("Freq"), drop=FALSE]
+stability.table <- stability.table[order(stability.table$Freq, decreasing = TRUE),,drop=FALSE]
+stability.table <- na.omit(stability.table)
 
 # Reformat loading values for ease of interpretation
 splsda.loadings$direction = ifelse(splsda.loadings$comp1 > 0, "right", "left")
@@ -243,6 +276,10 @@ splsda.loadings$comp1 = abs(splsda.loadings$comp1)
 
 # Match loadings order to stability values
 splsda.loadings <- splsda.loadings[match(rownames(stability.table), rownames(splsda.loadings)),,drop=FALSE]
+splsda.loadings <- na.omit(splsda.loadings)
+
+# Make sure stability and loading values match up
+stability.table <- stability.table[rownames(stability.table) %in% rownames(splsda.loadings),,drop=FALSE]
 
 # Join stability and loading values
 feature.details.table <- cbind(stability.table, splsda.loadings)
