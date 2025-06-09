@@ -4,7 +4,7 @@ from math import sqrt, ceil
 from .parsing import read_gz_file, vcf_header_to_metadata_validation, parse_vcf_genotypes
 from .ncls import WindowedNCLS
 
-def calculate_snp_ed(b1Gt, b2Gt, isCNV=False):
+def calculate_segregant_ed(b1Gt, b2Gt, isCNV=False):
     '''
     Parameters:
         b1Gt / b2Gt -- a list of lists containing the genotype value as integers
@@ -70,7 +70,7 @@ def calculate_snp_ed(b1Gt, b2Gt, isCNV=False):
         # Return the values
         return numAllelesB1, numAllelesB2, edist
 
-def parse_vcf_for_ed(vcfFile, metadataDict, isCNV, ignoreIdentical=True, quiet=False):
+def parse_vcf_for_ed(vcfFile, metadataDict, isCNV, parents=None, ignoreIdentical=True, quiet=False):
     '''
     Parameters:
         vcfFile -- a string pointing to the VCF or VCF-like file to parse
@@ -81,6 +81,9 @@ def parse_vcf_for_ed(vcfFile, metadataDict, isCNV, ignoreIdentical=True, quiet=F
                         }
         isCNV -- a boolean indicating whether the VCF file is for CNVs ("depth"; True)
                  or SNPs/indels ("call"; False)
+        parents -- (OPTIONAL) a list of two sample IDs to use as parents for calculating
+                   haplotype inheritance ED OR None if no parents are available or specified;
+                   default is None for standard segregant ED calculation
         ignoreIdentical -- (OPTIONAL) a boolean indicating whether to ignore
                            identical non-reference alleles shared by all samples;
                            default is True, which means that identical non-reference
@@ -95,6 +98,16 @@ def parse_vcf_for_ed(vcfFile, metadataDict, isCNV, ignoreIdentical=True, quiet=F
         numAllelesB2 -- the number of genotyped alleles in bulk 2
         euclideanDist -- the Euclidean distance between the two bulks
     '''
+    # Validations
+    if parents != None and len(parents) != 2:
+        raise ValueError("Parents must be a list of two sample IDs for haplotype inheritance ED calculation")
+        for parent in parents:
+            if parent not in metadataDict["bulk1"] and parent not in metadataDict["bulk2"]:
+                raise ValueError(f"Parent sample '{parent}' is not in either bulk; cannot calculate haplotype inheritance ED")
+    if parents == None:
+        parents = [] # this lets us use 'in' checks later without worrying about NoneType
+    
+    # Iterate through the VCF file
     samples = None
     with read_gz_file(vcfFile) as fileIn:
         for line in fileIn:
@@ -147,12 +160,22 @@ def parse_vcf_for_ed(vcfFile, metadataDict, isCNV, ignoreIdentical=True, quiet=F
                 variant = "snp"
             
             # Split sample genotypes into bulk1 and bulk2
-            bulk1 = [ snpDict[sample] for sample in metadataDict["bulk1"] if sample in snpDict ]
-            bulk2 = [ snpDict[sample] for sample in metadataDict["bulk2"] if sample in snpDict ]
+            bulk1 = [ snpDict[sample] for sample in metadataDict["bulk1"] if sample in snpDict and not sample in parents ]
+            bulk2 = [ snpDict[sample] for sample in metadataDict["bulk2"] if sample in snpDict and not sample in parents ]
+            parentsGT = [ snpDict[parent] for parent in parents ] if parents != None else None
             
-            # Calculate difference ratio
-            numAllelesB1, numAllelesB2, \
-                euclideanDist = calculate_snp_ed(bulk1, bulk2, isCNV=isCNV)
+            # Calculate Euclidean distance
+            if parents == None:
+                # Standard segregant ED calculation
+                numAllelesB1, numAllelesB2, \
+                    euclideanDist = calculate_segregant_ed(bulk1, bulk2, isCNV=isCNV)
+            else:
+                # Haplotype inheritance ED calculation
+                if len(parentsGT) != 2: # this can happen if one or both parents are not genotyped at this position
+                    continue
+                
+                numAllelesB1, numAllelesB2, \
+                    euclideanDist = calculate_inheritance_ed(bulk1, bulk2, parentsGT)
             
             # Skip if both bulks are identical
             if ignoreIdentical and euclideanDist == 0:

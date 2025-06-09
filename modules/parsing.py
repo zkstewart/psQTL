@@ -327,8 +327,8 @@ def parse_vcf_genotypes(formatField, sampleFields, samples):
             continue
         
         # Parse and store genotype
-        samplePopulation = samples[ongoingCount]
-        posGenotypeDict[samplePopulation] = list(map(int, genotype.split("/")))
+        sampleID = samples[ongoingCount]
+        posGenotypeDict[sampleID] = list(map(int, genotype.split("/")))
         
         ongoingCount += 1
     return posGenotypeDict

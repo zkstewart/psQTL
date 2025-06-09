@@ -3,13 +3,11 @@
 import os, sys, unittest, time, math
 import numpy as np
 
-os.chdir("/mnt/c/git/psQTL/tests")
-__file__ = "/mnt/c/git/psQTL/tests/test_units.py"
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from modules.parsing import parse_metadata, vcf_header_to_metadata_validation, parse_vcf_genotypes, \
     parse_vcf_stats, parse_samtools_depth_tsv, parse_binned_tsv
 from modules.ncls import WindowedNCLS
-from modules.ed import calculate_snp_ed, parse_vcf_for_ed
+from modules.ed import calculate_segregant_ed, parse_vcf_for_ed
 from modules.depth import get_median_value, predict_deletions
 from modules.samtools_handling import depth_to_histoDict
 
@@ -275,7 +273,7 @@ class TestED(unittest.TestCase):
         for v1, v2 in zip(isCNV_results, isCNV_truth):
             self.assertAlmostEqual(v1, v2, places=5, msg=f"Expected {v2} but got {v1}")
     
-    def test_calculate_snp_ed_1(self):
+    def test_calculate_segregant_ed_1(self):
         # Arrange
         power = 4
         b1Gt = [[2, 2],[0, 1],[0, 0],[1, 2],[0, 1],[0, 0],[0, 1],[0, 0],[0, 0],[1, 2],[0, 0]]
@@ -285,13 +283,13 @@ class TestED(unittest.TestCase):
                 [0, 0],[0, 0],[0, 0],[0, 0],[0, 0],[0, 0],[2, 2],[1, 2]]
         
         # Act
-        b1Alleles_1, b2Alleles_1, ed_1 = calculate_snp_ed(b1Gt, b2Gt, isCNV=True)
-        b1Alleles_2, b2Alleles_2, ed_2 = calculate_snp_ed(b1Gt, b2Gt, isCNV=False)
+        b1Alleles_1, b2Alleles_1, ed_1 = calculate_segregant_ed(b1Gt, b2Gt, isCNV=True)
+        b1Alleles_2, b2Alleles_2, ed_2 = calculate_segregant_ed(b1Gt, b2Gt, isCNV=False)
         
         # Assert
         self.assertNotEqual(ed_1, ed_2, "ED should not be the same for isCNV True and False")
     
-    def test_calculate_snp_ed_2(self):
+    def test_calculate_segregant_ed_2(self):
         # Arrange
         power = 4
         b1Gt = [[0, 1],[0, 1],[0, 1],[0, 1],[0, 1],[0, 1],[0, 1],[0, 1],[0, 1],[1, 1],[0, 1]]
@@ -301,8 +299,8 @@ class TestED(unittest.TestCase):
                 [0, 1],[0, 0],[0, 1],[0, 0],[0, 0],[0, 0],[0, 0],[0, 0]]
         
         # Act
-        b1Alleles_1, b2Alleles_1, ed_1 = calculate_snp_ed(b1Gt, b2Gt, isCNV=True)
-        b1Alleles_2, b2Alleles_2, ed_2 = calculate_snp_ed(b1Gt, b2Gt, isCNV=False)
+        b1Alleles_1, b2Alleles_1, ed_1 = calculate_segregant_ed(b1Gt, b2Gt, isCNV=True)
+        b1Alleles_2, b2Alleles_2, ed_2 = calculate_segregant_ed(b1Gt, b2Gt, isCNV=False)
         
         # Assert
         self.assertEqual(ed_1, ed_2, "ED should be the same for isCNV True and False")

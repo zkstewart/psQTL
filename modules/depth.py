@@ -218,7 +218,6 @@ def normalise_coverage_dict(coverageDict):
     for bulk, sampleDict in coverageDict.items():
         for sampleID, depthDict in sampleDict.items():
             for chrom, value in depthDict.items():
-                positions = np.array(value[0])
                 coverages = np.array(value[1])
                 
                 # Figure out what our median value is
