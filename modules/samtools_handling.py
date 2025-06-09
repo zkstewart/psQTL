@@ -93,6 +93,37 @@ def run_samtools_depth(ioList, threads):
 
 ##
 
+def depth_to_histoDict(depthFile, lengthsDict, binSize):
+    '''
+    Parameters:
+        depthFile -- a string containing the path to the input TSV file output by samtools depth.
+        lengthsDict -- a dictionary pairing contig IDs (keys) with their lengths (values).
+        binSize -- an integer indicating the size of the bin to sum depth values within.
+    Returns:
+        histoDict -- a dictionary pairing contig IDs (keys) with a numpy array of binned depth values.
+    '''
+    histoDict = {}
+    contigZeroBase = {}
+    for contigID, pos, depth in parse_samtools_depth_tsv(depthFile):
+        if not contigID in histoDict:
+            # Establish storage data structure for this contig
+            histoDict[contigID] = np.array([ 0
+                for windowChunk in range(math.ceil(lengthsDict[contigID] / binSize))
+            ])
+            
+            # Check if the contig is 0-based or 1-based
+            if pos == 0:
+                contigZeroBase[contigID] = 0
+            elif pos == 1:
+                contigZeroBase[contigID] = 1 # results in subtracting 1 from the position
+            else:
+                raise ValueError(f"First line in contig {contigID} is not 0 or 1; please check " +
+                                 "that the input depth file is valid and produced by samtools depth.")
+        
+        binIndex = (pos-contigZeroBase[contigID]) // binSize # adjust position to be 0-based if necessary
+        histoDict[contigID][binIndex] += depth
+    return histoDict
+
 def bin_task(ioPair, lengthsDict, binSize):
     '''
     Partner function for bin_samtools_depth. Will receive samtools depth outputs and bin them
@@ -107,14 +138,7 @@ def bin_task(ioPair, lengthsDict, binSize):
         raise ValueError("binSize must be a positive integer")
     
     # Parse the input depth file
-    histoDict = {}
-    for contigID, pos, depth in parse_samtools_depth_tsv(depthFile):
-        if not contigID in histoDict:
-            histoDict[contigID] = np.array([ 0
-                for windowChunk in range(math.ceil(lengthsDict[contigID] / binSize))
-            ])
-        binIndex = pos // binSize
-        histoDict[contigID][binIndex] += depth
+    histoDict = depth_to_histoDict(depthFile, lengthsDict, binSize)
     
     # Write the binned depth values to a file
     with open(outputFileName, "w") as fileOut:
