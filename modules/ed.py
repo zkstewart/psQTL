@@ -4,7 +4,7 @@ from math import sqrt, ceil
 from .parsing import read_gz_file, vcf_header_to_metadata_validation, parse_vcf_genotypes
 from .ncls import WindowedNCLS
 
-def calculate_snp_ed(b1Gt, b2Gt):
+def calculate_snp_ed(b1Gt, b2Gt, isCNV=False):
     '''
     Parameters:
         b1Gt / b2Gt -- a list of lists containing the genotype value as integers
@@ -15,50 +15,62 @@ def calculate_snp_ed(b1Gt, b2Gt):
                            [1, 1],
                            ...
                        ]
+        isCNV -- (OPTIONAL) a boolean indicating whether the genotypes are for CNVs
+                 (True) or SNPs/indels (False); default is False
     Returns:
         numAllelesB1 -- the number of genotyped alleles in bulk 1
         numAllelesB2 -- the number of genotyped alleles in bulk 2
         edist -- a float of the the Euclidean distance between the two bulks
     '''
     # Get all the unique alleles
-    alleles = list(set([ allele for gt in b1Gt + b2Gt for allele in gt ]))
-    if 0 not in alleles:
-        alleles.append(0)
-    alleles.sort()
+    alleles = [ allele for gt in b1Gt + b2Gt for allele in gt ]
+    uniqueAlleles = list(set(alleles))
     
     # Tally for bulk 1
-    b1Count = { allele: 0 for allele in alleles }
-    for allele1, allele2 in b1Gt:
-        b1Count[allele1] += 1
-        b1Count[allele2] += 1
+    if isCNV:
+        uniqueAlleles = [0, 1] # CNV genotypes get re-encoded to 0 and 1
+        medianAllele = np.median(alleles)
+        b1Count = { allele: 0 for allele in uniqueAlleles } # CNV genotypes are in relation to the median
+        for allele1, allele2 in b1Gt:
+            b1Count[0 if allele1 < medianAllele else 1] += 1
+            b1Count[0 if allele2 < medianAllele else 1] += 1
+    else:
+        b1Count = { allele: 0 for allele in uniqueAlleles }
+        for allele1, allele2 in b1Gt:
+            b1Count[allele1] += 1
+            b1Count[allele2] += 1
     
     # Tally for bulk 2
-    b2Count = { allele: 0 for allele in alleles }
-    for allele1, allele2 in b2Gt:
-        b2Count[allele1] += 1
-        b2Count[allele2] += 1
+    if isCNV:
+        b2Count = { allele: 0 for allele in uniqueAlleles } # CNV genotypes are in relation to the median
+        for allele1, allele2 in b2Gt:
+            b2Count[0 if allele1 < medianAllele else 1] += 1 # medianAllele was calculated for bulk 1
+            b2Count[0 if allele2 < medianAllele else 1] += 1
+    else:
+        b2Count = { allele: 0 for allele in uniqueAlleles }
+        for allele1, allele2 in b2Gt:
+            b2Count[allele1] += 1
+            b2Count[allele2] += 1
     
     # Sum the number of genotyped alleles for each bulk
     numAllelesB1 = sum(b1Count.values())
     numAllelesB2 = sum(b2Count.values())
     
     # Calculate the Euclidean distance between the two bulks if possible
-    if numAllelesB1 == 0 and numAllelesB2 == 0:
+    if numAllelesB1 == 0 or numAllelesB2 == 0:
         return numAllelesB1, numAllelesB2, 0 # euclidean distance cannot be calculated
-    elif numAllelesB1 == 0 or numAllelesB2 == 0:
-        return numAllelesB1, numAllelesB2, 1 # euclidean distance is 1
     else:
         # Derive our euclidean distance value
         """Refer to "Euclidean distance calculation" in Hill et al. 2013"""
         edist = sqrt(sum([
             ((b1Count[allele] / numAllelesB1) - (b2Count[allele] / numAllelesB2))**2
-            for allele in alleles
+            for allele in uniqueAlleles
         ]))
         
         # Return the values
         return numAllelesB1, numAllelesB2, edist
 
-def parse_vcf_for_ed(vcfFile, metadataDict, ignoreIdentical=True):
+def parse_vcf_for_ed(vcfFile, metadataDict, isCNV, ignoreIdentical=True):
     '''
     Parameters:
         vcfFile -- a string pointing to the VCF or VCF-like file to parse
@@ -67,6 +79,8 @@ def parse_vcf_for_ed(vcfFile, metadataDict, ignoreIdentical=True):
                             "bulk1": set([ "sample1", "sample2", ... ]),
                             "bulk2": set([ "sample3", "sample4", ... ])
                         }
+        isCNV -- a boolean indicating whether the VCF file is for CNVs ("depth"; True)
+                 or SNPs/indels ("call"; False)
         ignoreIdentical -- (OPTIONAL) a boolean indicating whether to ignore
                            identical non-reference alleles shared by all samples;
                            default is True, which means that identical non-reference
@@ -124,7 +138,7 @@ def parse_vcf_for_ed(vcfFile, metadataDict, ignoreIdentical=True):
             if any([ x == "." for x in ref_alt ]):
                 variant = "indel"
             elif all([ x == "N" for x in ref_alt ]): # for parsing deletion VCF-like files
-                variant = "indel"
+                variant = "cnv"
             elif any([ len(ref_alt[0]) != len(ref_alt[x]) for x in range(1, len(ref_alt))]):
                 variant = "indel"
             else:
@@ -136,7 +150,7 @@ def parse_vcf_for_ed(vcfFile, metadataDict, ignoreIdentical=True):
             
             # Calculate difference ratio
             numAllelesB1, numAllelesB2, \
-                euclideanDist = calculate_snp_ed(bulk1, bulk2)
+                euclideanDist = calculate_snp_ed(bulk1, bulk2, isCNV=isCNV)
             
             # Skip if both bulks are identical
             if ignoreIdentical and euclideanDist == 0:
