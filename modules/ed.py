@@ -1,5 +1,6 @@
 import numpy as np
 from math import sqrt, ceil
+from collections import Counter
 
 from .parsing import read_gz_file, vcf_header_to_metadata_validation, parse_vcf_genotypes
 from .ncls import WindowedNCLS
@@ -69,6 +70,95 @@ def calculate_segregant_ed(b1Gt, b2Gt, isCNV=False):
         
         # Return the values
         return numAllelesB1, numAllelesB2, edist
+
+def calculate_inheritance_ed(b1Gt, b2Gt, parentsGT):
+    '''
+    Parameters:
+        b1Gt / b2Gt -- a list of lists containing the genotype value as integers
+                       with format like:
+                       [
+                           [0, 1],
+                           [0, 2],
+                           [1, 1],
+                           ...
+                       ]
+        parentsGT -- a list of two lists containing the genotype value as integers
+                     for the parents with format like:
+                     [ [0, 1], [1, 2] ]
+    Returns:
+        numAllelesB1 -- the number of genotyped alleles in bulk 1
+        numAllelesB2 -- the number of genotyped alleles in bulk 2
+        edist -- a float of the the Euclidean distance between the two bulks
+    '''
+    parentsGT = [ [0, 1], [0, 2] ] # represents "A/T" and "A/G" parents
+    b1Gt = [[0, 2], [1, 2], [0, 2], [0, 0]] # represents "A/G", "T/G", "A/G", "A/A" genotypes in bulk 1
+    b2Gt = [[1, 2], [0, 1], [0, 0], [0, 0]] # represents "T/G", "A/T", "A/A", "A/A" genotypes in bulk 2
+    
+    
+    bulkSums = []
+    for bulkGt in [b1Gt, b2Gt]: # for each bulk
+        # Set up data structure to hold assigned allele counts across the bulk
+        bulkSum = {
+            "p1": {
+                gt: 0 for gt in parentsGT[0]
+            },
+            "p2": {
+                gt: 0 for gt in parentsGT[1]
+            }
+        }
+        # For each sample, assign alleles to parents based on the most likely inheritance
+        for gt in bulkGt:
+            # Set up the data structure for holding this sample's assigned alleles
+            sampleColumns = {
+                "p1": {
+                    gt: 0 for gt in parentsGT[0]
+                },
+                "p2": {
+                    gt: 0 for gt in parentsGT[1]
+                }
+            }
+            # Get the number of parent alleles that can be assigned
+            Palleles = Counter([ allele for parent in parentsGT for allele in parent ])
+            Palleles = Palleles.most_common()
+            Palleles.sort(key=lambda x: x[1]) # sort by count
+            Palleles = { allele: count for allele, count in Palleles }
+            
+            # Order sample alleles by the parent allele counts
+            Salleles = sorted(gt, key=lambda x: Palleles[x])
+            
+            # Assign sample alleles to most likely parent alleles
+            for Sallele in Salleles: # for each sample allele
+                count = Palleles[Sallele]
+                
+                # Derive the likelihood of this allele being assigned to a specific parental haplotype
+                likelihood = 1 / count
+                
+                # Partially assign the allele to all applicable haplotypes
+                for parent, assignedDict in sampleColumns.items():
+                    # Skip assigned parents
+                    if sum([ assignedDict[_allele] for _allele in assignedDict ]) == 1:
+                        continue
+                    
+                    if Sallele in assignedDict:
+                        assignedDict[Sallele] += likelihood
+                        
+                        # Update the parent allele counts to reflect that one allele has been confidently assigned
+                        if assignedDict[Sallele] == 1:
+                            parentGT = list(sampleColumns[parent].keys())
+                            for pGT in parentGT:
+                                Palleles[pGT] -= 1
+            
+            # Update the column sums for this sample
+            for parent, assignedDict in sampleColumns.items():
+                for allele, assigned in assignedDict.items():
+                    bulkSum[parent][allele] += assigned
+        
+        # Set aside results for this bulk
+        bulkSums.append(bulkSum)
+    
+    # Calculate the Euclidean distance between the two bulks
+    ## TBD
+    
 
 def parse_vcf_for_ed(vcfFile, metadataDict, isCNV, parents=None, ignoreIdentical=True, quiet=False):
     '''
