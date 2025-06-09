@@ -180,7 +180,7 @@ def call_ed(args, metadataDict, locations):
 def depth_ed(args, metadataDict, locations):
     if not os.path.isfile(locations.deletionEdFile + ".ok"):
         generate_ed_file(args.deletionFile, metadataDict, locations.deletionEdFile,
-                         isCNV=True,
+                         isCNV=False,
                          ignoreIdentical=False) # don't ignore identical
         open(locations.deletionEdFile + ".ok", "w").close() # touch a .ok file to indicate success
     else:
