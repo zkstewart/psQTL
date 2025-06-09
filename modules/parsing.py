@@ -268,7 +268,7 @@ def parse_deletion_stats(deletionFile):
     contigs = list(contigs.keys()) # convert to list
     return bins, deletionBins, samples, contigs
 
-def vcf_header_to_metadata_validation(vcfSamples, metadataDict, strict=True):
+def vcf_header_to_metadata_validation(vcfSamples, metadataDict, strict=True, quiet=True):
     '''
     Validates that the VCF file and metadata file are compatible with each other,
     printing warnings and producing errors as necessary.
@@ -280,8 +280,10 @@ def vcf_header_to_metadata_validation(vcfSamples, metadataDict, strict=True):
                             "bulk1": set([ "sample1", "sample2", ... ]),
                             "bulk2": set([ "sample3", "sample4", ... ])
                         }
-        strict -- OPTIONAL; a boolean indicating whether to error out if the files
+        strict -- (OPTIONAL) a boolean indicating whether to error out if the files
                   show any discrepancies. Default is True.
+        quiet -- (OPTIONAL) a boolean indicating whether to hide the final sample
+                 lists to the console. Default is True.
     '''
     vcfSamples = set(vcfSamples) # convert to set if not already one
     
@@ -329,8 +331,9 @@ def vcf_header_to_metadata_validation(vcfSamples, metadataDict, strict=True):
         raise ValueError("No samples from bulk 2 are present in the VCF file.")
     
     # Notify user of samples that will be used
-    print(f"# Samples used as part of bulk 1 (n={len(b1Samples)}) include: " + ", ".join(b1Samples))
-    print(f"# Samples used as part of bulk 2 (n={len(b2Samples)}) include: " + ", ".join(b2Samples))
+    if not quiet:
+        print(f"# Samples used as part of bulk 1 (n={len(b1Samples)}) include: " + ", ".join(b1Samples))
+        print(f"# Samples used as part of bulk 2 (n={len(b2Samples)}) include: " + ", ".join(b2Samples))
 
 def parse_vcf_genotypes(formatField, sampleFields, samples):
     '''

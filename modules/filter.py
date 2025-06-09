@@ -31,7 +31,7 @@ def filter_vcf(vcfFile, outputFileName, metadataDict, bulkMissing=0.25, qualThre
             # Handle header line
             if line.startswith("#CHROM"):
                 samples = sl[9:] # This gives us the ordered sample IDs
-                vcf_header_to_metadata_validation(samples, metadataDict, strict=False)
+                vcf_header_to_metadata_validation(samples, metadataDict, strict=False, quiet=False)
                 
                 b1Samples = [ sample for sample in samples if sample in metadataDict["bulk1"] ]
                 b1SampleNum = len(b1Samples)

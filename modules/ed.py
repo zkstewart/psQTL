@@ -32,8 +32,8 @@ def calculate_snp_ed(b1Gt, b2Gt, isCNV=False):
         medianAllele = np.median(alleles)
         b1Count = { allele: 0 for allele in uniqueAlleles } # CNV genotypes are in relation to the median
         for allele1, allele2 in b1Gt:
-            b1Count[0 if allele1 < medianAllele else 1] += 1
-            b1Count[0 if allele2 < medianAllele else 1] += 1
+            b1Count[0 if allele1 <= medianAllele else 1] += 1
+            b1Count[0 if allele2 <= medianAllele else 1] += 1
     else:
         b1Count = { allele: 0 for allele in uniqueAlleles }
         for allele1, allele2 in b1Gt:
@@ -44,8 +44,8 @@ def calculate_snp_ed(b1Gt, b2Gt, isCNV=False):
     if isCNV:
         b2Count = { allele: 0 for allele in uniqueAlleles } # CNV genotypes are in relation to the median
         for allele1, allele2 in b2Gt:
-            b2Count[0 if allele1 < medianAllele else 1] += 1 # medianAllele was calculated for bulk 1
-            b2Count[0 if allele2 < medianAllele else 1] += 1
+            b2Count[0 if allele1 <= medianAllele else 1] += 1 # medianAllele was calculated for bulk 1
+            b2Count[0 if allele2 <= medianAllele else 1] += 1
     else:
         b2Count = { allele: 0 for allele in uniqueAlleles }
         for allele1, allele2 in b2Gt:
@@ -70,7 +70,7 @@ def calculate_snp_ed(b1Gt, b2Gt, isCNV=False):
         # Return the values
         return numAllelesB1, numAllelesB2, edist
 
-def parse_vcf_for_ed(vcfFile, metadataDict, isCNV, ignoreIdentical=True):
+def parse_vcf_for_ed(vcfFile, metadataDict, isCNV, ignoreIdentical=True, quiet=False):
     '''
     Parameters:
         vcfFile -- a string pointing to the VCF or VCF-like file to parse
@@ -85,6 +85,8 @@ def parse_vcf_for_ed(vcfFile, metadataDict, isCNV, ignoreIdentical=True):
                            identical non-reference alleles shared by all samples;
                            default is True, which means that identical non-reference
                            alleles will be ignored
+        quiet -- (OPTIONAL) a boolean indicating whether to suppress output messages;
+                 default is False, which means that output messages will be printed
     Yields:
         contig -- the contig name for the variant
         pos -- the position of the variant
@@ -106,7 +108,7 @@ def parse_vcf_for_ed(vcfFile, metadataDict, isCNV, ignoreIdentical=True):
             # Handle header line
             if l.startswith("#CHROM"):
                 samples = sl[9:] # This gives us the ordered sample IDs
-                vcf_header_to_metadata_validation(samples, metadataDict, strict=False)
+                vcf_header_to_metadata_validation(samples, metadataDict, strict=False, quiet=quiet)
             if l.startswith("#"):
                 continue
             
