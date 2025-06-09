@@ -6,12 +6,14 @@ def get_codec(fileName):
         f = codecs.open(fileName, encoding='utf-8', errors='strict')
         for line in f:
             break
+        f.close()
         return "utf-8"
     except:
         try:
             f = codecs.open(fileName, encoding='utf-16', errors='strict')
             for line in f:
                 break
+            f.close()
             return "utf-16"
         except UnicodeDecodeError:
             print(f"Can't tell what codec '{fileName}' is!!")
