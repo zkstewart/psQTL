@@ -178,7 +178,7 @@ def emain(args, metadataDict, locations):
 def call_ed(args, metadataDict, locations):
     if not os.path.isfile(locations.variantEdFile + ".ok"):
         generate_ed_file(args.vcfFile, metadataDict, locations.variantEdFile,
-                         parents=args.parentSamples,
+                         parentSamples=args.parentSamples,
                          isCNV=False,
                          ignoreIdentical=not args.considerIdentical) # negate the flag to ignore identical
         open(locations.variantEdFile + ".ok", "w").close() # touch a .ok file to indicate success
