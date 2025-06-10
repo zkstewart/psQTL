@@ -294,7 +294,7 @@ def parse_vcf_for_ed(vcfFile, metadataDict, isCNV, parents=None, ignoreIdentical
             # Split sample genotypes into bulk1 and bulk2
             bulk1 = [ snpDict[sample] for sample in metadataDict["bulk1"] if sample in snpDict and not sample in parents ]
             bulk2 = [ snpDict[sample] for sample in metadataDict["bulk2"] if sample in snpDict and not sample in parents ]
-            parentsGT = [ snpDict[parent] for parent in parents ] if parents != None else None
+            parentsGT = [ snpDict[parent] for parent in parents if parent in snpDict ] # if parents == [] this will always be empty
             
             # Calculate Euclidean distance
             if parents == []:
