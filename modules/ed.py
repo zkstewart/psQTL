@@ -1,6 +1,7 @@
 import numpy as np
 from math import sqrt, ceil
 from collections import Counter
+from itertools import combinations
 
 from .parsing import read_gz_file, vcf_header_to_metadata_validation, parse_vcf_genotypes
 from .ncls import WindowedNCLS
@@ -71,6 +72,26 @@ def calculate_segregant_ed(b1Gt, b2Gt, isCNV=False):
         # Return the values
         return numAllelesB1, numAllelesB2, edist
 
+def possible_genotypes(gt1, gt2):
+    '''
+    Parameters:
+        gt1 / gt2 -- a list of integers representing the genotype values
+                     with format like:
+                     [0, 1, 2, ...]
+    Returns:
+        possibleGTs -- a set of tuples containing all possible genotypes
+                       that can be formed from the two genotypes
+    '''
+    numGt1 = int(len(gt1) / 2)
+    numGt2 = int(len(gt2) / 2)
+    
+    possibleGTs = []
+    for g1 in combinations(gt1, numGt1):
+        for g2 in combinations(gt2, numGt2):
+            possibleGTs.append(set(g1 + g2))
+    
+    return possibleGTs
+
 def calculate_inheritance_ed(b1Gt, b2Gt, parentsGT):
     '''
     Parameters:
@@ -103,6 +124,9 @@ def calculate_inheritance_ed(b1Gt, b2Gt, parentsGT):
                          "half of each parent's chromosomes (); cannot calculate inheritance Euclidean " + 
                          "distance with mismatched ploidy")
     
+    # Determine the possible progeny genotypes based on the parents' genotypes
+    possibleGTs = possible_genotypes(parentsGT[0], parentsGT[1])
+    
     # Assign alleles to parent haplotypes
     bulkSums = []
     numSamples = [0, 0] # [numSamplesB1, numSamplesB2]
@@ -118,6 +142,11 @@ def calculate_inheritance_ed(b1Gt, b2Gt, parentsGT):
         }
         # For each sample, assign alleles to parents based on the most likely inheritance
         for gt in bulkGt:
+            # Detect samples that cannot be matched to parents
+            if not set(gt) in possibleGTs:
+                continue
+            numSamples[i] += 1 # increment the sample count for this bulk since it is valid
+            
             # Set up the data structure for holding this sample's assigned alleles
             sampleColumns = {
                 "p1": {
@@ -127,26 +156,20 @@ def calculate_inheritance_ed(b1Gt, b2Gt, parentsGT):
                     gt: 0 for gt in parentsGT[1]
                 }
             }
-            # Get the number of parent alleles that can be assigned
+            # Order assignable parent allele by count; ensures that least common alleles are assigned first
             Palleles = Counter([ allele for parent in parentsGT for allele in parent ])
             Palleles = Palleles.most_common()
-            Palleles.sort(key=lambda x: x[1]) # sort by count
+            Palleles.sort(key=lambda x: x[1]) # sort by count for rare alleles first
             Palleles = { allele: count for allele, count in Palleles }
             
             # Order sample alleles by the parent allele counts
-            try:
-                Salleles = sorted(gt, key=lambda x: Palleles[x])
-            except KeyError as e:
-                continue # skip samples with alleles not in parentsGT
-            
-            # Validate that the sample has a genotype that is compatible with the parents
-            numNeeded = sum([ count for Pallele, count in Palleles.items() if Pallele in Salleles ])
-            if numNeeded < len(Salleles):
-                continue # skip samples for which parent alleles cannot possibly be assigned
-            numSamples[i] += 1 # increment the number of samples in this bulk since we have a valid sample
+            Salleles = sorted(gt, key=lambda x: Palleles[x])
             
             # Assign sample alleles to most likely parent alleles
+            isValidSample = True
+            parentAssigned = { parent: 0 for parent in sampleColumns } # how many alleles have been assigned to each parent
             for Sallele in Salleles: # for each sample allele
+                # Detect progeny mismatch with parent genotype
                 count = Palleles[Sallele]
                 
                 # Derive the likelihood of this allele being assigned to a specific parental haplotype
@@ -168,7 +191,7 @@ def calculate_inheritance_ed(b1Gt, b2Gt, parentsGT):
                             for pGT in parentGT:
                                 Palleles[pGT] -= 1
             
-            # Update the column sums for this sample
+            # Update the column sums using this sample
             for parent, assignedDict in sampleColumns.items():
                 for allele, assigned in assignedDict.items():
                     bulkSum[parent][allele] += assigned

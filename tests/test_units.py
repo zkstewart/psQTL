@@ -401,7 +401,7 @@ class TestED(unittest.TestCase):
         self.assertEqual(ed, truth, f"Expected ED to be zero but got {ed}")
     
     def test_calculate_inheritance_ed_with_impossible_progeny_1(self):
-        "Test that inheritance ED handles impossible progeny (not inheriting alleles that match parents) correctly"
+        "Test for impossible progeny (alleles do not exist in parents)"
         # Arrange
         parentsGT = [ [0, 0, 1, 1], [0, 0, 2, 2] ]
         b1Gt = [[0, 1, 2, 4], [0, 1, 2, 4], [0, 1, 3, 5], [0, 1, 3, 5]]
@@ -417,7 +417,7 @@ class TestED(unittest.TestCase):
         self.assertEqual(b2Alleles, 0, "Expected 0 alleles in bulk 2")
     
     def test_calculate_inheritance_ed_with_impossible_progeny_2(self):
-        "Test that inheritance ED handles impossible progeny (not inheriting alleles that match parents) correctly"
+        "Test for impossible progeny (allele combination cannot be inherited from parents)"
         # Arrange
         parentsGT = [ [1, 1], [0, 1] ]
         b1Gt = [[0, 0],[0, 0],[0, 0],[0, 0]]
@@ -431,6 +431,64 @@ class TestED(unittest.TestCase):
         self.assertEqual(ed, truth, f"Expected ED to be zero but got {ed}")
         self.assertEqual(b1Alleles, 0, "Expected 0 alleles in bulk 1")
         self.assertEqual(b2Alleles, 8, "Expected 0 alleles in bulk 2")
+    
+    def test_calculate_inheritance_ed_with_impossible_progeny_3(self):
+        "Test for impossible progeny (alleles could only be from a clone)"
+        # Arrange
+        parentsGT = [ [2, 1], [0, 0] ]
+        b1Gt = [[2, 1]]
+        b2Gt = [[0, 0]]
+        truth = 0
+        
+        # Act
+        b1Alleles, b2Alleles, ed = calculate_inheritance_ed(b1Gt, b2Gt, parentsGT)
+        
+        # Assert
+        self.assertEqual(ed, truth, f"Expected ED to be zero but got {ed}")
+        self.assertEqual(b1Alleles, 0, "Expected 0 alleles in bulk 1")
+        self.assertEqual(b2Alleles, 0, "Expected 0 alleles in bulk 2")
+
+    def test_calculate_ed_for_results_stability_1(self):
+        "Tests done with the program in a state where the results are trustworthy; future changes should not affect the results"
+        # Arrange
+        parentsGT = [ [0, 1], [1, 1] ]
+        b1Gt = [[0, 1], [0, 1], [0, 1], [0, 1]]
+        b2Gt = [[1, 1], [0, 1], [0, 1], [1, 1]]
+        truth = 0.42898458920779164
+        
+        # Act
+        b1Alleles, b2Alleles, ed = calculate_inheritance_ed(b1Gt, b2Gt, parentsGT)
+        
+        # Assert
+        self.assertAlmostEqual(ed, truth, places=5, msg=f"Expected ED to be {truth} but got {ed}")
+    
+    def test_calculate_ed_for_results_stability_2(self):
+        "Tests done with the program in a state where the results are trustworthy; future changes should not affect the results"
+        # Arrange
+        parentsGT = [ [0, 0], [1, 1] ]
+        b1Gt = [[0, 1], [0, 1], [0, 1], [0, 1]]
+        b2Gt = [[1, 1], [0, 1], [0, 1], [1, 1]]
+        truth = 0.25
+        
+        # Act
+        b1Alleles, b2Alleles, ed = calculate_inheritance_ed(b1Gt, b2Gt, parentsGT)
+        
+        # Assert
+        self.assertAlmostEqual(ed, truth, places=5, msg=f"Expected ED to be {truth} but got {ed}")
+    
+    def test_calculate_ed_for_results_stability_2(self):
+        "Tests done with the program in a state where the results are trustworthy; future changes should not affect the results"
+        # Arrange
+        parentsGT = [ [0, 0], [0, 1] ]
+        b1Gt = [[0, 0], [0, 1], [0, 0], [0, 1]]
+        b2Gt = [[1, 1], [0, 1], [0, 1], [0, 0]]
+        truth = 0.14299486306926387
+        
+        # Act
+        b1Alleles, b2Alleles, ed = calculate_inheritance_ed(b1Gt, b2Gt, parentsGT)
+        
+        # Assert
+        self.assertAlmostEqual(ed, truth, places=5, msg=f"Expected ED to be {truth} but got {ed}")
 
 if __name__ == '__main__':
     unittest.main()
