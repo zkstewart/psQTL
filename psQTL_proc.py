@@ -14,7 +14,7 @@ from modules.splsda import validate_r_exists, validate_r_packages_installation, 
     recode_vcf, run_windowed_splsda, run_integrative_splsda
 from _version import __version__
 
-def generate_ed_file(vcfFile, metadataDict, outputFileName, isCNV=False, ignoreIdentical=True):
+def generate_ed_file(vcfFile, metadataDict, outputFileName, parentSamples=None, isCNV=False, ignoreIdentical=True):
     '''
     Parameters:
         vcfFile -- a string indicating the path to the VCF file to be processed
@@ -36,6 +36,7 @@ def generate_ed_file(vcfFile, metadataDict, outputFileName, isCNV=False, ignoreI
         # Iterate through Euclidean distance calculations for VCF file
         for contig, pos, variant, numAllelesB1, numAllelesB2, \
         euclideanDist in parse_vcf_for_ed(vcfFile, metadataDict, isCNV,
+                                          parents=parentSamples,
                                           ignoreIdentical=ignoreIdentical):
             # Write content line
             fileOut.write(f"{contig}\t{pos}\t{variant}\t{numAllelesB1}\t" + \
@@ -86,6 +87,14 @@ def main():
     sparser.set_defaults(func=smain)
     
     # ED-subparser arguments
+    eparser.add_argument("--parents", dest="parentSamples",
+                         required=False,
+                         nargs=2,
+                         help="""Optionally, provide the names of the two parents used to
+                         generate the bulks; this is used to apply an alternative form of ED
+                         which leverages the parents' genotypes to extract more signal out of
+                         your data. If not provided, the standard ED will be used.""",
+                         default=False)
     eparser.add_argument("--considerIdentical", dest="considerIdentical",
                          required=False,
                          action="store_true",
@@ -169,6 +178,7 @@ def emain(args, metadataDict, locations):
 def call_ed(args, metadataDict, locations):
     if not os.path.isfile(locations.variantEdFile + ".ok"):
         generate_ed_file(args.vcfFile, metadataDict, locations.variantEdFile,
+                         parents=args.parentSamples,
                          isCNV=False,
                          ignoreIdentical=not args.considerIdentical) # negate the flag to ignore identical
         open(locations.variantEdFile + ".ok", "w").close() # touch a .ok file to indicate success
@@ -180,6 +190,7 @@ def call_ed(args, metadataDict, locations):
 def depth_ed(args, metadataDict, locations):
     if not os.path.isfile(locations.deletionEdFile + ".ok"):
         generate_ed_file(args.deletionFile, metadataDict, locations.deletionEdFile,
+                         parents=None, # no parents used for CNVs
                          isCNV=True,
                          ignoreIdentical=False) # don't ignore identical
         open(locations.deletionEdFile + ".ok", "w").close() # touch a .ok file to indicate success

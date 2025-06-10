@@ -90,13 +90,23 @@ def calculate_inheritance_ed(b1Gt, b2Gt, parentsGT):
         numAllelesB2 -- the number of genotyped alleles in bulk 2
         edist -- a float of the the Euclidean distance between the two bulks
     '''
-    parentsGT = [ [0, 1], [0, 2] ] # represents "A/T" and "A/G" parents
-    b1Gt = [[0, 2], [1, 2], [0, 2], [0, 0]] # represents "A/G", "T/G", "A/G", "A/A" genotypes in bulk 1
-    b2Gt = [[1, 2], [0, 1], [0, 0], [0, 0]] # represents "T/G", "A/T", "A/A", "A/A" genotypes in bulk 2
+    # Raise error for unmanageable ploidy values
+    for i, gt in enumerate(parentsGT):
+        if len(gt) % 2 != 0:
+            raise ValueError(f"Odd number of alleles found in parent {i+1}'s genotype; " +
+                             "cannot calculate inheritance Euclidean distance with odd ploidy")
+    PARENT_FULLY_ASSIGNED = { f"p{i+1}" : int(len(gt) / 2) for i, gt in enumerate(parentsGT) }
     
+    if len(b1Gt[0]) != sum(PARENT_FULLY_ASSIGNED.values()) or \
+       len(b2Gt[0]) != sum(PARENT_FULLY_ASSIGNED.values()):
+        raise ValueError("Progeny samples must have a number of alleles equal to the summed value of " +
+                         "half of each parent's chromosomes (); cannot calculate inheritance Euclidean " + 
+                         "distance with mismatched ploidy")
     
+    # Assign alleles to parent haplotypes
     bulkSums = []
-    for bulkGt in [b1Gt, b2Gt]: # for each bulk
+    numSamples = [0, 0] # [numSamplesB1, numSamplesB2]
+    for i, bulkGt in enumerate([b1Gt, b2Gt]): # for each bulk
         # Set up data structure to hold assigned allele counts across the bulk
         bulkSum = {
             "p1": {
@@ -124,26 +134,31 @@ def calculate_inheritance_ed(b1Gt, b2Gt, parentsGT):
             Palleles = { allele: count for allele, count in Palleles }
             
             # Order sample alleles by the parent allele counts
-            Salleles = sorted(gt, key=lambda x: Palleles[x])
+            try:
+                Salleles = sorted(gt, key=lambda x: Palleles[x])
+            except KeyError as e:
+                continue # skip samples with alleles not in parentsGT
+            numSamples[i] += 1 # increment the number of samples in this bulk since we have a valid sample
             
             # Assign sample alleles to most likely parent alleles
             for Sallele in Salleles: # for each sample allele
                 count = Palleles[Sallele]
                 
                 # Derive the likelihood of this allele being assigned to a specific parental haplotype
+                "Fractional values indicate partial assignment of the allele to a haplotype"
                 likelihood = 1 / count
                 
                 # Partially assign the allele to all applicable haplotypes
                 for parent, assignedDict in sampleColumns.items():
                     # Skip assigned parents
-                    if sum([ assignedDict[_allele] for _allele in assignedDict ]) == 1:
+                    if sum([ assignedDict[_allele] for _allele in assignedDict ]) == PARENT_FULLY_ASSIGNED[parent]:
                         continue
                     
                     if Sallele in assignedDict:
                         assignedDict[Sallele] += likelihood
                         
                         # Update the parent allele counts to reflect that one allele has been confidently assigned
-                        if assignedDict[Sallele] == 1:
+                        if assignedDict[Sallele] == PARENT_FULLY_ASSIGNED[parent]:
                             parentGT = list(sampleColumns[parent].keys())
                             for pGT in parentGT:
                                 Palleles[pGT] -= 1
@@ -156,9 +171,36 @@ def calculate_inheritance_ed(b1Gt, b2Gt, parentsGT):
         # Set aside results for this bulk
         bulkSums.append(bulkSum)
     
-    # Calculate the Euclidean distance between the two bulks
-    ## TBD
+    # Format bulkSums to ensure all alleles are present [makes it easier to calculate ED without nested if statements]
+    uniqueAlleles = list(set([ allele for gt in parentsGT for allele in gt ]))
+    for allele in uniqueAlleles:
+        for bSum in bulkSums:
+            if allele not in bSum["p1"]:
+                bSum["p1"][allele] = 0
+            if allele not in bSum["p2"]:
+                bSum["p2"][allele] = 0
+    b1Sum, b2Sum = bulkSums
     
+    # Get the number of samples and alleles in each bulk
+    numSamplesB1, numSamplesB2 = numSamples # we might have skipped samples that don't match parent genotypes
+    numAllelesB1 = numSamplesB1 * len(b1Gt[0]) # num samples * ploidy of the samples
+    numAllelesB2 = numSamplesB2 * len(b2Gt[0]) # conforms to the calculate_segregant_ed() return values
+    
+    # Calculate the Euclidean distance between the parental inherited alleles if possible
+    """Note that values are divied by the number of samples, not the number of alleles;
+    doing so gives results in the same scale as the standard segregant ED calculation,
+    but the rationale is difficult for me to articulate"""
+    if numSamplesB1 == 0 or numSamplesB2 == 0:
+        return numAllelesB1, numAllelesB2, 0 # euclidean distance cannot be calculated
+    else:
+        edist = sqrt(sum([
+            ((b1Sum[parent][allele] / numSamplesB1) - (b2Sum[parent][allele] / numSamplesB2))**2
+            for parent in ["p1", "p2"]
+            for allele in uniqueAlleles
+        ])/2) # divide by 2 since there are two parents we end up with a mirrored diagonal matrix
+    
+    # Return the values
+    return numAllelesB1, numAllelesB2, edist
 
 def parse_vcf_for_ed(vcfFile, metadataDict, isCNV, parents=None, ignoreIdentical=True, quiet=False):
     '''
@@ -255,7 +297,7 @@ def parse_vcf_for_ed(vcfFile, metadataDict, isCNV, parents=None, ignoreIdentical
             parentsGT = [ snpDict[parent] for parent in parents ] if parents != None else None
             
             # Calculate Euclidean distance
-            if parents == None:
+            if parents == []:
                 # Standard segregant ED calculation
                 numAllelesB1, numAllelesB2, \
                     euclideanDist = calculate_segregant_ed(bulk1, bulk2, isCNV=isCNV)
@@ -263,7 +305,6 @@ def parse_vcf_for_ed(vcfFile, metadataDict, isCNV, parents=None, ignoreIdentical
                 # Haplotype inheritance ED calculation
                 if len(parentsGT) != 2: # this can happen if one or both parents are not genotyped at this position
                     continue
-                
                 numAllelesB1, numAllelesB2, \
                     euclideanDist = calculate_inheritance_ed(bulk1, bulk2, parentsGT)
             

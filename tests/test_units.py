@@ -7,13 +7,15 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from modules.parsing import parse_metadata, vcf_header_to_metadata_validation, parse_vcf_genotypes, \
     parse_vcf_stats, parse_samtools_depth_tsv, parse_binned_tsv
 from modules.ncls import WindowedNCLS
-from modules.ed import calculate_segregant_ed, parse_vcf_for_ed
+from modules.ed import parse_vcf_for_ed, calculate_segregant_ed, calculate_inheritance_ed
 from modules.depth import get_median_value, predict_deletions
 from modules.samtools_handling import depth_to_histoDict
 
 # Specify data locations
 dataDir = os.path.join(os.getcwd(), "data")
 metadataFile = os.path.join(dataDir, "metadata.tsv")
+
+MAXIMAL_SEGREGATION = 1.4142135623730951 # sqrt(2)
 
 # Define unit tests
 class TestParsing(unittest.TestCase):
@@ -122,7 +124,7 @@ class TestParsing(unittest.TestCase):
 
 class TestDepth(unittest.TestCase):
     def test_get_median_value_1(self):
-        "Test that the median value calculation works correctly"
+        "Test that the median value calculation works correctly with zeros"
         # Arrange
         depthList = np.array([0, 1, 2, 3, 4, 5])
         
@@ -133,7 +135,7 @@ class TestDepth(unittest.TestCase):
         self.assertEqual(medianValue, 2.5, "Median of [0, 1, 2, 3, 4, 5] should be 2.5")
 
     def test_get_median_value_2(self):
-        "Test that the median value calculation works correctly"
+        "Test that the median value calculation works correctly without zeros"
         # Arrange
         depthList = np.array([1, 2, 3, 4, 5])
         
@@ -144,7 +146,7 @@ class TestDepth(unittest.TestCase):
         self.assertEqual(medianValue, 3.0, "Median of [1, 2, 3, 4, 5] should be 3.0")
     
     def test_get_median_value_3(self):
-        "Test that the median value calculation works correctly"
+        "Test that the median value calculation works correctly when all values are 0"
         # Arrange
         depthList = np.array([0, 0, 0, 0, 0])
         
@@ -155,7 +157,7 @@ class TestDepth(unittest.TestCase):
         self.assertEqual(medianValue, 1, "Median should fall back to 1 if all values are 0")
     
     def test_get_median_value_4(self):
-        "Test that the median value calculation works correctly"
+        "Test that the median value calculation works correctly when falling back to a non-zero value"
         # Arrange
         depthList = np.array([0, 0, 0, 5, 0, 0])
         
@@ -180,7 +182,7 @@ class TestDepth(unittest.TestCase):
         self.assertTrue(all(alleles == truth), "Predicted alleles should match the expected truth values")
     
     def test_samtools_binning_1(self):
-        "Test that samtools binning works correctly"
+        "Test that samtools binning works correctly with binSize 1"
         # Arrange
         depthFile = os.path.join(dataDir, "depth.1.tsv")
         lengthsDict = {"C.glau_01": 10}  # Example contig length
@@ -196,7 +198,7 @@ class TestDepth(unittest.TestCase):
         self.assertTrue(all(histoDict['C.glau_01'] == truth), f"Expected '{truth}' but got '{histoDict['C.glau_01']}'")
     
     def test_samtools_binning_2(self):
-        "Test that samtools binning works correctly"
+        "Test that samtools binning works correctly with divisible binSize"
         # Arrange
         depthFile = os.path.join(dataDir, "depth.1.tsv")
         lengthsDict = {"C.glau_01": 10}  # Example contig length
@@ -212,7 +214,7 @@ class TestDepth(unittest.TestCase):
         self.assertTrue(all(histoDict['C.glau_01'] == truth), f"Expected '{truth}' but got '{histoDict['C.glau_01']}'")
     
     def test_samtools_binning_3(self):
-        "Test that samtools binning works correctly"
+        "Test that samtools binning works correctly with unevenly divisible binSize"
         # Arrange
         depthFile = os.path.join(dataDir, "depth.1.tsv")
         lengthsDict = {"C.glau_01": 10}  # Example contig length
@@ -228,7 +230,7 @@ class TestDepth(unittest.TestCase):
         self.assertTrue(all(histoDict['C.glau_01'] == truth), f"Expected '{truth}' but got '{histoDict['C.glau_01']}'")
     
     def test_samtools_binning_4(self):
-        "Test that samtools binning works correctly"
+        "Test that samtools binning works correctly with excess binSize"
         # Arrange
         depthFile = os.path.join(dataDir, "depth.1.tsv")
         lengthsDict = {"C.glau_01": 10}  # Example contig length
@@ -274,8 +276,8 @@ class TestED(unittest.TestCase):
             self.assertAlmostEqual(v1, v2, places=5, msg=f"Expected {v2} but got {v1}")
     
     def test_calculate_segregant_ed_1(self):
+        "Test that segregation ED is different for isCNV True and False under certain conditions"
         # Arrange
-        power = 4
         b1Gt = [[2, 2],[0, 1],[0, 0],[1, 2],[0, 1],[0, 0],[0, 1],[0, 0],[0, 0],[1, 2],[0, 0]]
         b2Gt = [[0, 0],[2, 2],[0, 0],[0, 0],[0, 0],[0, 0],[0, 0],[0, 0],[0, 0],[0, 0],[0, 1],
                 [1, 2],[0, 0],[2, 2],[1, 2],[0, 0],[1, 2],[2, 2],[0, 0],[1, 2],[0, 0],[1, 2],
@@ -290,8 +292,8 @@ class TestED(unittest.TestCase):
         self.assertNotEqual(ed_1, ed_2, "ED should not be the same for isCNV True and False")
     
     def test_calculate_segregant_ed_2(self):
+        "Test that segregation ED is the same for isCNV True and False under certain conditions"
         # Arrange
-        power = 4
         b1Gt = [[0, 1],[0, 1],[0, 1],[0, 1],[0, 1],[0, 1],[0, 1],[0, 1],[0, 1],[1, 1],[0, 1]]
         b2Gt = [[0, 0],[0, 1],[0, 1],[0, 1],[0, 0],[0, 0],[0, 1],[0, 1],[0, 1],[0, 0],[0, 1],
                 [0, 1],[0, 0],[0, 1],[0, 1],[0, 0],[0, 0],[0, 0],[0, 1],[0, 1],[0, 1],[0, 0],
@@ -304,6 +306,115 @@ class TestED(unittest.TestCase):
         
         # Assert
         self.assertEqual(ed_1, ed_2, "ED should be the same for isCNV True and False")
+    
+    def test_calculate_inheritance_and_segregant_equality_1(self):
+        "Both ED methods should be equal for zero segregation"
+        # Arrange
+        parentsGT = [ [0, 1], [0, 1] ]
+        b1Gt = [[0, 1], [0, 1], [0, 1], [0, 1]]
+        b2Gt = [[0, 1], [0, 1], [0, 1], [0, 1]]
+        truth = 0
+        
+        # Act
+        b1Alleles_1, b2Alleles_1, ed_1 = calculate_segregant_ed(b1Gt, b2Gt, isCNV=False)
+        b1Alleles_2, b2Alleles_2, ed_2 = calculate_inheritance_ed(b1Gt, b2Gt, parentsGT)
+        
+        # Assert
+        self.assertEqual(ed_1, truth, "Segregant ED should be 0 for identical genotypes")
+        self.assertEqual(ed_2, truth, "Inheritance ED should be 0 for identical genotypes")
+        self.assertEqual(ed_1, ed_2, "Both ED methods should be equal for zero segregation")
+    
+    def test_calculate_inheritance_and_segregant_equality_2(self):
+        "Both ED methods should be equal for maximal segregation"
+        # Arrange
+        parentsGT = [ [0, 1], [0, 1] ]
+        b1Gt = [[0, 0], [0, 0], [0, 0], [0, 0]]
+        b2Gt = [[1, 1], [1, 1], [1, 1], [1, 1]]
+        truth = MAXIMAL_SEGREGATION
+        
+        # Act
+        b1Alleles_1, b2Alleles_1, ed_1 = calculate_segregant_ed(b1Gt, b2Gt, isCNV=False)
+        b1Alleles_2, b2Alleles_2, ed_2 = calculate_inheritance_ed(b1Gt, b2Gt, parentsGT)
+        
+        # Assert
+        self.assertAlmostEqual(ed_1, truth, places=5, msg="Segregant ED should be ~1.41421 for identical genotypes")
+        self.assertAlmostEqual(ed_2, truth, places=5, msg="Inheritance ED should be ~1.41421 for identical genotypes")
+        self.assertEqual(ed_1, ed_2, "Both ED methods should be equal for maximal segregation")
+    
+    def test_calculate_inheritance_ed_dip_dip_parents(self):
+        # Arrange
+        parentsGT = [ [0, 1], [0, 2] ] # represents "A/T" and "A/G" parents
+        b1Gt = [[0, 2], [1, 2], [0, 2], [0, 0]] # represents "A/G", "T/G", "A/G", "A/A" genotypes in bulk 1
+        b2Gt = [[1, 2], [0, 1], [0, 0], [0, 0]] # represents "T/G", "A/T", "A/A", "A/A" genotypes in bulk 2
+        # truth = 0.7905694150420949 # calculated by hand on the plane from WA to Brisbane!
+        truth = 0.5590169943749475 # after adjustment of dividing sum by 2 prior to sqrt() operation
+        
+        # Act
+        b1Alleles, b2Alleles, ed = calculate_inheritance_ed(b1Gt, b2Gt, parentsGT)
+        
+        # Assert
+        self.assertAlmostEqual(ed, truth, places=5, 
+                             msg=f"Expected ED to be approximately {truth} but got {ed}")
+        self.assertEqual(b1Alleles, 8, "Expected 8 alleles in bulk 1")
+        self.assertEqual(b2Alleles, 8, "Expected 8 alleles in bulk 2")
+    
+    def test_calculate_inheritance_ed_tet_tet_parents_1(self):
+        "Non-segregation should still give ED==0 with tetraploid parents and samples"
+        # Arrange
+        parentsGT = [ [0, 0, 1, 1], [0, 0, 2, 2] ]
+        b1Gt = [[0, 0, 1, 2], [0, 0, 1, 2], [0, 0, 1, 2], [0, 0, 1, 2]]
+        b2Gt = [[0, 0, 1, 2], [0, 0, 1, 2], [0, 0, 1, 2], [0, 0, 1, 2]]
+        truth = 0
+        
+        # Act
+        b1Alleles, b2Alleles, ed = calculate_inheritance_ed(b1Gt, b2Gt, parentsGT)
+        
+        # Assert
+        self.assertEqual(ed, truth, f"Expected ED to be zero but got {ed}")
+    
+    def test_calculate_inheritance_ed_tet_tet_parents_2(self):
+        "Maximal-segregation should still give ED==1.41421 with tetraploid parents and samples"
+        # Arrange
+        parentsGT = [ [0, 1, 2, 3], [0, 1, 4, 5] ]
+        b1Gt = [[0, 1, 2, 4], [0, 1, 2, 4], [0, 1, 2, 4], [0, 1, 2, 4]]
+        b2Gt = [[0, 1, 3, 5], [0, 1, 3, 5], [0, 1, 3, 5], [0, 1, 3, 5]]
+        truth = MAXIMAL_SEGREGATION
+        
+        # Act
+        b1Alleles, b2Alleles, ed = calculate_inheritance_ed(b1Gt, b2Gt, parentsGT)
+        
+        # Assert
+        self.assertEqual(ed, truth, f"Expected ED to be zero but got {ed}")
+    
+    def test_calculate_inheritance_ed_tet_tet_parents_3(self):
+        "Half-shuffled samples from the above test should give ED==0 with tetraploid parents and samples"
+        # Arrange
+        parentsGT = [ [0, 1, 2, 3], [0, 1, 4, 5] ]
+        b1Gt = [[0, 1, 2, 4], [0, 1, 2, 4], [0, 1, 3, 5], [0, 1, 3, 5]]
+        b2Gt = [[0, 1, 3, 5], [0, 1, 3, 5], [0, 1, 2, 4], [0, 1, 2, 4]]
+        truth = 0
+        
+        # Act
+        b1Alleles, b2Alleles, ed = calculate_inheritance_ed(b1Gt, b2Gt, parentsGT)
+        
+        # Assert
+        self.assertEqual(ed, truth, f"Expected ED to be zero but got {ed}")
+    
+    def test_calculate_inheritance_ed_with_impossible_progeny(self):
+        "Test that inheritance ED handles impossible progeny (not inheriting alleles that match parents) correctly"
+        # Arrange
+        parentsGT = [ [0, 0, 1, 1], [0, 0, 2, 2] ]
+        b1Gt = [[0, 1, 2, 4], [0, 1, 2, 4], [0, 1, 3, 5], [0, 1, 3, 5]]
+        b2Gt = [[0, 1, 3, 5], [0, 1, 3, 5], [0, 1, 2, 4], [0, 1, 2, 4]]
+        truth = 0
+        
+        # Act
+        b1Alleles, b2Alleles, ed = calculate_inheritance_ed(b1Gt, b2Gt, parentsGT)
+        
+        # Assert
+        self.assertEqual(ed, truth, f"Expected ED to be zero but got {ed}")
+        self.assertEqual(b1Alleles, 0, "Expected 0 alleles in bulk 1")
+        self.assertEqual(b2Alleles, 0, "Expected 0 alleles in bulk 2")
 
 if __name__ == '__main__':
     unittest.main()
