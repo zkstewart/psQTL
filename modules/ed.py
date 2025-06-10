@@ -118,11 +118,11 @@ def calculate_inheritance_ed(b1Gt, b2Gt, parentsGT):
                              "cannot calculate inheritance Euclidean distance with odd ploidy")
     PARENT_FULLY_ASSIGNED = { f"p{i+1}" : int(len(gt) / 2) for i, gt in enumerate(parentsGT) }
     
-    if len(b1Gt[0]) != sum(PARENT_FULLY_ASSIGNED.values()) or \
-       len(b2Gt[0]) != sum(PARENT_FULLY_ASSIGNED.values()):
+    if (len(b1Gt) > 0 and len(b1Gt[0]) != sum(PARENT_FULLY_ASSIGNED.values())) or \
+       (len(b2Gt) > 0 and len(b2Gt[0]) != sum(PARENT_FULLY_ASSIGNED.values())):
         raise ValueError("Progeny samples must have a number of alleles equal to the summed value of " +
-                         "half of each parent's chromosomes (); cannot calculate inheritance Euclidean " + 
-                         "distance with mismatched ploidy")
+                         f"half of each parent's chromosomes ({sum(PARENT_FULLY_ASSIGNED.values())}); " +
+                         "cannot calculate inheritance Euclidean distance with mismatched ploidy")
     
     # Determine the possible progeny genotypes based on the parents' genotypes
     possibleGTs = possible_genotypes(parentsGT[0], parentsGT[1])
@@ -211,8 +211,8 @@ def calculate_inheritance_ed(b1Gt, b2Gt, parentsGT):
     
     # Get the number of samples and alleles in each bulk
     numSamplesB1, numSamplesB2 = numSamples # we might have skipped samples that don't match parent genotypes
-    numAllelesB1 = numSamplesB1 * len(b1Gt[0]) # num samples * ploidy of the samples
-    numAllelesB2 = numSamplesB2 * len(b2Gt[0]) # conforms to the calculate_segregant_ed() return values
+    numAllelesB1 = numSamplesB1 * len(b1Gt[0]) if numSamplesB1 > 0 else 0 # num samples * ploidy of the samples
+    numAllelesB2 = numSamplesB2 * len(b2Gt[0]) if numSamplesB2 > 0 else 0 # conforms to the calculate_segregant_ed() return values
     
     # Calculate the Euclidean distance between the parental inherited alleles if possible
     """Note that values are divied by the number of samples, not the number of alleles;

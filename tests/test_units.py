@@ -490,5 +490,37 @@ class TestED(unittest.TestCase):
         # Assert
         self.assertAlmostEqual(ed, truth, places=5, msg=f"Expected ED to be {truth} but got {ed}")
 
+    def test_calculate_inheritance_ed_with_empty_bulk(self):
+        "Test for impossible progeny (alleles could only be from a clone)"
+        # Arrange
+        parentsGT = [ [1, 2], [0, 0] ]
+        b1Gt = []
+        b2Gt = [[0, 1]]
+        truth = 0
+        
+        # Act
+        b1Alleles, b2Alleles, ed = calculate_inheritance_ed(b1Gt, b2Gt, parentsGT)
+        
+        # Assert
+        self.assertEqual(ed, truth, f"Expected ED to be zero but got {ed}")
+        self.assertEqual(b1Alleles, 0, "Expected 0 alleles in bulk 1")
+        self.assertEqual(b2Alleles, 2, "Expected 0 alleles in bulk 2")
+
+    def test_calculate_segregant_ed_with_empty_bulk(self):
+        "Test for impossible progeny (alleles could only be from a clone)"
+        # Arrange
+        parentsGT = [ [1, 2], [0, 0] ]
+        b1Gt = []
+        b2Gt = [[0, 1]]
+        truth = 0
+        
+        # Act
+        b1Alleles, b2Alleles, ed = calculate_segregant_ed(b1Gt, b2Gt, parentsGT)
+        
+        # Assert
+        self.assertEqual(ed, truth, f"Expected ED to be zero but got {ed}")
+        self.assertEqual(b1Alleles, 0, "Expected 0 alleles in bulk 1")
+        self.assertEqual(b2Alleles, 2, "Expected 0 alleles in bulk 2")
+
 if __name__ == '__main__':
     unittest.main()
