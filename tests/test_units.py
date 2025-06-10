@@ -400,7 +400,7 @@ class TestED(unittest.TestCase):
         # Assert
         self.assertEqual(ed, truth, f"Expected ED to be zero but got {ed}")
     
-    def test_calculate_inheritance_ed_with_impossible_progeny(self):
+    def test_calculate_inheritance_ed_with_impossible_progeny_1(self):
         "Test that inheritance ED handles impossible progeny (not inheriting alleles that match parents) correctly"
         # Arrange
         parentsGT = [ [0, 0, 1, 1], [0, 0, 2, 2] ]
@@ -415,6 +415,22 @@ class TestED(unittest.TestCase):
         self.assertEqual(ed, truth, f"Expected ED to be zero but got {ed}")
         self.assertEqual(b1Alleles, 0, "Expected 0 alleles in bulk 1")
         self.assertEqual(b2Alleles, 0, "Expected 0 alleles in bulk 2")
+    
+    def test_calculate_inheritance_ed_with_impossible_progeny_2(self):
+        "Test that inheritance ED handles impossible progeny (not inheriting alleles that match parents) correctly"
+        # Arrange
+        parentsGT = [ [1, 1], [0, 1] ]
+        b1Gt = [[0, 0],[0, 0],[0, 0],[0, 0]]
+        b2Gt = [[1, 1],[0, 1],[1, 1],[0, 1]]
+        truth = 0
+        
+        # Act
+        b1Alleles, b2Alleles, ed = calculate_inheritance_ed(b1Gt, b2Gt, parentsGT)
+        
+        # Assert
+        self.assertEqual(ed, truth, f"Expected ED to be zero but got {ed}")
+        self.assertEqual(b1Alleles, 0, "Expected 0 alleles in bulk 1")
+        self.assertEqual(b2Alleles, 8, "Expected 0 alleles in bulk 2")
 
 if __name__ == '__main__':
     unittest.main()

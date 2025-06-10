@@ -138,6 +138,11 @@ def calculate_inheritance_ed(b1Gt, b2Gt, parentsGT):
                 Salleles = sorted(gt, key=lambda x: Palleles[x])
             except KeyError as e:
                 continue # skip samples with alleles not in parentsGT
+            
+            # Validate that the sample has a genotype that is compatible with the parents
+            numNeeded = sum([ count for Pallele, count in Palleles.items() if Pallele in Salleles ])
+            if numNeeded < len(Salleles):
+                continue # skip samples for which parent alleles cannot possibly be assigned
             numSamples[i] += 1 # increment the number of samples in this bulk since we have a valid sample
             
             # Assign sample alleles to most likely parent alleles
