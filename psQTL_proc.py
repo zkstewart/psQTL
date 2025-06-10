@@ -14,7 +14,7 @@ from modules.splsda import validate_r_exists, validate_r_packages_installation, 
     recode_vcf, run_windowed_splsda, run_integrative_splsda
 from _version import __version__
 
-def generate_ed_file(vcfFile, metadataDict, outputFileName, parentSamples=None, isCNV=False, ignoreIdentical=True):
+def generate_ed_file(vcfFile, metadataDict, outputFileName, parentSamples=[], isCNV=False, ignoreIdentical=True):
     '''
     Parameters:
         vcfFile -- a string indicating the path to the VCF file to be processed
@@ -94,7 +94,7 @@ def main():
                          generate the bulks; this is used to apply an alternative form of ED
                          which leverages the parents' genotypes to extract more signal out of
                          your data. If not provided, the standard ED will be used.""",
-                         default=False)
+                         default=[])
     eparser.add_argument("--considerIdentical", dest="considerIdentical",
                          required=False,
                          action="store_true",

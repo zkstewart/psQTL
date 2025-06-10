@@ -133,7 +133,7 @@ class TestDepth(unittest.TestCase):
         
         # Assert
         self.assertEqual(medianValue, 2.5, "Median of [0, 1, 2, 3, 4, 5] should be 2.5")
-
+    
     def test_get_median_value_2(self):
         "Test that the median value calculation works correctly without zeros"
         # Arrange
@@ -447,7 +447,7 @@ class TestED(unittest.TestCase):
         self.assertEqual(ed, truth, f"Expected ED to be zero but got {ed}")
         self.assertEqual(b1Alleles, 0, "Expected 0 alleles in bulk 1")
         self.assertEqual(b2Alleles, 0, "Expected 0 alleles in bulk 2")
-
+    
     def test_calculate_ed_for_results_stability_1(self):
         "Tests done with the program in a state where the results are trustworthy; future changes should not affect the results"
         # Arrange
@@ -489,7 +489,7 @@ class TestED(unittest.TestCase):
         
         # Assert
         self.assertAlmostEqual(ed, truth, places=5, msg=f"Expected ED to be {truth} but got {ed}")
-
+    
     def test_calculate_inheritance_ed_with_empty_bulk(self):
         "Test for impossible progeny (alleles could only be from a clone)"
         # Arrange
@@ -505,7 +505,7 @@ class TestED(unittest.TestCase):
         self.assertEqual(ed, truth, f"Expected ED to be zero but got {ed}")
         self.assertEqual(b1Alleles, 0, "Expected 0 alleles in bulk 1")
         self.assertEqual(b2Alleles, 2, "Expected 0 alleles in bulk 2")
-
+    
     def test_calculate_segregant_ed_with_empty_bulk(self):
         "Test for impossible progeny (alleles could only be from a clone)"
         # Arrange

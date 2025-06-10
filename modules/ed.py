@@ -74,13 +74,17 @@ def calculate_segregant_ed(b1Gt, b2Gt, isCNV=False):
 
 def possible_genotypes(gt1, gt2):
     '''
+    Calculate all possible inheritable genotypes from two parent genotypes.
+    
     Parameters:
         gt1 / gt2 -- a list of integers representing the genotype values
                      with format like:
                      [0, 1, 2, ...]
     Returns:
-        possibleGTs -- a set of tuples containing all possible genotypes
-                       that can be formed from the two genotypes
+        possibleGTs -- a list of sets containing all possible genotypes
+                       that can be formed from the two genotypes; sets
+                       mask duplicated alleles but allow for testing
+                       of genotype without regard to order
     '''
     numGt1 = int(len(gt1) / 2)
     numGt2 = int(len(gt2) / 2)
@@ -225,12 +229,12 @@ def calculate_inheritance_ed(b1Gt, b2Gt, parentsGT):
             ((b1Sum[parent][allele] / numSamplesB1) - (b2Sum[parent][allele] / numSamplesB2))**2
             for parent in ["p1", "p2"]
             for allele in uniqueAlleles
-        ])/2) # divide by 2 since there are two parents we end up with a mirrored diagonal matrix
+        ])/2) # divide by 2 since there are two parents and 2x the number of comparions made across bulks
     
     # Return the values
     return numAllelesB1, numAllelesB2, edist
 
-def parse_vcf_for_ed(vcfFile, metadataDict, isCNV, parents=None, ignoreIdentical=True, quiet=False):
+def parse_vcf_for_ed(vcfFile, metadataDict, isCNV, parents=[], ignoreIdentical=True, quiet=False):
     '''
     Parameters:
         vcfFile -- a string pointing to the VCF or VCF-like file to parse
@@ -242,8 +246,8 @@ def parse_vcf_for_ed(vcfFile, metadataDict, isCNV, parents=None, ignoreIdentical
         isCNV -- a boolean indicating whether the VCF file is for CNVs ("depth"; True)
                  or SNPs/indels ("call"; False)
         parents -- (OPTIONAL) a list of two sample IDs to use as parents for calculating
-                   haplotype inheritance ED OR None if no parents are available or specified;
-                   default is None for standard segregant ED calculation
+                   haplotype inheritance ED OR an empty list if no parents are available
+                   or specified; default is an empty list for standard segregant ED calculation
         ignoreIdentical -- (OPTIONAL) a boolean indicating whether to ignore
                            identical non-reference alleles shared by all samples;
                            default is True, which means that identical non-reference
@@ -259,13 +263,14 @@ def parse_vcf_for_ed(vcfFile, metadataDict, isCNV, parents=None, ignoreIdentical
         euclideanDist -- the Euclidean distance between the two bulks
     '''
     # Validations
-    if parents != None and len(parents) != 2:
-        raise ValueError("Parents must be a list of two sample IDs for haplotype inheritance ED calculation")
+    if parents == None: # just in case
+        parents = []
+    
+    if parents != [] and len(parents) != 2:
+        raise ValueError("Parents must be a list with zero (standard ED) or two sample IDs (haplotype inheritance ED)")
         for parent in parents:
             if parent not in metadataDict["bulk1"] and parent not in metadataDict["bulk2"]:
                 raise ValueError(f"Parent sample '{parent}' is not in either bulk; cannot calculate haplotype inheritance ED")
-    if parents == None:
-        parents = [] # this lets us use 'in' checks later without worrying about NoneType
     
     # Iterate through the VCF file
     samples = None
