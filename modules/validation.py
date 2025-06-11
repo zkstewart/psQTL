@@ -160,7 +160,9 @@ def validate_post_args(args):
     if "call" in args.inputType and "depth" in args.inputType:
         if "splsda" in args.measurementTypes:
             if not os.path.isfile(locations.integrativeSplsdaSelectedFile):
-                raise FileNotFoundError(f"Integrated sPLS-DA file '{locations.integrativeSplsdaSelectedFile}' does not exist!")
+                print("# Note: '-i call depth' and '-m splsda' was set, but no integrated sPLS-DA result was found; if you have not run " +
+                      "'psQTL_proc.py splsda -i call depth' yet, you may want to do that first. Otherwise, if running that command provided " +
+                      "a message indicating that 'Integrative sPLS-DA is not possible or necessary', then you should ignore this message.")
     
     # Validate genome FASTA file
     if not os.path.isfile(args.genomeFasta):
