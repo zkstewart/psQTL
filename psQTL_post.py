@@ -262,9 +262,10 @@ def main():
             dataDict["depth"]["ber"], dataDict["depth"]["ber_windowSize"] = parse_ber_to_windowed_ncls(locations.deletionSplsdaBerFile)
     if "call" in args.inputType and "depth" in args.inputType:
         if "splsda" in args.measurementTypes:
-            # Parse the integrated Sparse Partial Least Squares Discriminant Analysis data
-            dataDict["call"]["integrated"], dataDict["depth"]["integrated"] = parse_integrated_to_windowed_ncls(
-                locations.integrativeSplsdaSelectedFile)
+            if os.path.isfile(locations.integrativeSplsdaSelectedFile):
+                # Parse the integrated Sparse Partial Least Squares Discriminant Analysis data
+                dataDict["call"]["integrated"], dataDict["depth"]["integrated"] = parse_integrated_to_windowed_ncls(
+                    locations.integrativeSplsdaSelectedFile)
     
     # Parse depth data if necessary
     if "coverage" in args.plotTypes and "depth" in args.inputType:
