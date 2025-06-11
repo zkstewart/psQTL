@@ -7,7 +7,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from modules.parsing import parse_metadata, vcf_header_to_metadata_validation, parse_vcf_genotypes, \
     parse_vcf_stats, parse_samtools_depth_tsv, parse_binned_tsv
 from modules.ncls import WindowedNCLS
-from modules.ed import parse_vcf_for_ed, calculate_segregant_ed, calculate_inheritance_ed
+from modules.ed import parse_vcf_for_ed, calculate_segregant_ed, calculate_inheritance_ed, gt_median_adjustment
 from modules.depth import get_median_value, predict_deletions
 from modules.samtools_handling import depth_to_histoDict
 
@@ -521,6 +521,66 @@ class TestED(unittest.TestCase):
         self.assertEqual(ed, truth, f"Expected ED to be zero but got {ed}")
         self.assertEqual(b1Alleles, 0, "Expected 0 alleles in bulk 1")
         self.assertEqual(b2Alleles, 2, "Expected 0 alleles in bulk 2")
+    
+    def test_calculate_cnv_median_adjustment_1(self):
+        "Test that median adjustment for CNVs works correctly (bulks segregate evenly)"
+        # Arrange
+        b1Gt = [[0, 0], [0, 0], [0, 0], [0, 0]]
+        b2Gt = [[100, 100], [100, 100], [100, 100], [100, 100]]
+        b1Truth = 0
+        b2Truth = 1
+        
+        # Act
+        b1AdjGt, b2AdjGt = gt_median_adjustment([b1Gt, b2Gt])
+        
+        # Assert
+        self.assertTrue(all([ allele == b1Truth for gt in b1AdjGt for allele in gt ]), f"Expected adjusted bulk 1 to be {b1Truth}")
+        self.assertTrue(all([ allele == b2Truth for gt in b2AdjGt for allele in gt ]), f"Expected adjusted bulk 2 to be {b2Truth}")
+    
+    def test_calculate_cnv_median_adjustment_2(self):
+        "Test that median adjustment for CNVs works correctly (all alleles are zero)"
+        # Arrange
+        b1Gt = [[0, 0], [0, 0], [0, 0], [0, 0]]
+        b2Gt = [[0, 0], [0, 0], [0, 0], [0, 0]]
+        b1Truth = 0
+        b2Truth = 0
+        
+        # Act
+        b1AdjGt, b2AdjGt = gt_median_adjustment([b1Gt, b2Gt])
+        
+        # Assert
+        self.assertTrue(all([ allele == b1Truth for gt in b1AdjGt for allele in gt ]), f"Expected adjusted bulk 1 to be {b1Truth}")
+        self.assertTrue(all([ allele == b2Truth for gt in b2AdjGt for allele in gt ]), f"Expected adjusted bulk 2 to be {b2Truth}")
+    
+    def test_calculate_cnv_median_adjustment_3(self):
+        "Test that median adjustment for CNVs works correctly (all alleles are one)"
+        # Arrange
+        b1Gt = [[1, 1], [1, 1], [1, 1], [1, 1]]
+        b2Gt = [[1, 1], [1, 1], [1, 1], [1, 1]]
+        b1Truth = 0
+        b2Truth = 0
+        
+        # Act
+        b1AdjGt, b2AdjGt = gt_median_adjustment([b1Gt, b2Gt])
+        
+        # Assert
+        self.assertTrue(all([ allele == b1Truth for gt in b1AdjGt for allele in gt ]), f"Expected adjusted bulk 1 to be {b1Truth}")
+        self.assertTrue(all([ allele == b2Truth for gt in b2AdjGt for allele in gt ]), f"Expected adjusted bulk 2 to be {b2Truth}")
+    
+    def test_calculate_cnv_median_adjustment_4(self):
+        "Test that median adjustment for CNVs works correctly (one genotype is different)"
+        # Arrange
+        b1Gt = [[0, 0], [0, 0], [0, 0], [0, 0]]
+        b2Gt = [[0, 0], [0, 0], [0, 0], [0, 1]]
+        b1Truth = 0
+        b2Truth = 0
+        
+        # Act
+        b1AdjGt, b2AdjGt = gt_median_adjustment([b1Gt, b2Gt])
+        
+        # Assert
+        self.assertTrue(all([ allele == b1Truth for gt in b1AdjGt for allele in gt ]), f"Expected adjusted bulk 1 to be {b1Truth}")
+        self.assertFalse(all([ allele == b2Truth for gt in b2AdjGt for allele in gt ]), f"Expected adjusted bulk 2 to NOT be all {b2Truth}")
 
 if __name__ == '__main__':
     unittest.main()

@@ -6,6 +6,42 @@ from itertools import combinations
 from .parsing import read_gz_file, vcf_header_to_metadata_validation, parse_vcf_genotypes
 from .ncls import WindowedNCLS
 
+def gt_median_adjustment(genotypeLists):
+    '''
+    Receives a list of genotype lists, obtains the median of all alleles found in the lists,
+    and adjusts the genotypes to be relative to the median. This is specifically intended for
+    use on CNV genotypes, which are often highly variable and range from 0 up to very high values.
+    
+    Parameters:
+        genotypeLists -- a list of one or more lists containing genotype values as integers
+                         with format like:
+                         [
+                             [
+                                [0, 1],
+                                [0, 0],
+                                [1, 1],
+                                ...
+                             ],
+                             [ ... ],
+                             ...
+                         ]
+    Returns:
+        adjustedGenotypes -- a list of lists with the same structure as genotypeLists
+                             but with genotypes adjusted to be relative to the median of all
+                             alleles found in the genotypeLists
+    '''
+    alleles = [ allele for sublist in genotypeLists for gt in sublist for allele in gt ]
+    medianAllele = np.median(alleles)
+    adjustedGenotypes = []
+    for sublist in genotypeLists:
+        adjustedSublist = []
+        for allele1, allele2 in sublist:
+            adjustedAllele1 = 0 if allele1 <= medianAllele else 1
+            adjustedAllele2 = 0 if allele2 <= medianAllele else 1
+            adjustedSublist.append([adjustedAllele1, adjustedAllele2])
+        adjustedGenotypes.append(adjustedSublist)
+    return adjustedGenotypes
+
 def calculate_segregant_ed(b1Gt, b2Gt, isCNV=False):
     '''
     Parameters:
@@ -24,35 +60,25 @@ def calculate_segregant_ed(b1Gt, b2Gt, isCNV=False):
         numAllelesB2 -- the number of genotyped alleles in bulk 2
         edist -- a float of the the Euclidean distance between the two bulks
     '''
+    # Adjust values if this is a CNV
+    if isCNV:
+        b1Gt, b2Gt = gt_median_adjustment([b1Gt, b2Gt])
+    
     # Get all the unique alleles
     alleles = [ allele for gt in b1Gt + b2Gt for allele in gt ]
     uniqueAlleles = list(set(alleles))
     
     # Tally for bulk 1
-    if isCNV:
-        uniqueAlleles = [0, 1] # CNV genotypes get re-encoded to 0 and 1
-        medianAllele = np.median(alleles)
-        b1Count = { allele: 0 for allele in uniqueAlleles } # CNV genotypes are in relation to the median
-        for allele1, allele2 in b1Gt:
-            b1Count[0 if allele1 <= medianAllele else 1] += 1
-            b1Count[0 if allele2 <= medianAllele else 1] += 1
-    else:
-        b1Count = { allele: 0 for allele in uniqueAlleles }
-        for allele1, allele2 in b1Gt:
-            b1Count[allele1] += 1
-            b1Count[allele2] += 1
+    b1Count = { allele: 0 for allele in uniqueAlleles }
+    for allele1, allele2 in b1Gt:
+        b1Count[allele1] += 1
+        b1Count[allele2] += 1
     
     # Tally for bulk 2
-    if isCNV:
-        b2Count = { allele: 0 for allele in uniqueAlleles } # CNV genotypes are in relation to the median
-        for allele1, allele2 in b2Gt:
-            b2Count[0 if allele1 <= medianAllele else 1] += 1 # medianAllele was calculated for bulk 1
-            b2Count[0 if allele2 <= medianAllele else 1] += 1
-    else:
-        b2Count = { allele: 0 for allele in uniqueAlleles }
-        for allele1, allele2 in b2Gt:
-            b2Count[allele1] += 1
-            b2Count[allele2] += 1
+    b2Count = { allele: 0 for allele in uniqueAlleles }
+    for allele1, allele2 in b2Gt:
+        b2Count[allele1] += 1
+        b2Count[allele2] += 1
     
     # Sum the number of genotyped alleles for each bulk
     numAllelesB1 = sum(b1Count.values())
