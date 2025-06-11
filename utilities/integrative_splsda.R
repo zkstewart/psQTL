@@ -55,6 +55,14 @@ depthRdata <- loadRData(args$depth)
 call.X <- as.data.frame(callRdata$selected.X[,rownames(callRdata$feature.details.table)])
 depth.X <- as.data.frame(depthRdata$selected.X[,rownames(depthRdata$feature.details.table)])
 
+# Detect a lack of need to integrate
+if (ncol(call.X) == 1) {
+  stop("Integrative sPLS-DA is not possible or necessary since only one 'call' variant was selected")
+}
+if (ncol(depth.X) == 1) {
+  stop("Integrative sPLS-DA is not possible or necessary since only one 'depth' CNV was selected")
+}
+
 # Order datasets equivalently
 call.X$Y <- callRdata$Y
 depth.X$Y <- depthRdata$Y
@@ -73,14 +81,6 @@ if (! identical(call.X$Y, depth.X$Y)) {
 Y <- call.X$Y
 call.X <- call.X[, ! colnames(call.X) == "Y"]
 depth.X <- depth.X[, ! colnames(depth.X) == "Y"]
-
-# Detect a lack of need to integrate
-if (ncol(call.X) == 1) {
-  stop("Integrative sPLS-DA is not possible or necessary since only one 'call' variant was selected")
-}
-if (ncol(depth.X) == 1) {
-  stop("Integrative sPLS-DA is not possible or necessary since only one 'depth' CNV was selected")
-}
 
 # Set up list of X variables
 splsda.X <- list(
