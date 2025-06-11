@@ -226,7 +226,7 @@ def call_splsda(args, metadataDict, locations):
     # Encode variant calls for sPLS-DA analysis
     if (not os.path.isfile(locations.variantRecodedFile)) or (not os.path.isfile(locations.variantRecodedFile + ".ok")):
         print("# Encoding variant calls for sPLS-DA analysis ...")
-        recode_vcf(args.vcfFile, locations.variantRecodedFile)
+        recode_vcf(args.vcfFile, locations.variantRecodedFile, isCNV=False)
         open(locations.variantRecodedFile + ".ok", "w").close() # touch a .ok file to indicate success
     else:
         print("# Variant calls already encoded for sPLS-DA analysis; skipping ...")
@@ -257,7 +257,7 @@ def depth_splsda(args, metadataDict, locations):
     # Encode deletion variants for sPLS-DA analysis
     if (not os.path.isfile(locations.deletionRecodedFile)) or (not os.path.isfile(locations.deletionRecodedFile + ".ok")):
         print("# Encoding deletion variants for sPLS-DA analysis ...")
-        recode_vcf(args.deletionFile, locations.deletionRecodedFile)
+        recode_vcf(args.deletionFile, locations.deletionRecodedFile, isCNV=True)
         open(locations.deletionRecodedFile + ".ok", "w").close() # touch a .ok file to indicate success
     else:
         print("# Deletion variants already encoded for sPLS-DA analysis; skipping ...")

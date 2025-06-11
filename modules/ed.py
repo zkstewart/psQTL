@@ -30,15 +30,26 @@ def gt_median_adjustment(genotypeLists):
                              but with genotypes adjusted to be relative to the median of all
                              alleles found in the genotypeLists
     '''
-    alleles = [ allele for sublist in genotypeLists for gt in sublist for allele in gt ]
-    medianAllele = np.median(alleles)
+    # Flatten the genotype lists and calculate the median allele
+    alleles = [ allele for sublist in genotypeLists for gt in sublist if not "." in gt for allele in gt ]
+    if len(alleles) == 0:
+        medianAllele = 0 # if no alleles are found, set median to 0
+    else:
+        medianAllele = np.median(alleles)
+    
+    # Adjust the genotypes relative to the median allele
     adjustedGenotypes = []
     for sublist in genotypeLists:
         adjustedSublist = []
-        for allele1, allele2 in sublist:
-            adjustedAllele1 = 0 if allele1 <= medianAllele else 1
-            adjustedAllele2 = 0 if allele2 <= medianAllele else 1
-            adjustedSublist.append([adjustedAllele1, adjustedAllele2])
+        for gt in sublist:
+            gtList = []
+            if "." in gt:
+                gtList.append(".")
+            else:
+                for allele in gt:
+                    adjustedAllele = 0 if allele <= medianAllele else 1
+                    gtList.append(adjustedAllele)
+            adjustedSublist.append(gtList)
         adjustedGenotypes.append(adjustedSublist)
     return adjustedGenotypes
 

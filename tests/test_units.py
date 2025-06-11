@@ -10,6 +10,7 @@ from modules.ncls import WindowedNCLS
 from modules.ed import parse_vcf_for_ed, calculate_segregant_ed, calculate_inheritance_ed, gt_median_adjustment
 from modules.depth import get_median_value, predict_deletions
 from modules.samtools_handling import depth_to_histoDict
+from modules.splsda import recode_variant, recode_cnv
 
 # Specify data locations
 dataDir = os.path.join(os.getcwd(), "data")
@@ -522,7 +523,7 @@ class TestED(unittest.TestCase):
         self.assertEqual(b1Alleles, 0, "Expected 0 alleles in bulk 1")
         self.assertEqual(b2Alleles, 2, "Expected 0 alleles in bulk 2")
     
-    def test_calculate_cnv_median_adjustment_1(self):
+    def test_calculate_gt_median_adjustment_1(self):
         "Test that median adjustment for CNVs works correctly (bulks segregate evenly)"
         # Arrange
         b1Gt = [[0, 0], [0, 0], [0, 0], [0, 0]]
@@ -537,7 +538,7 @@ class TestED(unittest.TestCase):
         self.assertTrue(all([ allele == b1Truth for gt in b1AdjGt for allele in gt ]), f"Expected adjusted bulk 1 to be {b1Truth}")
         self.assertTrue(all([ allele == b2Truth for gt in b2AdjGt for allele in gt ]), f"Expected adjusted bulk 2 to be {b2Truth}")
     
-    def test_calculate_cnv_median_adjustment_2(self):
+    def test_calculate_gt_median_adjustment_2(self):
         "Test that median adjustment for CNVs works correctly (all alleles are zero)"
         # Arrange
         b1Gt = [[0, 0], [0, 0], [0, 0], [0, 0]]
@@ -552,7 +553,7 @@ class TestED(unittest.TestCase):
         self.assertTrue(all([ allele == b1Truth for gt in b1AdjGt for allele in gt ]), f"Expected adjusted bulk 1 to be {b1Truth}")
         self.assertTrue(all([ allele == b2Truth for gt in b2AdjGt for allele in gt ]), f"Expected adjusted bulk 2 to be {b2Truth}")
     
-    def test_calculate_cnv_median_adjustment_3(self):
+    def test_calculate_gt_median_adjustment_3(self):
         "Test that median adjustment for CNVs works correctly (all alleles are one)"
         # Arrange
         b1Gt = [[1, 1], [1, 1], [1, 1], [1, 1]]
@@ -567,7 +568,7 @@ class TestED(unittest.TestCase):
         self.assertTrue(all([ allele == b1Truth for gt in b1AdjGt for allele in gt ]), f"Expected adjusted bulk 1 to be {b1Truth}")
         self.assertTrue(all([ allele == b2Truth for gt in b2AdjGt for allele in gt ]), f"Expected adjusted bulk 2 to be {b2Truth}")
     
-    def test_calculate_cnv_median_adjustment_4(self):
+    def test_calculate_gt_median_adjustment_4(self):
         "Test that median adjustment for CNVs works correctly (one genotype is different)"
         # Arrange
         b1Gt = [[0, 0], [0, 0], [0, 0], [0, 0]]
@@ -581,6 +582,123 @@ class TestED(unittest.TestCase):
         # Assert
         self.assertTrue(all([ allele == b1Truth for gt in b1AdjGt for allele in gt ]), f"Expected adjusted bulk 1 to be {b1Truth}")
         self.assertFalse(all([ allele == b2Truth for gt in b2AdjGt for allele in gt ]), f"Expected adjusted bulk 2 to NOT be all {b2Truth}")
+    
+    def test_calculate_gt_median_adjustment_with_dots(self):
+        "Test that median adjustment handles dot values safely"
+        # Arrange
+        b1Gt = [[0, 0], ["."], ".", [1, 1]]
+        b1Truth = [[0, 0], ['.'], ['.'], [1, 1]]
+        
+        # Act
+        b1AdjGt = gt_median_adjustment([b1Gt])[0]
+        
+        # Assert
+        self.assertEqual(b1AdjGt, b1Truth, f"Expected adjusted bulk 1 to be {b1Truth}")
+
+class TestSPLSDA(unittest.TestCase):
+    def test_recode_variant_with_pipes(self):
+        "Test that recoding a variant works correctly when pipes separate alleles"
+        # Arrange
+        gtIndex = 1
+        sampleFields = ["example:0|0", "example2:0/0", "example3:1|1:otherstuff"]
+        truth = ["0", "0", "2"]
+        
+        # Act
+        recoded_variant = recode_variant(gtIndex, sampleFields)
+        
+        # Assert
+        self.assertEqual(recoded_variant, truth, f"Expected {truth} but got {recoded_variant}")
+    
+    def test_recode_variant_with_dots(self):
+        "Test that recoding a variant works correctly when dots are present"
+        # Arrange
+        gtIndex = 0
+        sampleFields = ["0/0", "0/.", "./."]
+        truth = ["0", ".", "."]
+        
+        # Act
+        recoded_variant = recode_variant(gtIndex, sampleFields)
+        
+        # Assert
+        self.assertEqual(recoded_variant, truth, f"Expected {truth} but got {recoded_variant}")
+    
+    def test_recode_variant_1(self):
+        "Test that recoding a variant works correctly with heterozygotes"
+        # Arrange
+        gtIndex = 0
+        sampleFields = ["0/0", "0/1", "0/1"]
+        truth = ["0", "1", "1"]
+        
+        # Act
+        recoded_variant = recode_variant(gtIndex, sampleFields)
+        
+        # Assert
+        self.assertEqual(recoded_variant, truth, f"Expected {truth} but got {recoded_variant}")
+    
+    def test_recode_variant_2(self):
+        "Test that recoding a variant works correctly with a homozygote"
+        # Arrange
+        gtIndex = 0
+        sampleFields = ["0/0", "0/1", "1/1"]
+        truth = ["0", "1", "2"]
+        
+        # Act
+        recoded_variant = recode_variant(gtIndex, sampleFields)
+        
+        # Assert
+        self.assertEqual(recoded_variant, truth, f"Expected {truth} but got {recoded_variant}")
+    
+    def test_recode_cnv_with_pipes(self):
+        "Test that recoding a CNV works correctly when pipes separate alleles"
+        # Arrange
+        gtIndex = 1
+        sampleFields = ["example:0|0", "example2:0/0", "example3:1|1:otherstuff"]
+        truth = ["0", "0", "1"]
+        
+        # Act
+        recoded_cnv = recode_cnv(gtIndex, sampleFields)
+        
+        # Assert
+        self.assertEqual(recoded_cnv, truth, f"Expected {truth} but got {recoded_cnv}")
+    
+    def test_recode_cnv_with_dots(self):
+        "Test that recoding a CNV works correctly when dots are present"
+        # Arrange
+        gtIndex = 0
+        sampleFields = ["0/0", "0/.", "./."]
+        truth = ["0", ".", "."]
+        
+        # Act
+        recoded_cnv = recode_cnv(gtIndex, sampleFields)
+        
+        # Assert
+        self.assertEqual(recoded_cnv, truth, f"Expected {truth} but got {recoded_cnv}")
+    
+    def test_recode_cnv_1(self):
+        "Test that median adjustment for CNVs works correctly (samples segregate strongly)"
+        # Arrange
+        gtIndex = 0
+        sampleFields = ["0/0", "1/1", "100/100", "100/100"]
+        truth = ["0", "0", "1", "1"]
+        
+        # Act
+        recoded_cnv = recode_cnv(gtIndex, sampleFields)
+        
+        # Assert
+        self.assertEqual(recoded_cnv, truth, f"Expected {truth} but got {recoded_cnv}")
+    
+    def test_recode_cnv_2(self):
+        "Test that median adjustment for CNVs works correctly (CNV presence is evenly distributed)"
+        # Arrange
+        gtIndex = 0
+        sampleFields = ["0/0", "0/1", "1/1", "1/2", "2/2"]
+        truth = ["0", "0", "0", "1", "1"]
+        
+        # Act
+        recoded_cnv = recode_cnv(gtIndex, sampleFields)
+        
+        # Assert
+        self.assertEqual(recoded_cnv, truth, f"Expected {truth} but got {recoded_cnv}")
 
 if __name__ == '__main__':
     unittest.main()
