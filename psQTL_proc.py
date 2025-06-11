@@ -14,14 +14,16 @@ from modules.splsda import validate_r_exists, validate_r_packages_installation, 
     recode_vcf, run_windowed_splsda, run_integrative_splsda
 from _version import __version__
 
-def generate_ed_file(vcfFile, metadataDict, outputFileName, ignoreIdentical):
+def generate_ed_file(vcfFile, metadataDict, outputFileName, parentSamples=[], isCNV=False, ignoreIdentical=True):
     '''
     Parameters:
         vcfFile -- a string indicating the path to the VCF file to be processed
         metadataDict -- a dictionary of metadata information parsed from the metadata file
         outputFileName -- a string indicating the path to the output file to be written
-        ignoreIdentical -- a boolean indicating whether to ignore variants where both bulks
-                           are identical
+        isCNV -- (OPTIONAL) a boolean indicating whether the VCF file contains CNV data
+                 (default: False, meaning the VCF file contains variant calls)
+        ignoreIdentical -- (OPTIONAL) a boolean indicating whether to ignore variants
+                           where both bulks are identical
     '''
     with gzip.open(outputFileName, "wt") as fileOut:
         # Write header line
@@ -33,7 +35,9 @@ def generate_ed_file(vcfFile, metadataDict, outputFileName, ignoreIdentical):
         
         # Iterate through Euclidean distance calculations for VCF file
         for contig, pos, variant, numAllelesB1, numAllelesB2, \
-        euclideanDist in parse_vcf_for_ed(vcfFile, metadataDict, ignoreIdentical):
+        euclideanDist in parse_vcf_for_ed(vcfFile, metadataDict, isCNV,
+                                          parents=parentSamples,
+                                          ignoreIdentical=ignoreIdentical):
             # Write content line
             fileOut.write(f"{contig}\t{pos}\t{variant}\t{numAllelesB1}\t" + \
                             f"{numAllelesB2}\t{euclideanDist}\n")
@@ -83,6 +87,14 @@ def main():
     sparser.set_defaults(func=smain)
     
     # ED-subparser arguments
+    eparser.add_argument("--parents", dest="parentSamples",
+                         required=False,
+                         nargs=2,
+                         help="""Optionally, provide the names of the two parents used to
+                         generate the bulks; this is used to apply an alternative form of ED
+                         which leverages the parents' genotypes to extract more signal out of
+                         your data. If not provided, the standard ED will be used.""",
+                         default=[])
     eparser.add_argument("--considerIdentical", dest="considerIdentical",
                          required=False,
                          action="store_true",
@@ -166,7 +178,9 @@ def emain(args, metadataDict, locations):
 def call_ed(args, metadataDict, locations):
     if not os.path.isfile(locations.variantEdFile + ".ok"):
         generate_ed_file(args.vcfFile, metadataDict, locations.variantEdFile,
-                         not args.considerIdentical) # negate the flag to ignore identical
+                         parentSamples=args.parentSamples,
+                         isCNV=False,
+                         ignoreIdentical=not args.considerIdentical) # negate the flag to ignore identical
         open(locations.variantEdFile + ".ok", "w").close() # touch a .ok file to indicate success
     else:
         raise FileExistsError(f"Euclidean distance file '{locations.variantEdFile}' already has a .ok file; " +
@@ -175,7 +189,10 @@ def call_ed(args, metadataDict, locations):
 
 def depth_ed(args, metadataDict, locations):
     if not os.path.isfile(locations.deletionEdFile + ".ok"):
-        generate_ed_file(locations.finalDeletionFile, metadataDict, locations.deletionEdFile, False) # don't ignore identical
+        generate_ed_file(args.deletionFile, metadataDict, locations.deletionEdFile,
+                         parentSamples=[], # no parents used for CNVs
+                         isCNV=True,
+                         ignoreIdentical=False) # don't ignore identical
         open(locations.deletionEdFile + ".ok", "w").close() # touch a .ok file to indicate success
     else:
         raise FileExistsError(f"Euclidean distance file '{locations.deletionEdFile}' already has a .ok file; " +
@@ -209,7 +226,7 @@ def call_splsda(args, metadataDict, locations):
     # Encode variant calls for sPLS-DA analysis
     if (not os.path.isfile(locations.variantRecodedFile)) or (not os.path.isfile(locations.variantRecodedFile + ".ok")):
         print("# Encoding variant calls for sPLS-DA analysis ...")
-        recode_vcf(args.vcfFile, locations.variantRecodedFile)
+        recode_vcf(args.vcfFile, locations.variantRecodedFile, isCNV=False)
         open(locations.variantRecodedFile + ".ok", "w").close() # touch a .ok file to indicate success
     else:
         print("# Variant calls already encoded for sPLS-DA analysis; skipping ...")
@@ -240,7 +257,7 @@ def depth_splsda(args, metadataDict, locations):
     # Encode deletion variants for sPLS-DA analysis
     if (not os.path.isfile(locations.deletionRecodedFile)) or (not os.path.isfile(locations.deletionRecodedFile + ".ok")):
         print("# Encoding deletion variants for sPLS-DA analysis ...")
-        recode_vcf(locations.finalDeletionFile, locations.deletionRecodedFile)
+        recode_vcf(args.deletionFile, locations.deletionRecodedFile, isCNV=True)
         open(locations.deletionRecodedFile + ".ok", "w").close() # touch a .ok file to indicate success
     else:
         print("# Deletion variants already encoded for sPLS-DA analysis; skipping ...")

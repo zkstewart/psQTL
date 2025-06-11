@@ -1,15 +1,30 @@
-import os, gzip
+import os, gzip, sys
 import pandas as pd
 import numpy as np
 from .parsing import parse_binned_tsv
 from .ncls import WindowedNCLS
 
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from _version import __version__
+
 def get_median_value(values):
+    '''
+    Parameters:
+        values -- a numpy array of depth values
+    Returns:
+        medianValue -- the median value of the input array, or 1 if all values are 0;
+                       if the median would be 0, it will return the median when ignoring
+                       zeros; if there are no non-zero values, this function will return 1.
+    '''
+    assert isinstance(values, np.ndarray), "Input values must be a numpy array."
+    
     medianValue = np.median(values)
     if medianValue == 0:
-        nonZeroValues = values[values != 0]
+        nonZeroValues = values[values != 0] # remove zeros
+        # If all values are zero, make sure we return 1
         if len(nonZeroValues) == 0:
             medianValue = 1
+        # Calculate median of non-zero values
         else:
             medianValue = np.median(nonZeroValues)
     return medianValue
@@ -119,12 +134,11 @@ def call_deletions_from_depth(samplePairs, outputFileName, windowSize):
     exploded_df = exploded_df[["#CHROM", "POS", "ID", "REF", "ALT", "QUAL", "FILTER", "INFO", "FORMAT", *samples]]
     
     # Write to output file
+    todaysDate = pd.Timestamp.now().strftime("%d-%m-%Y")
     with gzip.open(outputFileName, "wt") as fileOut:
         fileOut.write("##fileformat=VCF-like\n")
-        fileOut.write("##0/0=nodeletion\n")
-        fileOut.write("##0/1=hemizygousdeletion\n")
-        fileOut.write("##1/1=homozygousdeletion\n")
-        fileOut.write("##psQTL_prepDeletionPrediction\n")
+        fileOut.write("##FORMAT=<ID=GT,Number=1,Type=String,Description=\"Sums to number of allele copies\">\n")
+        fileOut.write(f"##psQTL_prep;module=depth, version={__version__}, windowSize={windowSize}; DD-MM-YYYY={todaysDate}\n")
         exploded_df.to_csv(fileOut, sep="\t", index=False)
 
 def parse_bins_as_dict(depthFileDict, windowSize):
@@ -204,7 +218,6 @@ def normalise_coverage_dict(coverageDict):
     for bulk, sampleDict in coverageDict.items():
         for sampleID, depthDict in sampleDict.items():
             for chrom, value in depthDict.items():
-                positions = np.array(value[0])
                 coverages = np.array(value[1])
                 
                 # Figure out what our median value is

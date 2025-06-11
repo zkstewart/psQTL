@@ -4,6 +4,7 @@ from collections import Counter
 
 from .parsing import read_gz_file
 from .ncls import WindowedNCLS
+from .ed import gt_median_adjustment
 
 def validate_r_exists():
     if not shutil.which("R"):
@@ -49,16 +50,95 @@ def validate_r_packages_installation():
             raise FileNotFoundError(f"The R package '{package}' is not installed. "
                                     "Please install it before running sPLS-DA.")
 
-def recode_vcf(vcfFile, outputFileName):
+def recode_variant(gtIndex, sampleFields):
     '''
-    Recode a VCF file to a format suitable for sPLS-DA analysis. Genotypes are encoded as
-    an integer (0, 1, or 2) based on the number of minor alleles present. The output file
-    is a TSV file with the following format:
+    Encodes the genotype of a sample as the number of minor alleles present.
+    
+    Parameters:
+        gtIndex -- an integer indicating the index of the GT field in the VCF format
+        sampleFields -- a list of strings, each coming from the VCF sample data fields
+    Returns:
+        encodedGTs -- a list of strings, each representing the encoded genotype for a sample
+    '''
+    genotypes = [
+        sampleData.split(":")[gtIndex].replace("|", "/").split("/")
+        for sampleData in sampleFields
+    ]
+    
+    # Count the number of alleles to determine major allele
+    alleles = Counter([ allele for gt in genotypes for allele in gt if allele != "." ])
+    mostCommonAlleles = alleles.most_common()
+    majorAlleles = [
+        allele
+        for allele, count in mostCommonAlleles
+        if count == mostCommonAlleles[0][1]
+    ]
+    
+    # Pick a single major allele if there are multiple
+    if len(majorAlleles) > 1:
+        majorAlleles.sort(key = lambda x: int(x)) # prefer ref allele if possible
+        majorAlleles = [majorAlleles[0]]
+    
+    # Encode genotype as the number of minor alleles
+    encodedGTs = []
+    for gt in genotypes:
+        if "." in gt:
+            encodedGT = "."
+        else:
+            encodedGT = sum([ 1 for allele in gt if not allele in majorAlleles ])
+        encodedGTs.append(str(encodedGT))
+    return encodedGTs
+
+def recode_cnv(gtIndex, sampleFields):
+    '''
+    Encodes the CNV of a sample according to whether it has an allele copy number
+    that is below or equal to the median (0) or above the median (1).
+    
+    Parameters:
+        gtIndex -- an integer indicating the index of the GT field in the VCF format
+        sampleFields -- a list of strings, each coming from the VCF sample data fields
+    Returns:
+        encodedGTs -- a list of strings, each representing the encoded genotype for a sample
+    '''
+    genotypes = [
+        sampleData.split(":")[gtIndex].replace("|", "/").split("/")
+        for sampleData in sampleFields
+    ]
+    
+    # Median adjust genotypes
+    alleles = [ list(map(int, gt)) if not "." in gt else "." for gt in genotypes ]
+    alleles = gt_median_adjustment([alleles])[0] # unpack the result
+    
+    # Encode genotype as presence or absence of copy number above median
+    encodedGTs = []
+    for allele in alleles:
+        if "." in allele:
+            encodedGT = "."
+        else:
+            encodedGT = "1" if 1 in allele else "0"
+        encodedGTs.append(encodedGT)
+    return encodedGTs
+
+def recode_vcf(vcfFile, outputFileName, isCNV=False):
+    '''
+    Recode a VCF file to a format suitable for sPLS-DA analysis.
+    
+    For variant calls:
+    Genotypes are encoded as an integer (0, 1, or 2) based on the number of minor
+    alleles present.
+    
+    For CNVs:
+    Allele copy numbers are encoded as 0 or 1, according to whether their copy
+    number is below or equal to the median (0) or above the median (1).
+    
+    The output file is a TSV file with the following format:
     [chrom, pos, sample1EncodedGT, sample2EncodedGT, ...]
     
     Parameters:
         vcfFile -- a string indicating the location of the input VCF file; can be gzipped
         outputFileName -- a string indicating the location of the output file; will be gzipped
+        isCNV -- (OPTIONAL) a boolean indicating whether the genotypes are for CNVs
+                 (True) or SNPs/indels (False); default is False
     '''
     with read_gz_file(vcfFile) as fileIn, gzip.open(outputFileName, "wt") as fileOut:
         for line in fileIn:
@@ -80,30 +160,14 @@ def recode_vcf(vcfFile, outputFileName):
             # Identify genotype position
             gtIndex = sl[8].split(":").index("GT")
             
-            # Count the number of alleles to determine major allele
-            alleles = Counter([
-                allele
-                for sampleData in sl[9:]
-                for allele in sampleData.split(":")[gtIndex].split("/")
-                if allele != "."
-            ])
-            mostCommonAlleles = alleles.most_common()
-            majorAlleles = [
-                allele
-                for allele, count in mostCommonAlleles
-                if count == mostCommonAlleles[0][1]
-            ]
+            # Recode the genotype according to variant type
+            if isCNV:
+                gtFields = recode_cnv(gtIndex, sl[9:])
+            else:
+                gtFields = recode_variant(gtIndex, sl[9:])
             
-            # Encode genotype as the number of minor alleles
-            encodedLine = [sl[0], sl[1]]
-            for sampleData in sl[9:]:
-                gt = sampleData.split(":")[gtIndex]
-                encodedGT = 0
-                if "." in gt:
-                    encodedGT = "."
-                else:
-                    encodedGT += sum([ 1 for allele in gt.split("/") if not allele in majorAlleles ])
-                encodedLine.append(str(encodedGT))
+            # Format the output line
+            encodedLine = [sl[0], sl[1], *gtFields]
             
             # Write to output file
             fileOut.write("\t".join(encodedLine) + "\n")

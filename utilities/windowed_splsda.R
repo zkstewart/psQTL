@@ -152,7 +152,7 @@ for (chromosome in unique(df$chrom))
             NA
         }
     )
-    if (is.na(window.perf)) {
+    if (all(is.na(window.perf))) {
         window.explanation[nrow(window.explanation) + 1,] <- c(chromosome, windowStart, 0.5) # BER=0.5
         next
     }

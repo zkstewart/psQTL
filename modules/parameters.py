@@ -1,6 +1,6 @@
 import os, json
 
-from .parsing import parse_vcf_stats, parse_deletion_stats, parse_metadata
+from .parsing import parse_vcf_stats, parse_metadata
 
 class ParameterCache:
     def __init__(self, workingDirectory):
@@ -430,12 +430,12 @@ class VcfCache:
     def _parse_vcf(self):
         if self._vcfFile == None or not os.path.isfile(self._vcfFile):
             raise FileNotFoundError(f"VCF file '{self._vcfFile}' is not a file.")
-        self._variants, self._samples, self._contigs = parse_vcf_stats(self._vcfFile)
+        self._variants, _, self._samples, self._contigs = parse_vcf_stats(self._vcfFile) # second returned value is not relevant
     
     def _parse_filtered_vcf(self):
         if self._filteredVcfFile == None or not os.path.isfile(self._filteredVcfFile):
             raise FileNotFoundError(f"Filtered VCF file '{self._filteredVcfFile}' is not a file.")
-        self._filteredVariants, self._filteredSamples, self._filteredContigs = parse_vcf_stats(self._filteredVcfFile)
+        self._filteredVariants, _, self._filteredSamples, self._filteredContigs = parse_vcf_stats(self._filteredVcfFile)
     
     @property
     def cacheFile(self):
@@ -593,7 +593,7 @@ class DeletionCache:
     def _parse_deletion_vcf(self):
         if self.deletionFile == None or not os.path.isfile(self.deletionFile):
             raise FileNotFoundError(f"Deletion file '{self.deletionFile}' is not a file.")
-        self._bins, self._deletionBins, self._samples, self._contigs = parse_deletion_stats(self.deletionFile)
+        self._bins, self._deletionBins, self._samples, self._contigs = parse_vcf_stats(self.deletionFile, refAllele="1")
     
     @property
     def cacheFile(self):

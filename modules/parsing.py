@@ -6,12 +6,14 @@ def get_codec(fileName):
         f = codecs.open(fileName, encoding='utf-8', errors='strict')
         for line in f:
             break
+        f.close()
         return "utf-8"
     except:
         try:
             f = codecs.open(fileName, encoding='utf-16', errors='strict')
             for line in f:
                 break
+            f.close()
             return "utf-16"
         except UnicodeDecodeError:
             print(f"Can't tell what codec '{fileName}' is!!")
@@ -145,18 +147,22 @@ def parse_binned_tsv(binFile):
             histoDict[contigID][pos] = depth
     return histoDict
 
-def parse_vcf_stats(vcfFile):
+def parse_vcf_stats(vcfFile, refAllele="0"):
     '''
     Parses a VCF file to determine the number of variants, the sample IDs, and
     contig IDs.
     
     Parameters:
         vcfFile -- a string indicating the path to a VCF file
+        refAllele -- (OPTIONAL) a string indicating the reference allele to use for
+                     determining whether a position has a variant; default is "0"
     Returns:
-        variants -- an integer indicating the number of variants in the VCF file
+        positions -- an integer indicating the number of positions listed in the VCF file
+        variants -- an integer indicating the number of positions with a variant in the VCF file
         samples -- a list of strings indicating the sample IDs in the VCF file
         contigs -- a list of strings indicating the contig IDs in the VCF file
     '''
+    positions = 0
     variants = 0
     samples = None
     contigs = {} # using as an ordered set
@@ -189,86 +195,37 @@ def parse_vcf_stats(vcfFile):
                 # Validate line length
                 if len(sl) < 11: # 9 fixed columns + 2 genotype columns
                     raise ValueError(f"VCF file has too few columns; offending line is '{l}'")
+                formatField = sl[8]
                 
+                # Determine the GT field index
+                if not ":" in formatField:
+                    gtIndex = 0
+                else:
+                    gtIndex = formatField.split(":").index("GT")
+                
+                # Store contig ID if not already present
                 if contig not in contigs:
                     contigs[contig] = None
-                variants += 1
+                
+                # Tally positions and variants
+                positions += 1
+                variants += 1 if any([
+                        allele != refAllele
+                        for sampleResult in sl[9:]
+                        for allele in sampleResult.split(":")[gtIndex].replace("|", "/").split("/")
+                    ]) else 0
     
     # Raise errors for faulty VCF files
-    if variants == 0 or contigs == {}:
+    if positions == 0 or contigs == {}:
         raise ValueError("VCF file is empty or has no variants!")
     if samples is None:
         raise ValueError("VCF file has no #CHROM header line!")
     
     # Format and return results
     contigs = list(contigs.keys()) # convert to list
-    return variants, samples, contigs
+    return positions, variants, samples, contigs
 
-def parse_deletion_stats(deletionFile):
-    '''
-    Parses a deletions VCF-like file to determine the number of bins,
-    bins that had a deletion in at least one sample, the sample IDs, and contig IDs.
-    
-    Parameters:
-        deletionFile -- a string indicating the path to a VCF-like file
-    Returns:
-        bins -- an integer indicating the number of bins in the VCF file
-        deletionBins -- an integer indicating the number of bins with deletions in the VCF file
-        samples -- a list of strings indicating the sample IDs in the VCF file
-        contigs -- a list of strings indicating the contig IDs in the VCF file
-    '''
-    bins = 0
-    deletionBins = 0
-    samples = None
-    contigs = {} # using as an ordered set
-    with read_gz_file(deletionFile) as fileIn:
-        for line in fileIn:
-            l = line.strip('\r\n\t "') # remove quotations to help with files opened by Excel
-            
-            # Skip blank lines
-            if l == "":
-                continue
-            
-            # Handle header lines
-            if l.startswith("#CHROM"):
-                try:
-                    samples = l.split("\t")[9:]
-                except:
-                    raise ValueError(f"#CHROM header line is malformed; offending line is '{l}'")
-            elif l.startswith("#"):
-                continue
-            
-            # Handle variant lines
-            else:
-                # Split line based on expected delimiter
-                try:
-                    sl = l.split("\t")
-                    contig = sl[0]
-                except:
-                    raise ValueError(f"Deletion file lacks tab-delimited formatting; offending line is '{l}'")
-                
-                # Validate line length
-                if len(sl) < 11: # 9 fixed columns + 2 genotype columns
-                    raise ValueError(f"Deletion file has too few columns; offending line is '{l}'")
-                
-                if contig not in contigs:
-                    contigs[contig] = None
-                
-                # Tally bins
-                deletionBins += 1 if any([ "1" in x for x in sl[9:]]) else 0
-                bins += 1
-    
-    # Raise errors for faulty deletion files
-    if bins == 0 or contigs == {}:
-        raise ValueError("Deletion file is empty or has no variants!")
-    if samples is None:
-        raise ValueError("Deletion file has no #CHROM header line!")
-    
-    # Format and return results
-    contigs = list(contigs.keys()) # convert to list
-    return bins, deletionBins, samples, contigs
-
-def vcf_header_to_metadata_validation(vcfSamples, metadataDict, strict=True):
+def vcf_header_to_metadata_validation(vcfSamples, metadataDict, strict=True, quiet=True):
     '''
     Validates that the VCF file and metadata file are compatible with each other,
     printing warnings and producing errors as necessary.
@@ -280,8 +237,10 @@ def vcf_header_to_metadata_validation(vcfSamples, metadataDict, strict=True):
                             "bulk1": set([ "sample1", "sample2", ... ]),
                             "bulk2": set([ "sample3", "sample4", ... ])
                         }
-        strict -- OPTIONAL; a boolean indicating whether to error out if the files
+        strict -- (OPTIONAL) a boolean indicating whether to error out if the files
                   show any discrepancies. Default is True.
+        quiet -- (OPTIONAL) a boolean indicating whether to hide the final sample
+                 lists to the console. Default is True.
     '''
     vcfSamples = set(vcfSamples) # convert to set if not already one
     
@@ -329,8 +288,9 @@ def vcf_header_to_metadata_validation(vcfSamples, metadataDict, strict=True):
         raise ValueError("No samples from bulk 2 are present in the VCF file.")
     
     # Notify user of samples that will be used
-    print(f"# Samples used as part of bulk 1 (n={len(b1Samples)}) include: " + ", ".join(b1Samples))
-    print(f"# Samples used as part of bulk 2 (n={len(b2Samples)}) include: " + ", ".join(b2Samples))
+    if not quiet:
+        print(f"# Samples used as part of bulk 1 (n={len(b1Samples)}) include: " + ", ".join(b1Samples))
+        print(f"# Samples used as part of bulk 2 (n={len(b2Samples)}) include: " + ", ".join(b2Samples))
 
 def parse_vcf_genotypes(formatField, sampleFields, samples):
     '''
@@ -361,7 +321,7 @@ def parse_vcf_genotypes(formatField, sampleFields, samples):
         
         # Edit genotype to have a consistently predictable separator
         "Phasing information is irrelevant for psQTL analysis"
-        genotype = genotype.replace("/", "|")
+        genotype = genotype.replace("|", "/")
         
         # Skip uncalled genotypes
         if "." in genotype:
@@ -369,8 +329,8 @@ def parse_vcf_genotypes(formatField, sampleFields, samples):
             continue
         
         # Parse and store genotype
-        samplePopulation = samples[ongoingCount]
-        posGenotypeDict[samplePopulation] = list(map(int, genotype.split("|")))
+        sampleID = samples[ongoingCount]
+        posGenotypeDict[sampleID] = list(map(int, genotype.split("/")))
         
         ongoingCount += 1
     return posGenotypeDict

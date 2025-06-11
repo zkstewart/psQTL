@@ -312,7 +312,7 @@ def validate_p(args):
         if (args.width != None and args.height != None):
             if args.width != 8 or args.height != 8:
                 print("# Note: psQTL is not yet equipped to handle non-default width or height while maintaining " +
-                      "clarity, so width and height will be set to 8.")
+                      "clarity for Circos plots, so width and height will be set to 8.")
                 args.width = 8
                 args.height = 8
             if args.width != args.height:

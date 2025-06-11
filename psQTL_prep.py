@@ -445,7 +445,7 @@ def vmain(args, locations):
         else:
             print(f"Window size: {paramsCache.windowSize} bp")
         print(f"Total num. bins: {deletionCache.bins}")
-        print(f"Num. bins with deletion: {deletionCache.deletionBins}")
+        print(f"Num. bins with CNV: {deletionCache.deletionBins}")
         print(f"Samples (n={len(deletionCache.samples)}): {deletionCache.samples}")
         print(f"Contigs (n={len(deletionCache.contigs)}): {deletionCache.contigs}")
         
