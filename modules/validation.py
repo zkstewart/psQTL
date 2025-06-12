@@ -140,7 +140,7 @@ def validate_post_args(args):
                 raise FileNotFoundError(f"sPLS-DA file for 'call' Balanced Error Rate '{locations.variantSplsdaBerFile}' does not exist!")
             if not os.path.isfile(locations.variantSplsdaBerFile + ".ok"):
                 raise FileNotFoundError(f"sPLS-DA file for 'call' Balanced Error Rate '{locations.variantSplsdaBerFile}' does not have a '.ok' flag!")
-    if "depth" in args.measurementTypes:
+    if "depth" in args.inputType:
         if "ed" in args.measurementTypes:
             if not os.path.isfile(locations.deletionEdFile):
                 raise FileNotFoundError(f"'depth' ED file '{locations.deletionEdFile}' does not exist!")
@@ -173,10 +173,6 @@ def validate_post_args(args):
         raise ValueError(f"--power value '{args.power}' must be >= 1!")
     if args.missingFilter < 0 or args.missingFilter > 1:
         raise ValueError(f"--missing value '{args.missingFilter}' must be between 0 and 1!")
-    if args.axisSpace < 0:
-        raise ValueError(f"--axisSpace value '{args.axisSpace}' must be >= 0!")
-    if args.axisSpace >= 360:
-        raise ValueError(f"--axisSpace value '{args.axisSpace}' must be < 360!")
     
     # Validate annotation GFF3 file
     if args.annotationGFF3 != None:
@@ -308,6 +304,10 @@ def validate_p(args):
     if args.height != None:
         if args.height < 1:
             raise ValueError(f"--height value '{args.height}' must be >= 1!")
+    if args.axisSpace < 0:
+        raise ValueError(f"--space value '{args.axisSpace}' must be >= 0!")
+    if args.axisSpace >= 360:
+        raise ValueError(f"--space value '{args.axisSpace}' must be < 360!")
     
     # Alert user to Circos dimensions logic
     if args.plotStyle == "circos":
