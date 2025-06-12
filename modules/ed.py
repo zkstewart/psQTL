@@ -81,15 +81,15 @@ def calculate_segregant_ed(b1Gt, b2Gt, isCNV=False):
     
     # Tally for bulk 1
     b1Count = { allele: 0 for allele in uniqueAlleles }
-    for allele1, allele2 in b1Gt:
-        b1Count[allele1] += 1
-        b1Count[allele2] += 1
+    for gt in b1Gt:
+        for allele in gt:
+            b1Count[allele] += 1
     
     # Tally for bulk 2
     b2Count = { allele: 0 for allele in uniqueAlleles }
-    for allele1, allele2 in b2Gt:
-        b2Count[allele1] += 1
-        b2Count[allele2] += 1
+    for gt in b2Gt:
+        for allele in gt:
+            b2Count[allele] += 1
     
     # Sum the number of genotyped alleles for each bulk
     numAllelesB1 = sum(b1Count.values())

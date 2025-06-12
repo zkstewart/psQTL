@@ -226,7 +226,9 @@ def call_splsda(args, metadataDict, locations):
     # Encode variant calls for sPLS-DA analysis
     if (not os.path.isfile(locations.variantRecodedFile)) or (not os.path.isfile(locations.variantRecodedFile + ".ok")):
         print("# Encoding variant calls for sPLS-DA analysis ...")
-        recode_vcf(args.vcfFile, locations.variantRecodedFile, isCNV=False)
+        recode_vcf(args.vcfFile, locations.variantRecodedFile,
+                   isCNV=False,
+                   sampleNames=[ v for value in metadataDict.values() for v in value ])
         open(locations.variantRecodedFile + ".ok", "w").close() # touch a .ok file to indicate success
     else:
         print("# Variant calls already encoded for sPLS-DA analysis; skipping ...")
@@ -257,7 +259,9 @@ def depth_splsda(args, metadataDict, locations):
     # Encode deletion variants for sPLS-DA analysis
     if (not os.path.isfile(locations.deletionRecodedFile)) or (not os.path.isfile(locations.deletionRecodedFile + ".ok")):
         print("# Encoding deletion variants for sPLS-DA analysis ...")
-        recode_vcf(args.deletionFile, locations.deletionRecodedFile, isCNV=True)
+        recode_vcf(args.deletionFile, locations.deletionRecodedFile,
+                   isCNV=True,
+                   sampleNames=[ v for value in metadataDict.values() for v in value ])
         open(locations.deletionRecodedFile + ".ok", "w").close() # touch a .ok file to indicate success
     else:
         print("# Deletion variants already encoded for sPLS-DA analysis; skipping ...")
@@ -285,6 +289,12 @@ def depth_splsda(args, metadataDict, locations):
         print("# Deletion variants already processed for sPLS-DA analysis; skipping ...")
 
 def integrative_splsda(args, metadataDict, locations):
+    # Check if it is possible to run integrative sPLS-DA
+    if (not os.path.isfile(locations.variantSplsdaRdataFile) or \
+        not os.path.isfile(locations.deletionSplsdaRdataFile)):
+        raise FileNotFoundError(f"Cannot run integrative sPLS-DA without both variant ({locations.variantSplsdaRdataFile}) " + 
+                                f"and deletion ({locations.deletionSplsdaRdataFile}) sPLS-DA RData files!")
+    
     # Run integrative sPLS-DA for variant calls
     if (not os.path.isfile(locations.integrativeSplsdaSelectedFile) or \
         not os.path.isfile(locations.integrativeSplsdaSelectedFile + ".ok")):

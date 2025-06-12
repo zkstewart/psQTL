@@ -100,7 +100,7 @@ def parse_metadata(metadataFile):
     
     # Reformat sets and lists then return
     for pop in metadataDict:
-        metadataDict[pop] = list(metadataDict[pop])
+        metadataDict[pop] = sorted(list(metadataDict[pop])) # sort to make sample ordering deterministic
     return metadataDict
 
 def parse_samtools_depth_tsv(depthFile):

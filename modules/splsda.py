@@ -119,7 +119,7 @@ def recode_cnv(gtIndex, sampleFields):
         encodedGTs.append(encodedGT)
     return encodedGTs
 
-def recode_vcf(vcfFile, outputFileName, isCNV=False):
+def recode_vcf(vcfFile, outputFileName, isCNV=False, sampleNames=None):
     '''
     Recode a VCF file to a format suitable for sPLS-DA analysis.
     
@@ -139,6 +139,9 @@ def recode_vcf(vcfFile, outputFileName, isCNV=False):
         outputFileName -- a string indicating the location of the output file; will be gzipped
         isCNV -- (OPTIONAL) a boolean indicating whether the genotypes are for CNVs
                  (True) or SNPs/indels (False); default is False
+        sampleNames -- (OPTIONAL) a list of strings indicating the names of the samples
+                        If provided, the output will only include these samples in the order specified.
+                        If None, all samples in the VCF file will be included.
     '''
     with read_gz_file(vcfFile) as fileIn, gzip.open(outputFileName, "wt") as fileOut:
         for line in fileIn:
@@ -146,7 +149,15 @@ def recode_vcf(vcfFile, outputFileName, isCNV=False):
             
             # Handle #CHROM line
             if line.startswith("#CHROM"):
-                fileOut.write("\t".join(["chrom", "pos"] + sl[9:]) + "\n")
+                if sampleNames != None:
+                    sampleIndices = [ sl[9:].index(name) for name in sampleNames if name in sl[9:] ]
+                    if len(sampleIndices) != len(sampleNames):
+                        raise ValueError(f"Some sample names in the metadata bulks ({sampleNames}) are not found in the VCF file.")
+                else:
+                    sampleIndices = list(range(0, len(sl[9:])))
+                
+                fileOut.write("\t".join(["chrom", "pos"] + [ sl[9:][i] for i in sampleIndices ]) + "\n")
+                #fileOut.write("\t".join(["chrom", "pos"] + sl[9:][sampleIndices]) + "\n")
                 continue
             
             # Skip comment lines
@@ -162,9 +173,9 @@ def recode_vcf(vcfFile, outputFileName, isCNV=False):
             
             # Recode the genotype according to variant type
             if isCNV:
-                gtFields = recode_cnv(gtIndex, sl[9:])
+                gtFields = recode_cnv(gtIndex, [ sl[9:][i] for i in sampleIndices ])
             else:
-                gtFields = recode_variant(gtIndex, sl[9:])
+                gtFields = recode_variant(gtIndex, [ sl[9:][i] for i in sampleIndices ])
             
             # Format the output line
             encodedLine = [sl[0], sl[1], *gtFields]

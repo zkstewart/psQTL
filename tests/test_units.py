@@ -1,11 +1,11 @@
 #! python3
 
-import os, sys, unittest, time, math
+import os, sys, unittest, time, math, shutil, subprocess
 import numpy as np
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from modules.parsing import parse_metadata, vcf_header_to_metadata_validation, parse_vcf_genotypes, \
-    parse_vcf_stats, parse_samtools_depth_tsv, parse_binned_tsv
+    parse_vcf_stats, parse_samtools_depth_tsv, parse_binned_tsv, read_gz_file
 from modules.ncls import WindowedNCLS
 from modules.ed import parse_vcf_for_ed, calculate_segregant_ed, calculate_inheritance_ed, gt_median_adjustment
 from modules.depth import get_median_value, predict_deletions
@@ -15,8 +15,21 @@ from modules.splsda import recode_variant, recode_cnv
 # Specify data locations
 dataDir = os.path.join(os.getcwd(), "data")
 metadataFile = os.path.join(dataDir, "metadata.tsv")
+baseDir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 MAXIMAL_SEGREGATION = 1.4142135623730951 # sqrt(2)
+
+# Define utility functions
+def run_subprocess(command):
+    '''
+    Parameters:
+        command -- a list of strings representing the command to run
+    '''
+    process = subprocess.Popen(" ".join(command), shell = True,
+                               stdout = subprocess.PIPE,
+                               stderr = subprocess.PIPE)
+    stdout, stderr = process.communicate()
+    return process.returncode, stdout.decode("utf-8").rstrip("\r\n "), stderr.decode("utf-8").rstrip("\r\n ")
 
 # Define unit tests
 class TestParsing(unittest.TestCase):
@@ -252,6 +265,35 @@ class TestED(unittest.TestCase):
         # Arrange
         metadataDict = parse_metadata(metadataFile)
         vcfFile = os.path.join(dataDir, "deletions.1.vcf")
+        notCNV_truth = [0.478198599250326,0.5942205544782738,0.6083495165377463,
+                        0.7877780740982955,0.6366455643787936,0.3733361028931871,
+                        0.14110778338534205,0.396669657738795]
+        isCNV_truth = [0.478198599250326,0.40607684329781774,0.6914281385881762,
+                       0.888979035327655,0.7651177588005215,0.14110778338534202,
+                       0.0,0.396669657738795]
+        
+        # Act & Assert
+        notCNV_results = []
+        for contig, pos, variant, numAllelesB1, numAllelesB2, euclideanDist \
+        in parse_vcf_for_ed(vcfFile, metadataDict, isCNV=False, ignoreIdentical=True, quiet=True):
+            notCNV_results.append(euclideanDist)
+        
+        isCNV_results = []
+        for contig, pos, variant, numAllelesB1, numAllelesB2, euclideanDist \
+        in parse_vcf_for_ed(vcfFile, metadataDict, isCNV=True, ignoreIdentical=True, quiet=True):
+            isCNV_results.append(euclideanDist)
+        
+        # Assert
+        for v1, v2 in zip(notCNV_results, notCNV_truth):
+            self.assertAlmostEqual(v1, v2, places=5, msg=f"Expected {v2} but got {v1}")
+        for v1, v2 in zip(isCNV_results, isCNV_truth):
+            self.assertAlmostEqual(v1, v2, places=5, msg=f"Expected {v2} but got {v1}")
+    
+    def test_parse_vcf_for_ed_tetraploid(self):
+        "Test parsing a VCF (with tetraploid variants) with deletions where isCNV is True and False"
+        # Arrange
+        metadataDict = parse_metadata(metadataFile)
+        vcfFile = os.path.join(dataDir, "deletions.2.vcf")
         notCNV_truth = [0.478198599250326,0.5942205544782738,0.6083495165377463,
                         0.7877780740982955,0.6366455643787936,0.3733361028931871,
                         0.14110778338534205,0.396669657738795]
@@ -699,6 +741,463 @@ class TestSPLSDA(unittest.TestCase):
         
         # Assert
         self.assertEqual(recoded_cnv, truth, f"Expected {truth} but got {recoded_cnv}")
+
+class TestMain(unittest.TestCase):
+    def test_diploid_variants_no_parents_full_metadata(self):
+        "Test a full psQTL analysis pipeline with a test set of variants and metadata"
+        # Arrange: set variables
+        workDir = os.path.join(dataDir, "tmp")
+        fulltestMetadata = os.path.join(dataDir, "fulltest.metadata.1.tsv")
+        vcfFile = os.path.join(dataDir, "fulltest.variants.1.vcf")
+        genomeFile = os.path.join(dataDir, "genome.fasta")
+        
+        edTruth = "chr1\t10\tsnp\t42\t98\t1.0678755470980512"
+        berTruth = "chr1\t0\t0.05\n"
+        selectedTruth = "chr1\t10\t1\t1\tleft\n"
+        recodeTruth = ['chrom\tpos\tbulk1_1\tbulk1_10\tbulk1_11\tbulk1_12\tbulk1_13\tbulk1_14\tbulk1_15\tbulk1_16\tbulk1_17\tbulk1_18\tbulk1_19\tbulk1_2\tbulk1_20\tbulk1_21\tbulk1_3\tbulk1_4\tbulk1_5\tbulk1_6\tbulk1_7\tbulk1_8\tbulk1_9\tbulk2_1\tbulk2_10\tbulk2_11\tbulk2_12\tbulk2_13\tbulk2_14\tbulk2_15\tbulk2_16\tbulk2_17\tbulk2_18\tbulk2_19\tbulk2_2\tbulk2_20\tbulk2_21\tbulk2_22\tbulk2_23\tbulk2_24\tbulk2_25\tbulk2_26\tbulk2_27\tbulk2_28\tbulk2_29\tbulk2_3\tbulk2_30\tbulk2_31\tbulk2_32\tbulk2_33\tbulk2_34\tbulk2_35\tbulk2_36\tbulk2_37\tbulk2_38\tbulk2_39\tbulk2_4\tbulk2_40\tbulk2_41\tbulk2_42\tbulk2_43\tbulk2_44\tbulk2_45\tbulk2_46\tbulk2_47\tbulk2_48\tbulk2_49\tbulk2_5\tbulk2_6\tbulk2_7\tbulk2_8\tbulk2_9',
+                       'chr1\t10\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t1\t1\t2\t2\t2\t1\t2\t2\t1\t0\t2\t1\t1\t2\t1\t1\t0\t1\t0\t1\t0\t0\t0\t0\t0']
+        
+        # Arrange: cleanup any previous work directory
+        if os.path.exists(workDir):
+            shutil.rmtree(workDir)
+        if not os.path.exists(workDir):
+            os.makedirs(workDir)
+        
+        # Act&Assert: run psQTL_prep.py initialise
+        cmd = [
+            "python", os.path.join(baseDir, "psQTL_prep.py"), "initialise",
+            "-d", workDir,
+            "--meta", fulltestMetadata,
+            "--fvcf", vcfFile
+        ]
+        returncode, stdout, stderr = run_subprocess(cmd)
+        #self.assertTrue(returncode == 0, f"Expected returncode 0 but got: {returncode}")
+        self.assertTrue(stderr == "", f"Expected no stderr output but got: {stderr}")
+        
+        # Act&Assert: run psQTL_proc.py ed
+        cmd = [
+            "python", os.path.join(baseDir, "psQTL_proc.py"), "ed",
+            "-d", workDir,
+            "-i", "call"
+        ]
+        returncode, stdout, stderr = run_subprocess(cmd)
+        #self.assertTrue(returncode == 0, f"Expected returncode 0 but got: {returncode}")
+        self.assertTrue(stderr == "", f"Expected no stderr output but got: {stderr}")
+        
+        edFile = os.path.join(workDir, "psQTL_variants.ed.tsv.gz")
+        edContents = []
+        with read_gz_file(edFile) as fileIn:
+            for line in fileIn:
+                edContents.append(line.strip())
+        self.assertTrue(edContents[1] == edTruth, f"Expected ED file to contain '{edTruth}' but got: {edContents[1]}")
+        
+        # Act&Assert: run psQTL_proc.py splsda
+        cmd = [
+            "python", os.path.join(baseDir, "psQTL_proc.py"), "splsda",
+            "-d", workDir,
+            "-i", "call"
+        ]
+        returncode, stdout, stderr = run_subprocess(cmd)
+        #self.assertTrue(returncode == 0, f"Expected returncode 0 but got: {returncode}")
+        self.assertTrue(stderr == "", f"Expected no stderr output but got: {stderr}")
+        
+        # Assert: check that the output files are correctly generated
+        berFile = os.path.join(workDir, "splsda", "psQTL_variants.BER.tsv")
+        with open(berFile) as fileIn:
+            berContents = fileIn.readlines()
+        self.assertTrue(berContents[1] == berTruth, f"Expected BER file to contain '{berTruth}' but got: {berContents[1]}")
+        
+        selectedFile = os.path.join(workDir, "splsda", "psQTL_variants.selected.tsv")
+        with open(selectedFile) as fileIn:
+            selectedContents = fileIn.readlines()
+        self.assertTrue(selectedContents[1] == selectedTruth, f"Expected selected file to contain '{selectedTruth}' but got: {selectedContents[1]}")
+        
+        recodeFile = os.path.join(workDir, "splsda", "psQTL_variants.recode.tsv.gz")
+        recodeContents = []
+        with read_gz_file(recodeFile) as fileIn:
+            for line in fileIn:
+                recodeContents.append(line.strip())
+        self.assertTrue(recodeContents == recodeTruth, f"Expected recode file to be '{recodeTruth}' but got: {recodeContents}")
+    
+    def test_diploid_variants_parents_full_metadata(self):
+        "Test a full psQTL analysis pipeline with a test set of variants (parents calculation) and metadata"
+        # Arrange: set variables
+        workDir = os.path.join(dataDir, "tmp")
+        fulltestMetadata = os.path.join(dataDir, "fulltest.metadata.1.tsv")
+        vcfFile = os.path.join(dataDir, "fulltest.variants.1.vcf")
+        genomeFile = os.path.join(dataDir, "genome.fasta")
+        
+        edTruth = "chr1\t10\tsnp\t0\t20\t0"
+        berTruth = "chr1\t0\t0.05\n"
+        selectedTruth = "chr1\t10\t1\t1\tleft\n"
+        recodeTruth = ['chrom\tpos\tbulk1_1\tbulk1_10\tbulk1_11\tbulk1_12\tbulk1_13\tbulk1_14\tbulk1_15\tbulk1_16\tbulk1_17\tbulk1_18\tbulk1_19\tbulk1_2\tbulk1_20\tbulk1_21\tbulk1_3\tbulk1_4\tbulk1_5\tbulk1_6\tbulk1_7\tbulk1_8\tbulk1_9\tbulk2_1\tbulk2_10\tbulk2_11\tbulk2_12\tbulk2_13\tbulk2_14\tbulk2_15\tbulk2_16\tbulk2_17\tbulk2_18\tbulk2_19\tbulk2_2\tbulk2_20\tbulk2_21\tbulk2_22\tbulk2_23\tbulk2_24\tbulk2_25\tbulk2_26\tbulk2_27\tbulk2_28\tbulk2_29\tbulk2_3\tbulk2_30\tbulk2_31\tbulk2_32\tbulk2_33\tbulk2_34\tbulk2_35\tbulk2_36\tbulk2_37\tbulk2_38\tbulk2_39\tbulk2_4\tbulk2_40\tbulk2_41\tbulk2_42\tbulk2_43\tbulk2_44\tbulk2_45\tbulk2_46\tbulk2_47\tbulk2_48\tbulk2_49\tbulk2_5\tbulk2_6\tbulk2_7\tbulk2_8\tbulk2_9',
+                       'chr1\t10\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t1\t1\t2\t2\t2\t1\t2\t2\t1\t0\t2\t1\t1\t2\t1\t1\t0\t1\t0\t1\t0\t0\t0\t0\t0']
+        
+        # Arrange: cleanup any previous work directory
+        if os.path.exists(workDir):
+            shutil.rmtree(workDir)
+        if not os.path.exists(workDir):
+            os.makedirs(workDir)
+        
+        # Act&Assert: run psQTL_prep.py initialise
+        cmd = [
+            "python", os.path.join(baseDir, "psQTL_prep.py"), "initialise",
+            "-d", workDir,
+            "--meta", fulltestMetadata,
+            "--fvcf", vcfFile
+        ]
+        returncode, stdout, stderr = run_subprocess(cmd)
+        #self.assertTrue(returncode == 0, f"Expected returncode 0 but got: {returncode}")
+        self.assertTrue(stderr == "", f"Expected no stderr output but got: {stderr}")
+        
+        # Act&Assert: run psQTL_proc.py ed
+        cmd = [
+            "python", os.path.join(baseDir, "psQTL_proc.py"), "ed",
+            "-d", workDir,
+            "-i", "call", "--parents", "bulk1_1", "bulk2_29"
+        ]
+        returncode, stdout, stderr = run_subprocess(cmd)
+        #self.assertTrue(returncode == 0, f"Expected returncode 0 but got: {returncode}")
+        self.assertTrue(stderr == "", f"Expected no stderr output but got: {stderr}")
+        
+        edFile = os.path.join(workDir, "psQTL_variants.ed.tsv.gz")
+        edContents = []
+        with read_gz_file(edFile) as fileIn:
+            for line in fileIn:
+                edContents.append(line.strip())
+        self.assertTrue(edContents[1] == edTruth, f"Expected ED file to contain '{edTruth}' but got: {edContents[1]}")
+        
+        # Act&Assert: run psQTL_proc.py splsda
+        cmd = [
+            "python", os.path.join(baseDir, "psQTL_proc.py"), "splsda",
+            "-d", workDir,
+            "-i", "call"
+        ]
+        returncode, stdout, stderr = run_subprocess(cmd)
+        #self.assertTrue(returncode == 0, f"Expected returncode 0 but got: {returncode}")
+        self.assertTrue(stderr == "", f"Expected no stderr output but got: {stderr}")
+        
+        # Assert: check that the output files are correctly generated
+        berFile = os.path.join(workDir, "splsda", "psQTL_variants.BER.tsv")
+        with open(berFile) as fileIn:
+            berContents = fileIn.readlines()
+        self.assertTrue(berContents[1] == berTruth, f"Expected BER file to contain '{berTruth}' but got: {berContents[1]}")
+        
+        selectedFile = os.path.join(workDir, "splsda", "psQTL_variants.selected.tsv")
+        with open(selectedFile) as fileIn:
+            selectedContents = fileIn.readlines()
+        self.assertTrue(selectedContents[1] == selectedTruth, f"Expected selected file to contain '{selectedTruth}' but got: {selectedContents[1]}")
+        
+        recodeFile = os.path.join(workDir, "splsda", "psQTL_variants.recode.tsv.gz")
+        recodeContents = []
+        with read_gz_file(recodeFile) as fileIn:
+            for line in fileIn:
+                recodeContents.append(line.strip())
+        self.assertTrue(recodeContents == recodeTruth, f"Expected recode file to be '{recodeTruth}' but got: {recodeContents}")
+    
+    def test_diploid_variants_no_parents_subset_metadata(self):
+        "Test a full psQTL analysis pipeline with a test set of variants and subsetted metadata"
+        # Arrange: set variables
+        workDir = os.path.join(dataDir, "tmp")
+        fulltestMetadata = os.path.join(dataDir, "subset.metadata.1.tsv")
+        vcfFile = os.path.join(dataDir, "fulltest.variants.1.vcf")
+        genomeFile = os.path.join(dataDir, "genome.fasta")
+        
+        edTruth = "chr1\t10\tsnp\t42\t58\t1.4142135623730951"
+        berTruth = "chr1\t0\t0\n"
+        selectedTruth = "chr1\t10\t1\t1\tleft\n"
+        recodeTruth = ['chrom\tpos\tbulk1_1\tbulk1_10\tbulk1_11\tbulk1_12\tbulk1_13\tbulk1_14\tbulk1_15\tbulk1_16\tbulk1_17\tbulk1_18\tbulk1_19\tbulk1_2\tbulk1_20\tbulk1_21\tbulk1_3\tbulk1_4\tbulk1_5\tbulk1_6\tbulk1_7\tbulk1_8\tbulk1_9\tbulk2_1\tbulk2_10\tbulk2_11\tbulk2_12\tbulk2_13\tbulk2_14\tbulk2_15\tbulk2_16\tbulk2_17\tbulk2_18\tbulk2_19\tbulk2_2\tbulk2_20\tbulk2_21\tbulk2_22\tbulk2_23\tbulk2_24\tbulk2_25\tbulk2_26\tbulk2_27\tbulk2_28\tbulk2_29\tbulk2_3\tbulk2_4\tbulk2_5\tbulk2_6\tbulk2_7\tbulk2_8\tbulk2_9',
+                       'chr1\t10\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0']
+        
+        # Arrange: cleanup any previous work directory
+        if os.path.exists(workDir):
+            shutil.rmtree(workDir)
+        if not os.path.exists(workDir):
+            os.makedirs(workDir)
+        
+        # Act&Assert: run psQTL_prep.py initialise
+        cmd = [
+            "python", os.path.join(baseDir, "psQTL_prep.py"), "initialise",
+            "-d", workDir,
+            "--meta", fulltestMetadata,
+            "--fvcf", vcfFile
+        ]
+        returncode, stdout, stderr = run_subprocess(cmd)
+        #self.assertTrue(returncode == 0, f"Expected returncode 0 but got: {returncode}")
+        self.assertTrue(stderr == "", f"Expected no stderr output but got: {stderr}")
+        
+        # Act&Assert: run psQTL_proc.py ed
+        cmd = [
+            "python", os.path.join(baseDir, "psQTL_proc.py"), "ed",
+            "-d", workDir,
+            "-i", "call"
+        ]
+        returncode, stdout, stderr = run_subprocess(cmd)
+        #self.assertTrue(returncode == 0, f"Expected returncode 0 but got: {returncode}")
+        self.assertTrue(stderr == "", f"Expected no stderr output but got: {stderr}")
+        
+        edFile = os.path.join(workDir, "psQTL_variants.ed.tsv.gz")
+        edContents = []
+        with read_gz_file(edFile) as fileIn:
+            for line in fileIn:
+                edContents.append(line.strip())
+        self.assertTrue(edContents[1] == edTruth, f"Expected ED file to contain '{edTruth}' but got: {edContents[1]}")
+        
+        # Act&Assert: run psQTL_proc.py splsda
+        cmd = [
+            "python", os.path.join(baseDir, "psQTL_proc.py"), "splsda",
+            "-d", workDir,
+            "-i", "call"
+        ]
+        returncode, stdout, stderr = run_subprocess(cmd)
+        #self.assertTrue(returncode == 0, f"Expected returncode 0 but got: {returncode}")
+        self.assertTrue(stderr == "", f"Expected no stderr output but got: {stderr}")
+        
+        # Assert: check that the output files are correctly generated
+        berFile = os.path.join(workDir, "splsda", "psQTL_variants.BER.tsv")
+        with open(berFile) as fileIn:
+            berContents = fileIn.readlines()
+        self.assertTrue(berContents[1] == berTruth, f"Expected BER file to contain '{berTruth}' but got: {berContents[1]}")
+        
+        selectedFile = os.path.join(workDir, "splsda", "psQTL_variants.selected.tsv")
+        with open(selectedFile) as fileIn:
+            selectedContents = fileIn.readlines()
+        self.assertTrue(selectedContents[1] == selectedTruth, f"Expected selected file to contain '{selectedTruth}' but got: {selectedContents[1]}")
+        
+        recodeFile = os.path.join(workDir, "splsda", "psQTL_variants.recode.tsv.gz")
+        recodeContents = []
+        with read_gz_file(recodeFile) as fileIn:
+            for line in fileIn:
+                recodeContents.append(line.strip())
+        self.assertTrue(recodeContents == recodeTruth, f"Expected recode file to be '{recodeTruth}' but got: {recodeContents}")
+    
+    def test_diploid_variants_parents_subset_metadata(self):
+        "Test a full psQTL analysis pipeline with a test set of variants (parents calculation) and metadata"
+        # Arrange: set variables
+        workDir = os.path.join(dataDir, "tmp")
+        fulltestMetadata = os.path.join(dataDir, "subset.metadata.1.tsv")
+        vcfFile = os.path.join(dataDir, "fulltest.variants.1.vcf")
+        genomeFile = os.path.join(dataDir, "genome.fasta")
+        
+        edTruth = "chr1\t10\tsnp\t0\t0\t0"
+        berTruth = "chr1\t0\t0\n"
+        selectedTruth = "chr1\t10\t1\t1\tleft\n"
+        recodeTruth = ['chrom\tpos\tbulk1_1\tbulk1_10\tbulk1_11\tbulk1_12\tbulk1_13\tbulk1_14\tbulk1_15\tbulk1_16\tbulk1_17\tbulk1_18\tbulk1_19\tbulk1_2\tbulk1_20\tbulk1_21\tbulk1_3\tbulk1_4\tbulk1_5\tbulk1_6\tbulk1_7\tbulk1_8\tbulk1_9\tbulk2_1\tbulk2_10\tbulk2_11\tbulk2_12\tbulk2_13\tbulk2_14\tbulk2_15\tbulk2_16\tbulk2_17\tbulk2_18\tbulk2_19\tbulk2_2\tbulk2_20\tbulk2_21\tbulk2_22\tbulk2_23\tbulk2_24\tbulk2_25\tbulk2_26\tbulk2_27\tbulk2_28\tbulk2_29\tbulk2_3\tbulk2_4\tbulk2_5\tbulk2_6\tbulk2_7\tbulk2_8\tbulk2_9',
+                       'chr1\t10\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0']
+        
+        # Arrange: cleanup any previous work directory
+        if os.path.exists(workDir):
+            shutil.rmtree(workDir)
+        if not os.path.exists(workDir):
+            os.makedirs(workDir)
+        
+        # Act&Assert: run psQTL_prep.py initialise
+        cmd = [
+            "python", os.path.join(baseDir, "psQTL_prep.py"), "initialise",
+            "-d", workDir,
+            "--meta", fulltestMetadata,
+            "--fvcf", vcfFile
+        ]
+        returncode, stdout, stderr = run_subprocess(cmd)
+        #self.assertTrue(returncode == 0, f"Expected returncode 0 but got: {returncode}")
+        self.assertTrue(stderr == "", f"Expected no stderr output but got: {stderr}")
+        
+        # Act&Assert: run psQTL_proc.py ed
+        cmd = [
+            "python", os.path.join(baseDir, "psQTL_proc.py"), "ed",
+            "-d", workDir,
+            "-i", "call", "--parents", "bulk1_1", "bulk2_29"
+        ]
+        returncode, stdout, stderr = run_subprocess(cmd)
+        #self.assertTrue(returncode == 0, f"Expected returncode 0 but got: {returncode}")
+        self.assertTrue(stderr == "", f"Expected no stderr output but got: {stderr}")
+        
+        edFile = os.path.join(workDir, "psQTL_variants.ed.tsv.gz")
+        edContents = []
+        with read_gz_file(edFile) as fileIn:
+            for line in fileIn:
+                edContents.append(line.strip())
+        self.assertTrue(edContents[1] == edTruth, f"Expected ED file to contain '{edTruth}' but got: {edContents[1]}")
+        
+        # Act&Assert: run psQTL_proc.py splsda
+        cmd = [
+            "python", os.path.join(baseDir, "psQTL_proc.py"), "splsda",
+            "-d", workDir,
+            "-i", "call"
+        ]
+        returncode, stdout, stderr = run_subprocess(cmd)
+        #self.assertTrue(returncode == 0, f"Expected returncode 0 but got: {returncode}")
+        self.assertTrue(stderr == "", f"Expected no stderr output but got: {stderr}")
+        
+        # Assert: check that the output files are correctly generated
+        berFile = os.path.join(workDir, "splsda", "psQTL_variants.BER.tsv")
+        with open(berFile) as fileIn:
+            berContents = fileIn.readlines()
+        self.assertTrue(berContents[1] == berTruth, f"Expected BER file to contain '{berTruth}' but got: {berContents[1]}")
+        
+        selectedFile = os.path.join(workDir, "splsda", "psQTL_variants.selected.tsv")
+        with open(selectedFile) as fileIn:
+            selectedContents = fileIn.readlines()
+        self.assertTrue(selectedContents[1] == selectedTruth, f"Expected selected file to contain '{selectedTruth}' but got: {selectedContents[1]}")
+        
+        recodeFile = os.path.join(workDir, "splsda", "psQTL_variants.recode.tsv.gz")
+        recodeContents = []
+        with read_gz_file(recodeFile) as fileIn:
+            for line in fileIn:
+                recodeContents.append(line.strip())
+        self.assertTrue(recodeContents == recodeTruth, f"Expected recode file to be '{recodeTruth}' but got: {recodeContents}")
+    
+    def test_tetraploid_variants_no_parents_full_metadata(self):
+        "Test a full psQTL analysis pipeline with a test set of tetraploid variants and metadata"
+        # Arrange: set variables
+        workDir = os.path.join(dataDir, "tmp")
+        fulltestMetadata = os.path.join(dataDir, "fulltest.metadata.1.tsv")
+        vcfFile = os.path.join(dataDir, "fulltest.variants.2.vcf")
+        genomeFile = os.path.join(dataDir, "genome.fasta")
+        
+        edTruth = "chr1\t10\tsnp\t84\t196\t1.0678755470980512" # twice as many alleles, same ED as diploid version
+        berTruth = "chr1\t0\t0.05\n"
+        selectedTruth = "chr1\t10\t1\t1\tleft\n"
+        recodeTruth = ['chrom\tpos\tbulk1_1\tbulk1_10\tbulk1_11\tbulk1_12\tbulk1_13\tbulk1_14\tbulk1_15\tbulk1_16\tbulk1_17\tbulk1_18\tbulk1_19\tbulk1_2\tbulk1_20\tbulk1_21\tbulk1_3\tbulk1_4\tbulk1_5\tbulk1_6\tbulk1_7\tbulk1_8\tbulk1_9\tbulk2_1\tbulk2_10\tbulk2_11\tbulk2_12\tbulk2_13\tbulk2_14\tbulk2_15\tbulk2_16\tbulk2_17\tbulk2_18\tbulk2_19\tbulk2_2\tbulk2_20\tbulk2_21\tbulk2_22\tbulk2_23\tbulk2_24\tbulk2_25\tbulk2_26\tbulk2_27\tbulk2_28\tbulk2_29\tbulk2_3\tbulk2_30\tbulk2_31\tbulk2_32\tbulk2_33\tbulk2_34\tbulk2_35\tbulk2_36\tbulk2_37\tbulk2_38\tbulk2_39\tbulk2_4\tbulk2_40\tbulk2_41\tbulk2_42\tbulk2_43\tbulk2_44\tbulk2_45\tbulk2_46\tbulk2_47\tbulk2_48\tbulk2_49\tbulk2_5\tbulk2_6\tbulk2_7\tbulk2_8\tbulk2_9',
+                       'chr1\t10\t4\t4\t4\t4\t4\t4\t4\t4\t4\t4\t4\t4\t4\t4\t4\t4\t4\t4\t4\t4\t4\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t2\t2\t4\t4\t4\t2\t4\t4\t2\t0\t4\t2\t2\t4\t2\t2\t0\t2\t0\t2\t0\t0\t0\t0\t0']
+        
+        # Arrange: cleanup any previous work directory
+        if os.path.exists(workDir):
+            shutil.rmtree(workDir)
+        if not os.path.exists(workDir):
+            os.makedirs(workDir)
+        
+        # Act&Assert: run psQTL_prep.py initialise
+        cmd = [
+            "python", os.path.join(baseDir, "psQTL_prep.py"), "initialise",
+            "-d", workDir,
+            "--meta", fulltestMetadata,
+            "--fvcf", vcfFile
+        ]
+        returncode, stdout, stderr = run_subprocess(cmd)
+        self.assertTrue(returncode == 0, f"Expected returncode 0 but got: {returncode}")
+        self.assertTrue(stderr == "", f"Expected no stderr output but got: {stderr}")
+        
+        # Act&Assert: run psQTL_proc.py ed
+        cmd = [
+            "python", os.path.join(baseDir, "psQTL_proc.py"), "ed",
+            "-d", workDir,
+            "-i", "call"
+        ]
+        returncode, stdout, stderr = run_subprocess(cmd)
+        self.assertTrue(returncode == 0, f"Expected returncode 0 but got: {returncode}")
+        self.assertTrue(stderr == "", f"Expected no stderr output but got: {stderr}")
+        
+        edFile = os.path.join(workDir, "psQTL_variants.ed.tsv.gz")
+        edContents = []
+        with read_gz_file(edFile) as fileIn:
+            for line in fileIn:
+                edContents.append(line.strip())
+        self.assertTrue(edContents[1] == edTruth, f"Expected ED file to contain '{edTruth}' but got: {edContents[1]}")
+        
+        # Act&Assert: run psQTL_proc.py splsda
+        cmd = [
+            "python", os.path.join(baseDir, "psQTL_proc.py"), "splsda",
+            "-d", workDir,
+            "-i", "call"
+        ]
+        returncode, stdout, stderr = run_subprocess(cmd)
+        self.assertTrue(returncode == 0, f"Expected returncode 0 but got: {returncode}")
+        self.assertTrue(stderr == "", f"Expected no stderr output but got: {stderr}")
+        
+        # Assert: check that the output files are correctly generated
+        berFile = os.path.join(workDir, "splsda", "psQTL_variants.BER.tsv")
+        with open(berFile) as fileIn:
+            berContents = fileIn.readlines()
+        self.assertTrue(berContents[1] == berTruth, f"Expected BER file to contain '{berTruth}' but got: {berContents[1]}")
+        
+        selectedFile = os.path.join(workDir, "splsda", "psQTL_variants.selected.tsv")
+        with open(selectedFile) as fileIn:
+            selectedContents = fileIn.readlines()
+        self.assertTrue(selectedContents[1] == selectedTruth, f"Expected selected file to contain '{selectedTruth}' but got: {selectedContents[1]}")
+        
+        recodeFile = os.path.join(workDir, "splsda", "psQTL_variants.recode.tsv.gz")
+        recodeContents = []
+        with read_gz_file(recodeFile) as fileIn:
+            for line in fileIn:
+                recodeContents.append(line.strip())
+        self.assertTrue(recodeContents == recodeTruth, f"Expected recode file to be '{recodeTruth}' but got: {recodeContents}")
+    
+    def test_tetraploid_variants_parents_full_metadata(self):
+        "Test a full psQTL analysis pipeline with a test set of variants (parents calculation) and metadata"
+        # Arrange: set variables
+        workDir = os.path.join(dataDir, "tmp")
+        fulltestMetadata = os.path.join(dataDir, "fulltest.metadata.1.tsv")
+        vcfFile = os.path.join(dataDir, "fulltest.variants.2.vcf")
+        genomeFile = os.path.join(dataDir, "genome.fasta")
+        
+        edTruth = "chr1\t10\tsnp\t0\t40\t0"
+        berTruth = "chr1\t0\t0.05\n"
+        selectedTruth = "chr1\t10\t1\t1\tleft\n"
+        recodeTruth = ['chrom\tpos\tbulk1_1\tbulk1_10\tbulk1_11\tbulk1_12\tbulk1_13\tbulk1_14\tbulk1_15\tbulk1_16\tbulk1_17\tbulk1_18\tbulk1_19\tbulk1_2\tbulk1_20\tbulk1_21\tbulk1_3\tbulk1_4\tbulk1_5\tbulk1_6\tbulk1_7\tbulk1_8\tbulk1_9\tbulk2_1\tbulk2_10\tbulk2_11\tbulk2_12\tbulk2_13\tbulk2_14\tbulk2_15\tbulk2_16\tbulk2_17\tbulk2_18\tbulk2_19\tbulk2_2\tbulk2_20\tbulk2_21\tbulk2_22\tbulk2_23\tbulk2_24\tbulk2_25\tbulk2_26\tbulk2_27\tbulk2_28\tbulk2_29\tbulk2_3\tbulk2_30\tbulk2_31\tbulk2_32\tbulk2_33\tbulk2_34\tbulk2_35\tbulk2_36\tbulk2_37\tbulk2_38\tbulk2_39\tbulk2_4\tbulk2_40\tbulk2_41\tbulk2_42\tbulk2_43\tbulk2_44\tbulk2_45\tbulk2_46\tbulk2_47\tbulk2_48\tbulk2_49\tbulk2_5\tbulk2_6\tbulk2_7\tbulk2_8\tbulk2_9',
+                       'chr1\t10\t4\t4\t4\t4\t4\t4\t4\t4\t4\t4\t4\t4\t4\t4\t4\t4\t4\t4\t4\t4\t4\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t2\t2\t4\t4\t4\t2\t4\t4\t2\t0\t4\t2\t2\t4\t2\t2\t0\t2\t0\t2\t0\t0\t0\t0\t0']
+        
+        # Arrange: cleanup any previous work directory
+        if os.path.exists(workDir):
+            shutil.rmtree(workDir)
+        if not os.path.exists(workDir):
+            os.makedirs(workDir)
+        
+        # Act&Assert: run psQTL_prep.py initialise
+        cmd = [
+            "python", os.path.join(baseDir, "psQTL_prep.py"), "initialise",
+            "-d", workDir,
+            "--meta", fulltestMetadata,
+            "--fvcf", vcfFile
+        ]
+        returncode, stdout, stderr = run_subprocess(cmd)
+        #self.assertTrue(returncode == 0, f"Expected returncode 0 but got: {returncode}")
+        self.assertTrue(stderr == "", f"Expected no stderr output but got: {stderr}")
+        
+        # Act&Assert: run psQTL_proc.py ed
+        cmd = [
+            "python", os.path.join(baseDir, "psQTL_proc.py"), "ed",
+            "-d", workDir,
+            "-i", "call", "--parents", "bulk1_1", "bulk2_29"
+        ]
+        returncode, stdout, stderr = run_subprocess(cmd)
+        #self.assertTrue(returncode == 0, f"Expected returncode 0 but got: {returncode}")
+        self.assertTrue(stderr == "", f"Expected no stderr output but got: {stderr}")
+        
+        edFile = os.path.join(workDir, "psQTL_variants.ed.tsv.gz")
+        edContents = []
+        with read_gz_file(edFile) as fileIn:
+            for line in fileIn:
+                edContents.append(line.strip())
+        self.assertTrue(edContents[1] == edTruth, f"Expected ED file to contain '{edTruth}' but got: {edContents[1]}")
+        
+        # Act&Assert: run psQTL_proc.py splsda
+        cmd = [
+            "python", os.path.join(baseDir, "psQTL_proc.py"), "splsda",
+            "-d", workDir,
+            "-i", "call"
+        ]
+        returncode, stdout, stderr = run_subprocess(cmd)
+        #self.assertTrue(returncode == 0, f"Expected returncode 0 but got: {returncode}")
+        self.assertTrue(stderr == "", f"Expected no stderr output but got: {stderr}")
+        
+        # Assert: check that the output files are correctly generated
+        berFile = os.path.join(workDir, "splsda", "psQTL_variants.BER.tsv")
+        with open(berFile) as fileIn:
+            berContents = fileIn.readlines()
+        self.assertTrue(berContents[1] == berTruth, f"Expected BER file to contain '{berTruth}' but got: {berContents[1]}")
+        
+        selectedFile = os.path.join(workDir, "splsda", "psQTL_variants.selected.tsv")
+        with open(selectedFile) as fileIn:
+            selectedContents = fileIn.readlines()
+        self.assertTrue(selectedContents[1] == selectedTruth, f"Expected selected file to contain '{selectedTruth}' but got: {selectedContents[1]}")
+        
+        recodeFile = os.path.join(workDir, "splsda", "psQTL_variants.recode.tsv.gz")
+        recodeContents = []
+        with read_gz_file(recodeFile) as fileIn:
+            for line in fileIn:
+                recodeContents.append(line.strip())
+        self.assertTrue(recodeContents == recodeTruth, f"Expected recode file to be '{recodeTruth}' but got: {recodeContents}")
 
 if __name__ == '__main__':
     unittest.main()

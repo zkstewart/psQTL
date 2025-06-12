@@ -56,11 +56,11 @@ call.X <- as.data.frame(callRdata$selected.X[,rownames(callRdata$feature.details
 depth.X <- as.data.frame(depthRdata$selected.X[,rownames(depthRdata$feature.details.table)])
 
 # Detect a lack of need to integrate
-if (ncol(call.X) == 1) {
-  stop("Integrative sPLS-DA is not possible or necessary since only one 'call' variant was selected")
+if (ncol(call.X) < 2) {
+  stop("Integrative sPLS-DA is not possible or necessary since only one or zero 'call' variants were selected")
 }
-if (ncol(depth.X) == 1) {
-  stop("Integrative sPLS-DA is not possible or necessary since only one 'depth' CNV was selected")
+if (ncol(depth.X) < 2) {
+  stop("Integrative sPLS-DA is not possible or necessary since only one or zero 'depth' CNVs were selected")
 }
 
 # Order datasets equivalently

@@ -43,6 +43,10 @@ if (!requireNamespace("BiocParallel", quietly=TRUE))
     BiocManager::install("BiocParallel")
 library(BiocParallel)
 
+if (!requireNamespace("MASS", quietly=TRUE))
+    install.packages("MASS")
+library(MASS)
+
 # Set up parallel processing
 if (args$threads == 1) {
   BPPARAM <- BiocParallel::SerialParam()
@@ -72,10 +76,16 @@ rownames(df) <- make.names(paste0(df$chrom, "_", df$pos), unique=TRUE)
 # Drop any df values we are not analysing [Can occur if user metadata is a subset of VCF samples]
 df <- df[,c("chrom", "pos", metadata.table$V1)] # this also sorts df and metadata equivalently
 
+# Check that VCF has at least 1 variant
+if (nrow(df) == 0)
+{
+    stop(paste0("Encoded VCF file '", args$v, "' has no variants. sPLS-DA analysis cannot continue; please check your input VCF file for issues."))
+}
+
 # Discover incompatibilities between metadata and encoded VCF
 if ((ncol(df)-2) != nrow(metadata.table)) # -2 to account for c("chrom", "pos")
 {
-  stop(paste0("Encoded VCF column names (", paste(colnames(df[3:ncol(df)]), collapse=","), ") do not equal metadata sample labels (", paste(metadata.table$V1, collapse=","), "); incompatibility means sPLS-DA analysis cannot continue"))
+    stop(paste0("Encoded VCF column names (", paste(colnames(df[3:ncol(df)]), collapse=","), ") do not equal metadata sample labels (", paste(metadata.table$V1, collapse=","), "); incompatibility means sPLS-DA analysis cannot continue"))
 }
 
 # Extract Y variable values
@@ -106,18 +116,46 @@ for (chromosome in unique(df$chrom))
     # Remove invariant sites
     windowDF <- windowDF[! rowSums(windowDF) %in% c(0, ncol(windowDF)),,drop=FALSE]
     
-    # Store BER=0.5 if insufficient variants are found in this window
+    # Perform alternate process if insufficient variants are found in this window
     if (nrow(windowDF) < 2)
     {
-      window.explanation[nrow(window.explanation) + 1,] <- c(chromosome, windowStart, 0.5) # BER=0.5
-      next
+        # Extract details for this single-feature window
+        feature.row <- windowDF[1,]
+        feature.pos <- unlist(strsplit(rownames(feature.row), "_"))
+        feature.pos <- as.numeric(feature.pos[length(feature.pos)])
+        lm.df <- data.frame("X" = as.numeric(feature.row), "Y" = Y)
+        
+        # Run LDA, or skip if complete similarity or segregation exists
+        bulk1Values <- unique(lm.df[lm.df$Y == "bulk1",]$X)
+        bulk2Values <- unique(lm.df[lm.df$Y == "bulk2",]$X)
+        if (length(bulk1Values) == 1 & length(bulk2Values) == 1)
+        {
+            if (bulk1Values == bulk2Values) {
+                window.ber <- 0.5 # cannot distinguish in an identical region
+            } else {
+                window.ber <- 0 # complete segregation leads to perfect prediction
+            }
+        } else {
+            # Perform linear discriminant analysis
+            lda.fit <- lda(Y ~ X, data=lm.df)
+            lda.pred <- predict(lda.fit, lm.df)
+            posterior <- as.data.frame(lda.pred$posterior)
+            # Calculate an approximate measure of BER
+            predicted <- ifelse(posterior$bulk1 >= posterior$bulk2, "bulk1", "bulk2")
+            window.ber <- (1 - (sum(predicted == Y) / length(Y))) / 2
+        }
+        
+        # Store window and feature
+        window.explanation[nrow(window.explanation) + 1,] <- c(chromosome, windowStart, window.ber)
+        selected.features[nrow(selected.features) + 1,] <- c(chromosome, feature.pos, window.ber)
+        next
     }
 
     # Detect scenario where only 1 variant site exists in a population
     if (sum(colSums(windowDF) > 0) < 2)
     {
-      window.explanation[nrow(window.explanation) + 1,] <- c(chromosome, windowStart, 0.5) # BER=0.5
-      next
+        window.explanation[nrow(window.explanation) + 1,] <- c(chromosome, windowStart, 0.5) # BER=0.5
+        next
     }
     
     # Transpose to obtain X value for PLS-DA
@@ -172,18 +210,18 @@ for (chromosome in unique(df$chrom))
     # Store window explanatory power if features are found
     if (nrow(window.features) == 0)
     {
-      window.explanation[nrow(window.explanation) + 1,] <- c(chromosome, windowStart, 0.5) # BER=0.5
-      next
+        window.explanation[nrow(window.explanation) + 1,] <- c(chromosome, windowStart, 0.5) # BER=0.5
+        next
     }
     window.explanation[nrow(window.explanation) + 1,] <- c(chromosome, windowStart, window.ber)
     
     # Store best selected feature
     for (row.index in 1:nrow(window.features))
     {
-      feature.row <- window.features[row.index,]
-      feature.pos <- unlist(strsplit(rownames(feature.row), "_"))
-      feature.pos <- as.numeric(feature.pos[length(feature.pos)])
-      selected.features[nrow(selected.features) + 1,] <- c(chromosome, feature.pos, window.ber)
+        feature.row <- window.features[row.index,]
+        feature.pos <- unlist(strsplit(rownames(feature.row), "_"))
+        feature.pos <- as.numeric(feature.pos[length(feature.pos)])
+        selected.features[nrow(selected.features) + 1,] <- c(chromosome, feature.pos, window.ber)
     }
   }
 }
@@ -198,31 +236,44 @@ selected.X <- t(selected.df[, ! colnames(selected.df) %in% c("chrom", "pos")])
 # Raise error if we've filtered out all features with BER cutoff
 if (nrow(selected.X) == 0)
 {
-  original.number <- ncol(selected.df) - 2 # sans the chrom and pos columns
-  stop(paste0(
-    "BER cutoff of ", args$berCutoff, " reduces potential features from ",
-    original.number, " down to 0. Your data either has insufficient information ",
-    "to enable QTL prediction or your BER cutoff may be too strict."
-  ))
+    original.number <- ncol(selected.df) - 2 # sans the chrom and pos columns
+    stop(paste0(
+        "BER cutoff of ", args$berCutoff, " reduces potential features from ",
+        original.number, " down to 0. Your data either has insufficient information ",
+        "to enable QTL prediction with sPLS-DA or your BER cutoff may be too strict."
+    ))
 }
 
 # Tune sPLS-DA to choose number of genomic features
-list.keepX <- c(1:9,  seq(10, 30, 5)) # it is very improbable that more than 30 QTLs exist or can be meaningfully identified
-if (mixomicsVersion[2] <= 30) {
-    tune.splsda.test <- tune.splsda(selected.X, Y, test.keepX = list.keepX,
-                                    ncomp = 1, folds = 2, validation = 'Mfold',
-                                    scale = FALSE,
-                                    nrepeat = args$nrepeat, max.iter = args$maxiters,
-                                    cpus = args$threads)
+if (ncol(selected.X) < 2)
+{
+    print("Only one feature selected, so no tuning of sPLS-DA is performed")
+    select.keepX <- ncol(selected.X) # this will be 1
+    tune.splsda.test <- NULL
 } else {
-    tune.splsda.test <- tune.splsda(selected.X, Y, test.keepX = list.keepX,
-                                    ncomp = 1, folds = 2, validation = 'Mfold',
-                                    scale = FALSE,
-                                    nrepeat = args$nrepeat, max.iter = args$maxiters,
-                                    BPPARAM = BPPARAM)
+    if (ncol(selected.X) < 10) {
+        list.keepX <- c(1:ncol(selected.X)) # if fewer than 10 features, test all
+    } else {
+        max.features <- ifelse(ncol(selected.X) < 30, ncol(selected.X), 30)
+        list.keepX <- c(1:9,  seq(10, max.features, 5)) # it is very improbable that more than 30 QTLs exist or can be meaningfully identified
+    }
+
+    if (mixomicsVersion[2] <= 30) {
+        tune.splsda.test <- tune.splsda(selected.X, Y, test.keepX = list.keepX,
+                                        ncomp = 1, folds = 2, validation = 'Mfold',
+                                        scale = FALSE,
+                                        nrepeat = args$nrepeat, max.iter = args$maxiters,
+                                        cpus = args$threads)
+    } else {
+        tune.splsda.test <- tune.splsda(selected.X, Y, test.keepX = list.keepX,
+                                        ncomp = 1, folds = 2, validation = 'Mfold',
+                                        scale = FALSE,
+                                        nrepeat = args$nrepeat, max.iter = args$maxiters,
+                                        BPPARAM = BPPARAM)
+    }
+    select.keepX <- tune.splsda.test$choice.keepX[1:ncomp]
 }
 ncomp <- 1 # 'tune.splsda.test$choice.ncomp$ncomp' won't be used as a single component is sufficient when discriminating two groups
-select.keepX <- tune.splsda.test$choice.keepX[1:ncomp]
 
 # Run sPLS-DA to select multi-QTLs and identify most important features
 final.splsda <- splsda(selected.X, Y, keepX = select.keepX,
@@ -255,23 +306,22 @@ splsda.loadings <- splsda.loadings[abs(rowSums(splsda.loadings)) > 0,,drop=FALSE
 # Tabulate stability values
 if (nrow(splsda.loadings) == 1)
 {
-  stability.table <- data.frame(
-    "Var1" = rownames(splsda.loadings),
-    "Freq" = 1
-  )
+    stability.table <- data.frame(
+        "Var1" = rownames(splsda.loadings),
+        "Freq" = 1
+    )
 } else {
-  stability.table <- tryCatch(
+    stability.table <- tryCatch(
     {
-      as.data.frame(perf.final.splsda$features$stable$comp1[
+        as.data.frame(perf.final.splsda$features$stable$comp1[
         selectVar(final.splsda, comp = 1)$name])
     },
     error = function(e) {
-      data.frame(
+        data.frame(
         "Var1" = rownames(splsda.loadings),
         "Freq" = rep(0, nrow(splsda.loadings))
-      )
-    }
-  )
+        )
+    })
 }
 stability.table <- na.omit(stability.table) # this might not be needed anymore, but is kept for safety
 rownames(stability.table) <- stability.table$Var1
