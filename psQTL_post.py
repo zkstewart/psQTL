@@ -172,6 +172,7 @@ def main():
                          to allow for the Y-axis labels in the top centre of the plot
                          (default: 10)""",
                          default=10)
+    
     # Report-subparser arguments
     rparser.add_argument("-a", dest="annotationGFF3",
                          required=True,

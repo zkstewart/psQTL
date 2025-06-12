@@ -53,7 +53,7 @@ def gt_median_adjustment(genotypeLists):
         adjustedGenotypes.append(adjustedSublist)
     return adjustedGenotypes
 
-def calculate_segregant_ed(b1Gt, b2Gt, isCNV=False):
+def calculate_segregant_ed(b1Gt, b2Gt, isCNV=False, parentsGT=None):
     '''
     Parameters:
         b1Gt / b2Gt -- a list of lists containing the genotype value as integers
@@ -66,6 +66,11 @@ def calculate_segregant_ed(b1Gt, b2Gt, isCNV=False):
                        ]
         isCNV -- (OPTIONAL) a boolean indicating whether the genotypes are for CNVs
                  (True) or SNPs/indels (False); default is False
+        parentsGT -- a list of two lists containing the genotype value as integers
+                     for the parents with format like:
+                     [ [0, 1], [1, 2] ]
+                     OR None if no parents are available or specified to
+                     filter out non-inheritable genotypes
     Returns:
         numAllelesB1 -- the number of genotyped alleles in bulk 1
         numAllelesB2 -- the number of genotyped alleles in bulk 2
@@ -75,6 +80,39 @@ def calculate_segregant_ed(b1Gt, b2Gt, isCNV=False):
     if isCNV:
         b1Gt, b2Gt = gt_median_adjustment([b1Gt, b2Gt])
     
+    # Filter impossible progeny genotypes based on the parents' genotypes
+    if parentsGT != None and parentsGT != []:
+        possibleGTs = possible_genotypes(parentsGT[0], parentsGT[1])
+        b1Gt = [ gt for gt in b1Gt if set(gt) in possibleGTs ]
+        b2Gt = [ gt for gt in b2Gt if set(gt) in possibleGTs ]
+    
+    # Calculate Euclidean distance between the two bulks with both methods
+    numAllelesB1, numAllelesB2, edist1 = calculate_allele_frequency_ed(b1Gt, b2Gt)
+    numSamplesB1, numSamplesB2, edist2 = calculate_genotype_frequency_ed(b1Gt, b2Gt)
+    
+    # Return the values
+    "Choose the method of comparison that yields the largest distance"
+    return numAllelesB1, numAllelesB2, max(edist1, edist2)
+
+def calculate_allele_frequency_ed(b1Gt, b2Gt):
+    '''
+    Separate function to calculate the Euclidean distance between two bulks
+    based on the allele frequencies of the genotypes in each bulk.
+    
+    Parameters:
+        b1Gt / b2Gt -- a list of lists containing the genotype value as integers
+                       with format like:
+                       [
+                           [0, 1],
+                           [0, 0],
+                           [1, 1],
+                           ...
+                       ]
+    Returns:
+        numAllelesB1 -- the number of genotyped alleles in bulk 1
+        numAllelesB2 -- the number of genotyped alleles in bulk 2
+        edist -- a float of the the Euclidean distance between the two bulks
+    '''
     # Get all the unique alleles
     alleles = [ allele for gt in b1Gt + b2Gt for allele in gt ]
     uniqueAlleles = list(set(alleles))
@@ -100,14 +138,60 @@ def calculate_segregant_ed(b1Gt, b2Gt, isCNV=False):
         return numAllelesB1, numAllelesB2, 0 # euclidean distance cannot be calculated
     else:
         # Derive our euclidean distance value
-        """Refer to "Euclidean distance calculation" in Hill et al. 2013"""
+        "Refer to 'Euclidean distance calculation' in Hill et al. 2013"
         edist = sqrt(sum([
             ((b1Count[allele] / numAllelesB1) - (b2Count[allele] / numAllelesB2))**2
             for allele in uniqueAlleles
         ]))
-        
         # Return the values
         return numAllelesB1, numAllelesB2, edist
+
+def calculate_genotype_frequency_ed(b1Gt, b2Gt):
+    '''
+    Parameters:
+        b1Gt / b2Gt -- a list of lists containing the genotype value as integers
+                       with format like:
+                       [
+                           [0, 1],
+                           [0, 0],
+                           [1, 1],
+                           ...
+                       ]
+    Returns:
+        numSamplesB1 -- the number of genotyped samples in bulk 1
+        numSamplesB2 -- the number of genotyped samples in bulk 2
+        edist -- a float of the the Euclidean distance between the two bulks
+    '''
+    # Get all the unique genotypes
+    uniqueGts = set(tuple(sorted(gt)) for gt in b1Gt + b2Gt)
+    
+    # Tally for bulk 1
+    b1GtCount = { gt: 0 for gt in uniqueGts }
+    for gt in b1Gt:
+        b1GtCount[tuple(sorted(gt))] += 1
+    
+    # Tally for bulk 2
+    b2GtCount = { gt: 0 for gt in uniqueGts }
+    for gt in b2Gt:
+        b2GtCount[tuple(sorted(gt))] += 1
+    
+    # Sum the number of genotyped samples for each bulk
+    numSamplesB1 = len(b1Gt)
+    numSamplesB2 = len(b2Gt)
+    
+    # Calculate the Euclidean distance between the two bulks if possible
+    if numSamplesB1 == 0 or numSamplesB2 == 0:
+        return numSamplesB1, numSamplesB2, 0 # euclidean distance cannot be calculated
+    else:
+        # Derive our euclidean distance value
+        "This is the same as in calculate_allele_frequency_ed(), but for genotypes instead of alleles"
+        edist = sqrt(sum([
+            ((b1GtCount[gt] / numSamplesB1) - (b2GtCount[gt] / numSamplesB2))**2
+            for gt in uniqueGts
+        ]))
+        
+        # Return the values
+        return numSamplesB1, numSamplesB2, edist
 
 def possible_genotypes(gt1, gt2):
     '''
@@ -135,6 +219,8 @@ def possible_genotypes(gt1, gt2):
 
 def calculate_inheritance_ed(b1Gt, b2Gt, parentsGT):
     '''
+    DEPRECATED; use calculate_segregant_ed() instead.
+    
     Parameters:
         b1Gt / b2Gt -- a list of lists containing the genotype value as integers
                        with format like:
@@ -367,16 +453,8 @@ def parse_vcf_for_ed(vcfFile, metadataDict, isCNV, parents=[], ignoreIdentical=T
             parentsGT = [ snpDict[parent] for parent in parents if parent in snpDict ] # if parents == [] this will always be empty
             
             # Calculate Euclidean distance
-            if parents == []:
-                # Standard segregant ED calculation
-                numAllelesB1, numAllelesB2, \
-                    euclideanDist = calculate_segregant_ed(bulk1, bulk2, isCNV=isCNV)
-            else:
-                # Haplotype inheritance ED calculation
-                if len(parentsGT) != 2: # this can happen if one or both parents are not genotyped at this position
-                    continue
-                numAllelesB1, numAllelesB2, \
-                    euclideanDist = calculate_inheritance_ed(bulk1, bulk2, parentsGT)
+            numAllelesB1, numAllelesB2, euclideanDist = calculate_segregant_ed(bulk1, bulk2,
+                                                                               isCNV=isCNV, parentsGT=parentsGT)
             
             # Skip if both bulks are identical
             if ignoreIdentical and euclideanDist == 0:
