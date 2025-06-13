@@ -81,7 +81,7 @@ def calculate_segregant_ed(b1Gt, b2Gt, isCNV=False, parentsGT=None):
         b1Gt, b2Gt = gt_median_adjustment([b1Gt, b2Gt])
     
     # Filter impossible progeny genotypes based on the parents' genotypes
-    if parentsGT != None and parentsGT != []:
+    if parentsGT != None and len(parentsGT) == 2:
         possibleGTs = possible_genotypes(parentsGT[0], parentsGT[1])
         b1Gt = [ gt for gt in b1Gt if set(gt) in possibleGTs ]
         b2Gt = [ gt for gt in b2Gt if set(gt) in possibleGTs ]
