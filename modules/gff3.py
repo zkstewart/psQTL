@@ -13,7 +13,7 @@ from .parsing import read_gz_file
 
 class GFF3Feature:
     IMMUTABLE = ["ID", "ftype"] # these attributes should never change once set
-    def __init__(self, ID, ftype, start=None, end=None, strand=None, contig=None, children=[], parents=set()):
+    def __init__(self, ID, ftype, start=None, end=None, strand=None, contig=None, children=None, parents=None):
         self.ID = ID
         self.ftype = ftype
         self.start = start
@@ -51,6 +51,8 @@ class GFF3Feature:
         if self._start != None:
             return self._start
         else:
+            if len(self.children) == 0:
+                return None
             return min([ child.start for child in self.children ])
     
     @start.setter
@@ -71,6 +73,8 @@ class GFF3Feature:
         if self._end != None:
             return self._end
         else:
+            if len(self.children) == 0:
+                return None
             return max([ child.end for child in self.children ])
     
     @end.setter
@@ -153,8 +157,8 @@ class GFF3Graph:
         "exon": "mRNA",
         "mRNA": "gene",
         "lnc_RNA": "gene",
-        "Product": "gene", # Product is a special case, but we treat it as a gene parent
-        "gene": None  # Gene is the top-level feature, no parent
+        "Product": "gene" # Product is a special case, but we treat it as a gene parent
+        # "gene": None  # Gene is the top-level feature, no parent should be inferred
     }
     
     def __init__(self, fileLocation):
@@ -217,6 +221,16 @@ class GFF3Graph:
                 longestMrna = [mrnaFeature, mrnaLen]
         return longestMrna[0]
     
+    def _get_unique_feature_id(self, inputID):
+        ongoingCount = 1
+        featureID = inputID
+        while featureID in self.features:
+            featureID = f"{inputID}.{ongoingCount}"
+            if not featureID in self.features:
+                break
+            ongoingCount += 1
+        return featureID
+    
     def parse_gff3(self, gff3File):
         '''
         Parses a GFF3 file and populates the graph with features.
@@ -269,23 +283,37 @@ class GFF3Graph:
                                       start=start, end=end, strand=strand,
                                       contig=contig, children=[], parents=parentIDs)
                 
-                # Add the feature to the graph
-                self.add(feature)
+                # Index the feature if it doesn't already exist
+                if not featureID in self.features:
+                    self.add(feature)
+                # Specifically handle exons or CDS which are allowed to have duplicated IDs
+                elif ftype in ["exon", "CDS"]:
+                    feature.ID = self._get_unique_feature_id(featureID)
+                    self.add(feature)
+                # Handle other duplicated feature types
+                else:
+                    "We assume that the GFF3 is unsorted if we reach this point, so we are detailing an existing feature"
+                    feature = self.features[featureID]
+                    
+                    # Check that inferred details are correct
+                    if feature.ftype != ftype:
+                        raise ValueError(f"Unsorted GFF3 issue: Feature ID '{featureID}' has a different type '{feature.ftype}' than previously inferred '{ftype}'")
+                    if feature.contig != contig:
+                        raise ValueError(f"Unsorted GFF3 issue: Feature ID '{featureID}' has a different contig '{feature.contig}' than previously inferred '{contig}'")
+                    
+                    # Update feature details
+                    feature.start = start
+                    feature.end = end
+                    feature.strand = strand
+                    feature.parents.update(parentIDs) # add parents to existing set
+                    self.add(feature) # re-add to ensure parents are updated correctly
     
     def add(self, feature):
-        # Obtain a unique ID for the feature
-        featureID = feature.ID
-        ongoingCount = 1
-        while featureID in self.features:
-            featureID = f"{feature.ID}.{ongoingCount}"
-            if not featureID in self.features:
-                break
-            ongoingCount += 1
-        
         # Store feature within the graph
-        self.ftypes.setdefault(feature.ftype, []) # necessary if first occurrence of a subfeature preceeds its parent type
-        self.ftypes[feature.ftype].append(featureID)
-        self.features[featureID] = feature
+        if not feature.ID in self.features: # only if it doesn't already exist
+            self.ftypes.setdefault(feature.ftype, []) # necessary if first occurrence of a subfeature preceeds its parent type
+            self.ftypes[feature.ftype].append(feature.ID)
+            self.features[feature.ID] = feature
         
         # Update graph features with parent-child relationships
         for parentID in feature.parents:
@@ -301,7 +329,7 @@ class GFF3Graph:
                     self.add(parentFeature)
                 else:
                     raise ValueError("Your GFF3 is not sorted in top-down hierarchical order which has caused an error; " +
-                                     f"I encountered a {feature.ftype} with ID '{featureID}' that has a parent '{parentID}' which has " + 
+                                     f"I encountered a {feature.ftype} with ID '{feature.ID}' that has a parent '{parentID}' which has " + 
                                      f"not yet appeared in your GFF3 file. I am unsure what parent type to infer for " +
                                      f"'{feature.ftype}' features, so I cannot continue parsing. Sort your GFF3 file in " +
                                      "conventional top-down hierarchical order before trying again.")
@@ -389,6 +417,32 @@ class GFF3Graph:
         
         # Return list
         return features
+    
+    def qc(self, typesToCheck=None):
+        '''
+        Runs a quality control check on the GFF3Graph to ensure that all
+        features are properly linked.
+        
+        Returns:
+            danglingFeatures -- a dictionary where keys are feature IDs
+                                and values are the number of dangling features
+                                that do not have a parent or child.
+            typesToCheck -- (OPTIONAL) a list of feature types to check for dangling features
+                            OR None to check all feature types.
+        '''
+        danglingFeatures = {}
+        for feature in self:
+            if typesToCheck == None or feature.ftype in typesToCheck:
+                if len(feature.parents) == 0 and len(feature.children) == 0:
+                    danglingFeatures.setdefault(feature.ftype, 0)
+                    danglingFeatures[feature.ftype] = 1
+        
+        if len(danglingFeatures) != 0:
+            print(f"WARNING: Parsing '{self.fileLocation}' resulted in dangling features with no parents or children, " +
+                  "which is likely due to an unsorted or incorrectly formatted GFF3 file. This may cause issues with " +
+                  "psQTL's functionality.")
+            for ftype, count in danglingFeatures.items():
+                print(f"# {count} '{ftype}' feature{'s have' if count > 1 else ' has'} no parents or children")
     
     def __getitem__(self, key):
         return self.features[key]

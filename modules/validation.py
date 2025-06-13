@@ -181,6 +181,7 @@ def validate_post_args(args):
         else:
             args.gff3Obj = GFF3Graph(args.annotationGFF3) # parsing now to raise errors early
             args.gff3Obj.create_ncls_index("gene")
+            args.gff3Obj.qc(typesToCheck=["gene", "mRNA"]) # prints out warnings if any issues found
     
     # Validate output file
     if os.path.exists(args.outputFileName):
@@ -226,14 +227,19 @@ def validate_regions(args, lengthsDict):
             # Detect reverse orientation and swap start/end if necessary
             reverse = False
             if start > end:
-                # Prevent reverse orientation if plotStyle == "circos"
-                if args.plotStyle == "circos":
-                    raise ValueError(f"--region '{contigID, start, end}' cannot be in reverse orientation " + 
-                                    "with '-s circos'; only '-s horizontal' plot style can plot in reverse.")
-                # Otherwise, swap start and end
+                if args.mode == "plot":
+                    # Prevent reverse orientation if plotStyle == "circos"
+                    if args.plotStyle == "circos":
+                        raise ValueError(f"--region '{contigID, start, end}' cannot be in reverse orientation " + 
+                                        "with '-s circos'; only '-s horizontal' plot style can plot in reverse.")
+                    # Otherwise, swap start and end
+                    else:
+                        start, end = end, start
+                        reverse = True
+                # If running 'report' mode, just swap start and end
                 else:
                     start, end = end, start
-                    reverse = True
+                    reverse = True # has no effect in 'report' mode, but keeps logic consistent
             
             # Validate end position
             if end > lengthsDict[contigID]:

@@ -1370,8 +1370,91 @@ class TestGFF3(unittest.TestCase):
                         f"Expected mRNA {mrnaID2} to have start {mrnaTruth2[0]} and end {mrnaTruth2[1]}, but got start {gff3Obj[mrnaID2].start} and end {gff3Obj[mrnaID2].end}")
     
     def test_faulty_gff3_handling_4(self):
-        "Test parsing GFF3 which has exon ID but no transcript ID"
-        pass
+        "Test parsing GFF3 which has exon/CDS lines (with no gene or mRNA lines)"
+        # Arrange
+        gff3File = os.path.join(dataDir, "faulty.4.gff3")
+        numMrnas = 2
+        numExons = 10
+        numCDS = 10
+        
+        # Act
+        gff3Obj = GFF3Graph(gff3File)
+        
+        # Assert
+        self.assertTrue(len(gff3Obj.ftypes["mRNA"]) == numMrnas,
+                        f"Expected GFF3Graph object to have {numMrnas} mRNAs but got {len(gff3Obj.ftypes['mRNA'])}")
+        self.assertTrue(len(gff3Obj.ftypes["exon"]) == numExons,
+                        f"Expected GFF3Graph object to have {numExons} exons but got {len(gff3Obj.ftypes['exon'])}")
+        self.assertTrue(len(gff3Obj.ftypes["CDS"]) == numCDS,
+                        f"Expected GFF3Graph object to have {numCDS} CDS but got {len(gff3Obj.ftypes['CDS'])}")
+    
+    def test_faulty_gff3_handling_5(self):
+        "Test parsing GFF3 which has exon/CDS lines preceeding mRNA lines (with no gene lines)"
+        # Arrange
+        gff3File = os.path.join(dataDir, "faulty.5.gff3")
+        numGenes = 2 # genes should be inferred from mRNAs without duplication
+        numMrnas = 2
+        numExons = 10
+        numCDS = 10
+        
+        # Act
+        gff3Obj = GFF3Graph(gff3File)
+        
+        # Assert
+        self.assertTrue(len(gff3Obj.ftypes["gene"]) == numGenes,
+                        f"Expected GFF3Graph object to have {numGenes} genes but got {len(gff3Obj.ftypes['gene'])}")
+        self.assertTrue(len(gff3Obj.ftypes["mRNA"]) == numMrnas,
+                        f"Expected GFF3Graph object to have {numMrnas} mRNAs but got {len(gff3Obj.ftypes['mRNA'])}")
+        self.assertTrue(len(gff3Obj.ftypes["exon"]) == numExons,
+                        f"Expected GFF3Graph object to have {numExons} exons but got {len(gff3Obj.ftypes['exon'])}")
+        self.assertTrue(len(gff3Obj.ftypes["CDS"]) == numCDS,
+                        f"Expected GFF3Graph object to have {numCDS} CDS but got {len(gff3Obj.ftypes['CDS'])}")
+    
+    def test_faulty_gff3_handling_6(self):
+        "Test parsing GFF3 which has exon/CDS lines preceeding mRNA lines (with no gene lines)"
+        # Arrange
+        gff3File = os.path.join(dataDir, "faulty.6.gff3")
+        numGenes = 2 # neither genes nor mRNAs should have duplicates being inferred
+        numMrnas = 2
+        numExons = 10
+        numCDS = 10
+        
+        # Act
+        gff3Obj = GFF3Graph(gff3File)
+        
+        # Assert
+        self.assertTrue(len(gff3Obj.ftypes["gene"]) == numGenes,
+                        f"Expected GFF3Graph object to have {numGenes} genes but got {len(gff3Obj.ftypes['gene'])}")
+        self.assertTrue(len(gff3Obj.ftypes["mRNA"]) == numMrnas,
+                        f"Expected GFF3Graph object to have {numMrnas} mRNAs but got {len(gff3Obj.ftypes['mRNA'])}")
+        self.assertTrue(len(gff3Obj.ftypes["exon"]) == numExons,
+                        f"Expected GFF3Graph object to have {numExons} exons but got {len(gff3Obj.ftypes['exon'])}")
+        self.assertTrue(len(gff3Obj.ftypes["CDS"]) == numCDS,
+                        f"Expected GFF3Graph object to have {numCDS} CDS but got {len(gff3Obj.ftypes['CDS'])}")
+
+    def test_faulty_gff3_handling_7(self):
+        "Test parsing GFF3 which has exon/CDS lines preceeding gene lines (with no mRNA lines)"
+        # Arrange
+        gff3File = os.path.join(dataDir, "faulty.7.gff3")
+        numGenes = 2 # neither genes nor mRNAs should have duplicates being inferred
+        numMrnas = 2
+        numExons = 10
+        numCDS = 10
+        
+        # Act
+        gff3Obj = GFF3Graph(gff3File)
+        
+        # Assert
+        self.assertTrue(len(gff3Obj.ftypes["gene"]) == numGenes,
+                        f"Expected GFF3Graph object to have {numGenes} genes but got {len(gff3Obj.ftypes['gene'])}")
+        self.assertTrue(len(gff3Obj.ftypes["mRNA"]) == numMrnas,
+                        f"Expected GFF3Graph object to have {numMrnas} mRNAs but got {len(gff3Obj.ftypes['mRNA'])}")
+        self.assertTrue(len(gff3Obj.ftypes["exon"]) == numExons,
+                        f"Expected GFF3Graph object to have {numExons} exons but got {len(gff3Obj.ftypes['exon'])}")
+        self.assertTrue(len(gff3Obj.ftypes["CDS"]) == numCDS,
+                        f"Expected GFF3Graph object to have {numCDS} CDS but got {len(gff3Obj.ftypes['CDS'])}")
+        self.assertTrue(all([ len(gff3Obj[x].parents) == 0 for x in gff3Obj.ftypes["mRNA"] ]),
+                        "Expected mRNAs to be unlinked from their gene parents, but some have parents")
 
 if __name__ == '__main__':
     unittest.main()
