@@ -11,6 +11,7 @@ from modules.ed import parse_vcf_for_ed, calculate_segregant_ed, calculate_inher
 from modules.depth import get_median_value, predict_deletions
 from modules.samtools_handling import depth_to_histoDict
 from modules.splsda import recode_variant, recode_cnv
+from modules.gff3 import GFF3Graph
 
 # Specify data locations
 dataDir = os.path.join(os.getcwd(), "data")
@@ -1253,6 +1254,124 @@ class TestMain(unittest.TestCase):
             for line in fileIn:
                 recodeContents.append(line.strip())
         self.assertTrue(recodeContents == recodeTruth, f"Expected recode file to be '{recodeTruth}' but got: {recodeContents}")
+
+class TestGFF3(unittest.TestCase):
+    def test_normal_gff3_handling_1(self):
+        "Test parsing GFF3 which is fully specified but has some minor formatting issues"
+        # Arrange
+        gff3File = os.path.join(dataDir, "normal.1.gff3")
+        numGenes = 2
+        numMrnas = 2
+        numExons = 10
+        numCDS = 10
+        
+        # Act
+        gff3Obj = GFF3Graph(gff3File)
+        
+        # Assert
+        self.assertTrue(len(gff3Obj.ftypes["gene"]) == numGenes,
+                        f"Expected GFF3Graph object to have {numGenes} genes but got {len(gff3Obj.ftypes['gene'])}")
+        self.assertTrue(len(gff3Obj.ftypes["mRNA"]) == numMrnas,
+                        f"Expected GFF3Graph object to have {numMrnas} mRNAs but got {len(gff3Obj.ftypes['mRNA'])}")
+        self.assertTrue(len(gff3Obj.ftypes["exon"]) == numExons,
+                        f"Expected GFF3Graph object to have {numExons} exons but got {len(gff3Obj.ftypes['exon'])}")
+        self.assertTrue(len(gff3Obj.ftypes["CDS"]) == numCDS,
+                        f"Expected GFF3Graph object to have {numCDS} CDS but got {len(gff3Obj.ftypes['CDS'])}")
+    
+    def test_gff3_longest_isoform(self):
+        "Test parsing GFF3 which is fully specified but has some minor formatting issues"
+        # Arrange
+        gff3File = os.path.join(dataDir, "normal.2.gff3")
+        longestIsoformTruth = "Soltu.DM.S001600.1" # 939 bp versus 671 for the other mRNA
+        
+        # Act
+        gff3Obj = GFF3Graph(gff3File)
+        longestMrnaFeature = GFF3Graph.longest_isoform(gff3Obj["Soltu.DM.S001600"])
+        
+        # Assert
+        self.assertTrue(longestMrnaFeature.ID == longestIsoformTruth,
+                        f"Expected longest mRNA feature to be {longestIsoformTruth} genes but got {longestMrnaFeature.ID}")
+    
+    def test_faulty_gff3_handling_1(self):
+        "Test parsing GFF3 which lacks gene lines"
+        # Arrange
+        gff3File = os.path.join(dataDir, "faulty.1.gff3")
+        numGenes = 2
+        numMrnas = 2
+        numExons = 10
+        numCDS = 10
+        
+        # Act
+        gff3Obj = GFF3Graph(gff3File)
+        
+        # Assert
+        self.assertTrue(len(gff3Obj.ftypes["gene"]) == numGenes,
+                        f"Expected GFF3Graph object to have {numGenes} genes but got {len(gff3Obj.ftypes['gene'])}")
+        self.assertTrue(len(gff3Obj.ftypes["mRNA"]) == numMrnas,
+                        f"Expected GFF3Graph object to have {numMrnas} mRNAs but got {len(gff3Obj.ftypes['mRNA'])}")
+        self.assertTrue(len(gff3Obj.ftypes["exon"]) == numExons,
+                        f"Expected GFF3Graph object to have {numExons} exons but got {len(gff3Obj.ftypes['exon'])}")
+        self.assertTrue(len(gff3Obj.ftypes["CDS"]) == numCDS,
+                        f"Expected GFF3Graph object to have {numCDS} CDS but got {len(gff3Obj.ftypes['CDS'])}")
+    
+    def test_faulty_gff3_handling_2(self):
+        "Test parsing GFF3 which has gene lines but no mRNA lines"
+        # Arrange
+        gff3File = os.path.join(dataDir, "faulty.2.gff3")
+        numGenes = 2
+        numExons = 10
+        numCDS = 10
+        
+        # Act
+        gff3Obj = GFF3Graph(gff3File)
+        
+        # Assert
+        self.assertTrue(len(gff3Obj.ftypes["gene"]) == numGenes,
+                        f"Expected GFF3Graph object to have {numGenes} genes but got {len(gff3Obj.ftypes['gene'])}")
+        self.assertFalse(hasattr(gff3Obj, "mRNA"),
+                        f"Expected GFF3Graph object to have no mRNAs")
+        self.assertTrue(len(gff3Obj.ftypes["exon"]) == numExons,
+                        f"Expected GFF3Graph object to have {numExons} exons but got {len(gff3Obj.ftypes['exon'])}")
+        self.assertTrue(len(gff3Obj.ftypes["CDS"]) == numCDS,
+                        f"Expected GFF3Graph object to have {numCDS} CDS but got {len(gff3Obj.ftypes['CDS'])}")
+    
+    def test_faulty_gff3_handling_3(self):
+        "Test parsing GFF3 which has a missing link between gene and exon (mRNA missing)"
+        # Arrange
+        gff3File = os.path.join(dataDir, "faulty.3.gff3")
+        numGenes = 2
+        numMrnas = 2
+        numExons = 10
+        numCDS = 10
+        
+        mrnaID1 = "Soltu.DM.S001600.1"
+        mrnaTruth1 = [6135, 8473]
+        
+        mrnaID2 = "Soltu.DM.S001610.1"
+        mrnaTruth2 = [9694, 11432]
+        
+        # Act
+        gff3Obj = GFF3Graph(gff3File)
+        
+        # Assert
+        self.assertTrue(len(gff3Obj.ftypes["gene"]) == numGenes,
+                        f"Expected GFF3Graph object to have {numGenes} genes but got {len(gff3Obj.ftypes['gene'])}")
+        self.assertTrue(len(gff3Obj.ftypes["mRNA"]) == numMrnas,
+                        f"Expected GFF3Graph object to have {numMrnas} mRNAs but got {len(gff3Obj.ftypes['mRNA'])}")
+        self.assertTrue(len(gff3Obj.ftypes["exon"]) == numExons,
+                        f"Expected GFF3Graph object to have {numExons} exons but got {len(gff3Obj.ftypes['exon'])}")
+        self.assertTrue(len(gff3Obj.ftypes["CDS"]) == numCDS,
+                        f"Expected GFF3Graph object to have {numCDS} CDS but got {len(gff3Obj.ftypes['CDS'])}")
+        self.assertTrue(all([ len(gff3Obj[x].parents) == 0 for x in gff3Obj.ftypes["mRNA"] ]),
+                        "Expected mRNAs to be unlinked from their parents, but some have parents")
+        self.assertTrue(gff3Obj[mrnaID1].start == mrnaTruth1[0] and gff3Obj[mrnaID1].end == mrnaTruth1[1],
+                        f"Expected mRNA {mrnaID1} to have start {mrnaTruth1[0]} and end {mrnaTruth1[1]}, but got start {gff3Obj[mrnaID1].start} and end {gff3Obj[mrnaID1].end}")
+        self.assertTrue(gff3Obj[mrnaID2].start == mrnaTruth2[0] and gff3Obj[mrnaID2].end == mrnaTruth2[1],
+                        f"Expected mRNA {mrnaID2} to have start {mrnaTruth2[0]} and end {mrnaTruth2[1]}, but got start {gff3Obj[mrnaID2].start} and end {gff3Obj[mrnaID2].end}")
+    
+    def test_faulty_gff3_handling_4(self):
+        "Test parsing GFF3 which has exon ID but no transcript ID"
+        pass
 
 if __name__ == '__main__':
     unittest.main()

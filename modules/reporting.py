@@ -1,5 +1,5 @@
 import math
-from .gff3 import GFF3
+from .gff3 import GFF3Graph
 
 def report_genes(edNCLS, gff3Obj, regions, outputFileName, radiusSize=50000):
     '''
@@ -34,7 +34,7 @@ def report_genes(edNCLS, gff3Obj, regions, outputFileName, radiusSize=50000):
             # Get longest isoform for each gene in this region
             geneFeatures = gff3Obj.ncls_finder(start, end, "contig", contigID)
             mrnaFeatures = [
-                GFF3.longest_isoform(geneFeature)
+                GFF3Graph.longest_isoform(geneFeature)
                 for geneFeature in geneFeatures
                 if hasattr(geneFeature, "mRNA")
             ]
@@ -150,7 +150,7 @@ def report_depth(edNCLS, gff3Obj, regions, outputFileName, radiusSize=50000):
             # Get longest isoform for each gene in this region
             geneFeatures = gff3Obj.ncls_finder(start, end, "contig", contigID)
             mrnaFeatures = [
-                GFF3.longest_isoform(geneFeature)
+                GFF3Graph.longest_isoform(geneFeature)
                 for geneFeature in geneFeatures
                 if hasattr(geneFeature, "mRNA")
             ]

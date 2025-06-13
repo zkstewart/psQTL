@@ -3,12 +3,12 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
-from Bio.SeqFeature import SimpleLocation, ExactPosition
+from Bio.SeqFeature import SeqFeature, SimpleLocation, ExactPosition
 from pycirclize import Circos
 from matplotlib.patches import Patch
 from matplotlib.lines import Line2D
 
-from .gff3 import GFF3
+from .gff3 import GFF3Graph
 
 SAMPLE_AESTHETICS = [["#000000", "dotted"], ["#002D7E", "dashed"], ["#ECE45A", "dashdot"]]
 LINESCATTER_COLOURS = [["#2166ac", "#b2182b"], # blue to red, for ED measurements
@@ -276,9 +276,18 @@ class Plot:
         
         self._coverageSamples = value
     
+    @property
     def annotationGFF3(self):
-        "Must be implemented in subclasses"
-        raise NotImplementedError("annotationGFF3() must be implemented in subclasses")
+        return self._annotationGFF3
+    
+    @annotationGFF3.setter
+    def annotationGFF3(self, value):
+        if value is None:
+            self._annotationGFF3 = None
+            return
+        if not hasattr(value, "isGFF3Graph") or not value.isGFF3Graph:
+            raise TypeError("annotationGFF3 must be a GFF3Graph object")
+        self._annotationGFF3 = value
     
     @property
     def regions(self):
@@ -576,7 +585,7 @@ class Plot:
         # Get longest isoform for each gene in this region
         geneFeatures = gff3Obj.ncls_finder(start, end, "contig", contigID)
         mrnaFeatures = [
-            GFF3.longest_isoform(geneFeature)
+            GFF3Graph.longest_isoform(geneFeature)
             for geneFeature in geneFeatures
             if hasattr(geneFeature, "mRNA")
         ]
@@ -673,19 +682,6 @@ class HorizontalPlot(Plot):
         super().__init__(regions, callED, depthED, callSPLSDA, depthSPLSDA, integratedSPLSDA,
                          coverageNCLSDict, coverageSamples, annotationGFF3,
                          power, wmaSize, width, height)
-    
-    @property
-    def annotationGFF3(self):
-        return self._annotationGFF3
-    
-    @annotationGFF3.setter
-    def annotationGFF3(self, value):
-        if value is None:
-            self._annotationGFF3 = None
-            return
-        if not hasattr(value, "isGFF3") or not value.isGFF3:
-            raise TypeError("annotationGFF3 must be a GFF3 object")
-        self._annotationGFF3 = value
     
     def plot(self, plotTypes, outputFileName):
         '''
@@ -1372,26 +1368,6 @@ class CircosPlot(Plot):
             self._height = value
     
     @property
-    def annotationGFF3(self):
-        return self._annotationGFF3
-    
-    @annotationGFF3.setter
-    def annotationGFF3(self, value):
-        if value is None:
-            self._annotationGFF3 = None
-            return
-        if not isinstance(value, dict):
-            raise TypeError("annotationGFF3 must be a dict object")
-        for key, valueList in value.items():
-            if not isinstance(valueList, list):
-                raise TypeError("annotationGFF3 must be a dict of lists")
-            for item in valueList:
-                if not type(item).__name__ == "SeqFeature":
-                    raise TypeError("annotationGFF3 must be a dict of lists of SeqFeature objects")
-        
-        self._annotationGFF3 = value
-    
-    @property
     def axisSpace(self):
         if self._axisSpace is None:
             return CircosPlot.AXIS_SPACE
@@ -1801,31 +1777,36 @@ class CircosPlot(Plot):
         Plots the data for gene models.
         
         Parameters:
-            gff3Obj -- a Gff().get_seqid2features(feature_tyoe=None) instance
-                       from pyCirclize
+            gff3Obj -- a GFF3Graph object containing gene models with ncls indexing
         '''
         self.rowNum += 1 # increment row number for plotting
         
-        for colNum, (contigID, start, end, reverse) in enumerate(self.regions):
-            for feature in gff3Obj[contigID]:
-                if feature.type == "gene":
-                    featureStart = feature.location.start.real
-                    featureEnd = feature.location.end.real
-                    # Check if the feature is within the region
-                    if featureEnd > start and featureStart < end:
-                        # Truncate feature to prevent plotting outside the region
-                        if featureStart < start or featureEnd > end:
-                            newStart = max(start, featureStart)
-                            newEnd = min(end, featureEnd)
-                            feature.location = SimpleLocation(
-                                ExactPosition(newStart),
-                                ExactPosition(newEnd),
-                                strand=feature.location.strand
-                            )
-                        # Plot the feature
-                        self.axs[self.rowNum, colNum].genomic_features(
-                            [feature], plotstyle="arrow",
-                            fc=GENE_COLOURS[0])
+        for colNum, (contigID, start, end, reverse) in enumerate(self.regions):        
+            # Get longest isoform for each gene in this region
+            mrnaFeatures = self.genes(gff3Obj, contigID, start, end)
+            
+            # Plot each feature
+            for mrnaFeature in mrnaFeatures:
+                # Get start and end positions with truncation if they extend outside the region
+                newStart = max(start, mrnaFeature.start)
+                newEnd = min(end, mrnaFeature.end)
+                
+                # Format a feature amenable to pycirclize plotting
+                feature = SeqFeature(
+                    location=SimpleLocation(
+                        ExactPosition(newStart),
+                        ExactPosition(newEnd),
+                        strand=-1 if mrnaFeature.strand == "-" else 1
+                    ),
+                    type="mRNA",
+                    id=mrnaFeature.ID,
+                    qualifiers={"ID": [mrnaFeature.ID]}
+                )
+                
+                # Plot the feature
+                self.axs[self.rowNum, colNum].genomic_features(
+                    [feature], plotstyle="arrow",
+                        fc=GENE_COLOURS[0])
     
     def plot_coverage(self, depthNCLSDict, samples,
                       linewidth=1):

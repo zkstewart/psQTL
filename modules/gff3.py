@@ -6,105 +6,185 @@
 
 import re, sys, os
 import pandas as pd
-from collections import OrderedDict
+from collections import Counter
 from ncls import NCLS
 
-class Feature:
-    def __init__(self):
-        self.children = []
-        self.types = {}
-        self.isFeature = True
+from .parsing import read_gz_file
+
+class GFF3Feature:
+    IMMUTABLE = ["ID", "ftype"] # these attributes should never change once set
+    def __init__(self, ID, ftype, start=None, end=None, strand=None, contig=None, children=[], parents=set()):
+        self.ID = ID
+        self.ftype = ftype
+        self.start = start
+        self.end = end
+        self.strand = strand
+        self.contig = contig
+        
+        self._children = []
+        self.children = children
+        self.parents = parents if isinstance(parents, set) \
+                       else set(parents) if isinstance(parents, list) \
+                       else set([parents]) if isinstance(parents, str) \
+                       else set()
+        self.isGFF3Feature = True # flag for easier type checking
     
-    def add_attributes(self, dict):
-        '''
-        Parameters:
-            dict -- any dictionary with key: value pairs
-        '''
-        for key, value in dict.items():
-            self.__dict__[key] = value
+    @staticmethod
+    def make_ftype_case_appropriate(ftype):
+        if ftype.lower() == "gene":
+            return "gene"
+        elif ftype.lower() == "mrna":
+            return "mRNA"
+        elif ftype.lower() == "exon":
+            return "exon"
+        elif ftype.lower() == "cds":
+            return "CDS"
+        elif ftype.lower() == "lnc_rna":
+            return "lnc_RNA"
+        elif ftype.lower() == "product":
+            return "Product"
+        else:
+            return ftype
+    
+    @property
+    def start(self):
+        if self._start != None:
+            return self._start
+        else:
+            return min([ child.start for child in self.children ])
+    
+    @start.setter
+    def start(self, value):
+        if value != None:
+            try:
+                value = int(value)
+            except ValueError:
+                raise ValueError(f"Start value of '{value}' is not an integer and is invalid for GFF3 formatting")
+            if value < 1:
+                raise ValueError(f"Start value '{value}' cannot be zero or negative; GFF3 positions are 1-based")
+            self._start = value
+        else:
+            self._start = None
+    
+    @property
+    def end(self):
+        if self._end != None:
+            return self._end
+        else:
+            return max([ child.end for child in self.children ])
+    
+    @end.setter
+    def end(self, value):
+        if value != None:
+            try:
+                value = int(value)
+            except ValueError:
+                raise ValueError(f"End value of '{value}' is not an integer and is invalid for GFF3 formatting")
+            if value < 1:
+                raise ValueError(f"End value '{value}' cannot be zero or negative; GFF3 positions are 1-based")
+            self._end = value
+        else:
+            self._end = None
+    
+    @property
+    def strand(self):
+        if self._strand != None and self._strand != ".":
+            return self._strand
+        else:
+            childStrands = [ child.strand for child in self.children if child.strand != None and child.strand != "." ]
+            if len(childStrands) == 0:
+                return "+" # default strand if no children have a strand
+            else:
+                mostCommonStrand = Counter(childStrands).most_common(1)[0][0] # basic majority vote
+                return mostCommonStrand
+    
+    @strand.setter
+    def strand(self, value):
+        ACCEPTED_STRANDS = ["+", "-", "."] # "." might represent unknown strand
+        if value != None:
+            if not value in ACCEPTED_STRANDS:
+                raise ValueError(f"Strand value '{value}' is not recognised; should be one of {ACCEPTED_STRANDS}")
+            self._strand = value
+        else:
+            self._strand = None
+    
+    @property
+    def children(self):
+        return self._children
+    
+    @children.setter
+    def children(self, value):
+        if isinstance(value, list):
+            for child in value:
+                self.add_child(child) # ensure each child is added properly
+        else:
+            self.add_child(value) # type is not validated, but we assume it's a GFF3Feature object
     
     def add_child(self, childFeature):
         '''
+        Adds a child feature to this feature's children list.
+        
         Parameters:
-            childFeature -- should be a Feature object, but any object
-                            will be accepted.
+            childFeature -- a GFF3Feature object to add as a child of this feature.
         '''
+        childFeature.parents.add(self.ID) # ensure the child knows its parent
         self.children.append(childFeature)
-        try:
-            self.__dict__.setdefault(childFeature.type, [])
-            self.__dict__[childFeature.type].append(childFeature)
-            
-            self.types.setdefault(childFeature.type, [])
-            self.types[childFeature.type].append(childFeature)
-        except:
-            pass
-    
-    def retrieve_child(self, childID):
-        '''
-        Parameters:
-            childID -- a string indicating the ID field of the child to return
-        Returns:
-            child -- the child object/Feature that was found, OR a None value
-                     when the child does not exist.
-        '''
-        childList = self.retrieve_all_children()
-        for child in childList:
-            try:
-                if child.ID == childID:
-                    return child
-            except:
-                pass
-        return None
-    
-    def retrieve_all_children(self):
-        childList = []
-        for child in self.children:
-            childList.append(child)
-            childList += child.retrieve_all_children()
-        return childList
-    
-    def __getitem__(self, key):
-        return self.retrieve_child(key)
+        self.__dict__.setdefault(childFeature.ftype, [])
+        self.__dict__[childFeature.ftype].append(childFeature)
     
     def __repr__(self):
         reprPairs = []
-        attrsToShow = ["ID", "type", "Parent", "coords"]
+        attrsToShow = ["ID", "ftype", "contig", "coords", "strand", "parents"]
         
         for attr in attrsToShow:
-            try:
+            if attr == "coords":
+                reprPairs.append("coords=[{0}, {1}]".format(self.start, self.end))
+            elif attr == "strand":
+                reprPairs.append("strand={0}".format(self.strand if self.strand != None else "."))
+            else:
                 reprPairs.append("{0}={1}".format(attr, self.__dict__[attr]))
-            except:
-                pass
         
-        return "<{0}>".format(";".join(reprPairs))
+        return "<{0};{1}>".format(";".join(reprPairs),
+                                  f"children=[{', '.join([child.ID for child in self.children])}]")
 
-class GFF3:
-    def __init__(self, file_location, strict_parse=True, fix_duplicated_ids=False, slim_index=False):
-        self.fileLocation = file_location
-        self.features = OrderedDict()
-        self.types = {}
+class GFF3Graph:
+    PARENT_INFERENCE = {
+        "CDS": "mRNA",
+        "exon": "mRNA",
+        "mRNA": "gene",
+        "lnc_RNA": "gene",
+        "Product": "gene", # Product is a special case, but we treat it as a gene parent
+        "gene": None  # Gene is the top-level feature, no parent
+    }
+    
+    def __init__(self, fileLocation):
+        self.fileLocation = fileLocation
+        self.ftypes = {}
+        self.features = {}
         self.contigs = set()
-        self.parentTypes = set() # tells us which feature types to expect as being parents
+        
+        self.idRegex = re.compile(r"ID=(.+?)(;|$)")
+        self.parentRegex = re.compile(r"Parent=(.+?)(;|$)")
         
         self.ncls = None
         self._nclsType = None
         self._nclsIndex = None
         
-        self.isGFF3 = True
-        self.parse_gff3(strict_parse=strict_parse, fix_duplicated_ids=fix_duplicated_ids, slim_index=slim_index)
+        self.parse_gff3(self.fileLocation)
+        self.isGFF3Graph = True # flag for easier type checking
     
-    @staticmethod
-    def make_feature_case_appropriate(featureType):
-        if featureType.lower() == "gene":
-            return "gene"
-        elif featureType.lower() == "mrna":
-            return "mRNA"
-        elif featureType.lower() == "exon":
-            return "exon"
-        elif featureType.lower() == "cds":
-            return "CDS"
-        else:
-            return featureType
+    @property
+    def fileLocation(self):
+        return self._fileLocation
+    
+    @fileLocation.setter
+    def fileLocation(self, value):
+        if not isinstance(value, str):
+            raise ValueError("File location must be a string")
+        if not os.path.isfile(value):
+            raise FileNotFoundError(f"GFF3 file '{value}' is not a file")
+        
+        self._fileLocation = value
     
     @staticmethod
     def longest_isoform(geneFeature):
@@ -113,322 +193,118 @@ class GFF3:
         we'll end up picking the entry listed first in the gff3 file since our > condition
         won't be met. I doubt this will happen much or at all though.
         '''
-        assert hasattr(geneFeature, "mRNA"), \
-            "Longest isoform finding can only occur on features that have .mRNA children"
+        if not hasattr(geneFeature, "mRNA"):
+            raise ValueError("Longest isoform finding can only occur on features that have mRNA children")
         
         longestMrna = [None, 0]
         for mrnaFeature in geneFeature.mRNA:
-            if hasattr(mrnaFeature, "CDS"):
-                featType = "CDS"
-            else:
-                featType = "exon"
-            
             mrnaLen = 0
-            for subFeature in mrnaFeature.__dict__[featType]:
+            
+            # Determine the features to use for length calculation
+            if hasattr(mrnaFeature, "CDS"):
+                features = mrnaFeature.CDS
+            elif hasattr(mrnaFeature, "exon"):
+                features = mrnaFeature.exon
+            else:
+                features = []
+            
+            # Sum the lengths of the CDS (or exon) features
+            for subFeature in features:
                 mrnaLen += (subFeature.end - subFeature.start + 1)
-                
+            
+            # Update the longest mRNA if this one is longer
             if mrnaLen > longestMrna[1]:
                 longestMrna = [mrnaFeature, mrnaLen]
         return longestMrna[0]
     
-    @staticmethod
-    def _get_feature_coords(feature, exonOrCDS):
+    def parse_gff3(self, gff3File):
         '''
-        Hidden function of retrieve_sequence_from_FASTA() to retrieve sorted
-        coordinates lists for the exon or CDS features associated with what
-        should be an mRNA feature. If it's not it'll probably crash, hence why
-        this is a private method since I know exactly how it'll be used.
-        '''
-        coords = [f.coords for f in feature.__dict__[exonOrCDS]]
-        frames = [f.frame for f in feature.__dict__[exonOrCDS]]
-        forSorting = list(zip(coords, frames))
+        Parses a GFF3 file and populates the graph with features.
         
-        if feature.strand == '+':
-            forSorting.sort(key = lambda x: (int(x[0][0]), int(x[0][1])))
-        else:
-            forSorting.sort(key = lambda x: (-int(x[0][0]), -int(x[0][1])))
-        
-        coords = [c for c, f in forSorting]
-        frames = [f for c, f in forSorting]
-        
-        return coords, frames
-    
-    def parse_gff3(self, strict_parse=True, fix_duplicated_ids=False, full_warning=False, slim_index=False):
-        '''
         Parameters:
-            strict_parse -- a boolean indicating whether this function should
-                            die if the GFF3 doesn't meet strict format standards,
-                            or if failing annotation values should simply be skipped
-            full_warning -- a boolean indicating whether every single warning should
-                            be printed, or just the first 10.
-            slim_index -- a boolean indicating whether the GFF3 indexed should be fully
-                          featured (slim_index == False) or if a slim index should be created
-                          with minimal features detailed (slim_index == True)
+            gff3 -- a GFF3 object to parse and populate this graph with.
         '''
-        # Set up warning handling system
-        warningContainer = { # this dict acts like a JSON for data storage
-            "warningCount": 0,
-            "warningLimit": 10,
-            "hasHandledWarnings": False
-        }
-        def _handle_warning_message(warningContainer, message):
-            if full_warning == True or warningContainer["warningCount"] < warningContainer["warningLimit"]:
-                print(message)
-                warningContainer["warningCount"] += 1
-            if warningContainer["hasHandledWarnings"] == False and warningContainer["warningCount"] == warningContainer["warningLimit"]:
-                print("Further warning messages will be suppressed.")
-                warningContainer["hasHandledWarnings"] = True
+        # Reset the graph
+        self.fileLocation = gff3File
+        self.ftypes = {}
+        self.features = {}
+        self.contigs = set()
         
-        # Setup for slim parsing functionality
-        def _format_attributes(attributes, slim_index):
-            SLIM_ATTRIBUTES = ["id", "parent"]
-            
-            splitAttributes = []
-            for a in attributes.split("="):
-                if ";" in a:
-                    splitAttributes += a.rsplit(";", maxsplit=1)
-                else:
-                    splitAttributes.append(a)
-            
-            if not slim_index:
-                attributesDict = {splitAttributes[i]: splitAttributes[i+1] for i in range(0, len(splitAttributes)-(len(splitAttributes)%2), 2)}
-            else:
-                attributesDict = {
-                    splitAttributes[i]: splitAttributes[i+1]
-                    for i in range(0, len(splitAttributes)-(len(splitAttributes)%2), 2)
-                    if splitAttributes[i].lower() in SLIM_ATTRIBUTES
-                }
-            return attributesDict
-        
-        # Gene object loop
+        # Parse the GFF3 file into a graph structure
         lineCount = 0
-        with open(self.fileLocation, 'r') as fileIn:
+        with read_gz_file(self.fileLocation) as fileIn:
             for line in fileIn:
                 lineCount += 1
-                line = line.replace('\r', '')
+                sl = line.strip("\r\n\t;'\" ").split("\t")
                 
                 # Skip filler and comment lines
-                if line == "\n" or line.startswith("#"):
+                if line.startswith("#") or len(sl) != 9:
                     continue
                 
                 # Extract information from this line
-                try:
-                    contig, source, featureType, start, end, \
-                        score, strand, frame, attributes \
-                        = line.rstrip('\t\n').split('\t')
-                except:
-                    if strict_parse == True:
-                        raise ValueError(
-                            f"Error: Line #{lineCount} (\"{line}\") does not meet GFF3 standards; parsing failed"
-                        )
-                    else:
-                        _handle_warning_message(warningContainer,
-                            f"Warning: Line #{lineCount} (\"{line}\") does not meet GFF3 standards;" +
-                            " strict parsing is disabled, so we'll just continue and hope for the best"
-                        )
-                        continue
+                contig, source, ftype, start, end, \
+                    score, strand, frame, attributes = sl
+                start = int(start)
+                end = int(end)
+                ftype = GFF3Feature.make_ftype_case_appropriate(ftype)
                 
-                # Format attributes dictionary
-                attributesDict = _format_attributes(attributes, slim_index)
+                # Establish or populate tracking containers
+                self.ftypes.setdefault(ftype, [])
+                self.contigs.add(contig)
                 
-                # Ensure case conformity
-                featureType = GFF3.make_feature_case_appropriate(featureType)
-                
-                # Fix GFF3s which did not give exons an ID
-                "I'm looking at you banana genome hub. You shouldn't do this."
-                if 'ID' not in attributesDict and featureType.lower() == "exon":
-                    parentID = attributesDict["Parent"].split(',')
-                    assert len(parentID) == 1, \
-                        ("I tried to fix missing exon IDs but found a sequence with >1 parent ", +
-                         "i.e., {0}".format(attributesDict["Parent"]))
-                    parentID = parentID[0]
-                    
-                    parentFeature = self.features[parentID]
-                    try:
-                        numExons = len(parentFeature.exon)
-                    except:
-                        numExons = 0
-                    attributesDict["ID"] = f"{parentID}.exon{numExons+1}"
-                
-                # Skip un-indexable features
-                if 'ID' not in attributesDict and featureType.lower() != "cds": # see the human genome GFF3 biological_region values for why this is necessary
-                    continue
-                self.contigs.add(contig) # we can index this contig now that we've skipped un-indexable features
-                
-                # Handle parent-level features
-                if 'Parent' not in attributesDict: # If no Parent field this should BE the parent
-                    featureID = attributesDict["ID"]
-                    
-                    # End parsing if duplicate ID is found (strict_parse is True)
-                    if strict_parse == True:
-                        assert featureID not in self.features, \
-                            (f"Error: '{featureID}' feature occurs twice indicating poorly formatted file;" + 
-                            f" for debugging, line #{lineCount} == {line}; parsing will stop now")
-                    # Skip parsing if duplicate ID is found (strict_parse is False)
-                    else:
-                        if featureID in self.features:
-                            _handle_warning_message(warningContainer,
-                                f"Warning: '{featureID}' feature occurs more than once indicating poorly formatted file;"+
-                                " strict parsing is disabled, so we will just continue and hope for the best"
-                            )
-                            continue
-                    
-                    # Create feature and populate it with details
-                    feature = Feature()
-                    feature.add_attributes(attributesDict)
-                    if not slim_index:
-                        feature.add_attributes({
-                            "contig": contig, "source": source, "type": featureType,
-                            "start": int(start), "end": int(end), "coords": [int(start), int(end)],
-                            "score": score, "strand": strand, "frame": frame
-                        })
-                    else:
-                        feature.add_attributes({
-                            "contig": contig, "type": featureType,
-                            "start": int(start), "end": int(end),
-                            "strand": strand
-                        })
-                    
-                    # Index feature
-                    self.features[featureID] = feature
-                    self.types.setdefault(featureType, [])
-                    self.types[featureType].append(feature)
-                    self.parentTypes.add(featureType)
-                
-                # Handle subfeatures
+                # Get the ID attribute
+                featureID = [ x[0] for x in self.idRegex.findall(attributes) ]
+                if len(featureID) == 1:
+                    featureID = featureID[0]
+                elif len(featureID) == 0:
+                    featureID = f"{ftype}.{len(self.ftypes[ftype]) + 1}"
                 else:
-                    parents = attributesDict["Parent"].split(',')
-                    
-                    # Loop through parents and associate feature to them
-                    for parentID in parents:
-                        # Flexibly obtain a feature ID for normal features and for CDS that may lack IDs
-                        try:
-                            featureID = attributesDict["ID"]
-                        except:
-                            if featureType.lower() != "cds":
-                                raise AttributeError(
-                                    f"Error: '{featureType}' feature lacks an ID attribute and hence cannot be indexed;" +
-                                    f" for debugging, line #{lineCount} == {line}; parsing will stop now"
-                                )
-                            else:
-                                featureID = f"{parentID}.cds"
-                        
-                        # End parsing if parent doesn't exist (strict_parse is True)
-                        if strict_parse == True:
-                            assert parentID in self.features, \
-                                (f"Error: '{featureID}' feature points to a non-existing parent '{parentID}' at the time of parsing;" + 
-                                f" for debugging, line #{lineCount} == {line}; parsing will stop now")
-                        else:
-                            if parentID not in self.features:
-                                _handle_warning_message(warningContainer,
-                                    f"Warning: '{featureID}' feature points to a non-existing parent '{parentID}' at the time of parsing;" + 
-                                    " strict parsing is disabled, so we will just continue and hope for the best"
-                                )
-                                continue
-                        
-                        # End parsing if duplicate ID is found and we aren't fixing it
-                        if featureType.lower() != "cds": # CDS features are the ONLY feature allowed to have non-unique IDs
-                            if self.features[parentID].retrieve_child(featureID) != None:
-                                if fix_duplicated_ids:
-                                    for i in range(2, len(self.features[parentID].retrieve_all_children())+3):
-                                        if self.features[parentID].retrieve_child(f"{featureID}.{i}") == None:
-                                            featureID = f"{featureID}.{i}"
-                                            attributesDict["ID"] = featureID
-                                            break
-                                else:
-                                    raise ValueError(
-                                        (f"Error: '{featureID}' feature is associated to a parent '{parentID}' more than once;" + 
-                                        f" for debugging, line #{lineCount} == {line}; parsing will stop now")
-                                    )
-                        
-                        # Create feature and populate it with details
-                        feature = Feature()
-                        feature.add_attributes(attributesDict)
-                        if not slim_index:
-                            feature.add_attributes({
-                                "contig": contig, "source": source, "type": featureType,
-                                "start": int(start), "end": int(end), "coords": [int(start), int(end)],
-                                "score": score, "strand": strand, "frame": frame
-                            })
-                        else:
-                            feature.add_attributes({
-                                "contig": contig, "type": featureType,
-                                "start": int(start), "end": int(end),
-                                "strand": strand
-                            })
-                        
-                        # Index feature
-                        if featureType.lower() != "cds": # since CDS features aren't guaranteed to have unique IDs, there's no point indexing them
-                            self.features[featureID] = feature
-                        self.types.setdefault(featureType, [])
-                        self.types[featureType].append(feature)
-                        
-                        # Double-index for special child attributes
-                        self._index_products(feature)
-                        
-                        # Add it as a child of the parent
-                        "It's important to fully-specify the child before running add_child()"
-                        self.features[parentID].add_child(feature)
-            
-            # Generate shortcut fields
-            try:
-                self.gene_values = self.types["gene"]
-            except:
-                print("WARNING: No gene features found in GFF3 file '{0}'".format(self.fileLocation))
-                self.gene_values = None
-            try:
-                self.mrna_values = self.types["mRNA"]
-            except:
-                self.mrna_values = None
-            
-            # Sort contigs
-            self.contigs = list(self.contigs)
-            try:
-                self.contigs.sort(key = lambda x: list(map(int, re.findall(r'\d+', x)))) # This should let us sort things like "contig1a2" and "contig1a1" and have the latter come first
-            except:
-                self.contigs.sort()
+                    raise ValueError(f"GFF3 parsing failed since line #{lineCount} (\"{line}\") has multiple IDs")
+                
+                # Get the parent ID(s)
+                parentIDs = [ x[0] for x in self.parentRegex.findall(attributes) ]
+                
+                # Create a feature object
+                feature = GFF3Feature(ID=featureID, ftype=ftype,
+                                      start=start, end=end, strand=strand,
+                                      contig=contig, children=[], parents=parentIDs)
+                
+                # Add the feature to the graph
+                self.add(feature)
     
-    def sort_CDS(self):
-        '''
-        This method will take any parent feature that indexes CDS features, and ensures
-        that the CDS children are sorted in the way we would normally expect them to be.
-        For example, a +ve stranded gene should have CDS sorted so that the first entry
-        in a list is the "leftmost" on the chromosome (lesser coordinate). Alternatively,
-        a -ve stranded gene should have CDS sorted so that the first entry in a list is
-        the "rightmost" on the chromosome (greatest coordinate). The logic behind this
-        is to have CDS features sorted in 5'->3' order, rather than focusing on the
-        absolute chromosomal coordinates.
-        '''
-        assert "CDS" in self.types, \
-            "There are no CDS features in this GFF3; sorting is irrelevant"
+    def add(self, feature):
+        # Obtain a unique ID for the feature
+        featureID = feature.ID
+        ongoingCount = 1
+        while featureID in self.features:
+            featureID = f"{feature.ID}.{ongoingCount}"
+            if not featureID in self.features:
+                break
+            ongoingCount += 1
         
-        for parentID in set([x.Parent for x in self.types["CDS"]]):
-            parentFeature = self[parentID]
-            if parentFeature.strand == "+":
-                parentFeature.CDS.sort(key = lambda x: x.start)
-            elif parentFeature.strand == "-":
-                parentFeature.CDS.sort(key = lambda x: -x.end)
-            else:
-                raise ValueError(f"'{parentID} feature has CDS children but strand '{parentFeature.strand}' is unrecognised.")
-    
-    def sort_exon(self):
-        '''
-        Akin to sort_CDS(), this function does the same but for exon-indexing features.
-        The differences comes in how we approach features without a proper strand
-        being noted (+ve or -ve). In these cases, we'll just skip over the feature since,
-        without strand info, we can't know how it's "supposed" to be sorted.
-        '''
-        assert "exon" in self.types, \
-            "There are no exon features in this GFF3; sorting is irrelevant"
+        # Store feature within the graph
+        self.ftypes.setdefault(feature.ftype, []) # necessary if first occurrence of a subfeature preceeds its parent type
+        self.ftypes[feature.ftype].append(featureID)
+        self.features[featureID] = feature
         
-        for parentID in set([x.Parent for x in self.types["exon"]]):
-            parentFeature = self[parentID]
-            if parentFeature.strand == "+":
-                parentFeature.exon.sort(key = lambda x: x.start)
-            elif parentFeature.strand == "-":
-                parentFeature.exon.sort(key = lambda x: -x.end)
+        # Update graph features with parent-child relationships
+        for parentID in feature.parents:
+            # Associate the feature with its existing parents
+            if parentID in self.features:
+                self.features[parentID].add_child(feature)
+            # Create a placeholder for the parent if it doesn't exist
             else:
-                continue
+                if feature.ftype in GFF3Graph.PARENT_INFERENCE:
+                    parentFeature = GFF3Feature(parentID, GFF3Graph.PARENT_INFERENCE[feature.ftype],
+                                                contig=feature.contig,
+                                                children=[feature])
+                    self.add(parentFeature)
+                else:
+                    raise ValueError("Your GFF3 is not sorted in top-down hierarchical order which has caused an error; " +
+                                     f"I encountered a {feature.ftype} with ID '{featureID}' that has a parent '{parentID}' which has " + 
+                                     f"not yet appeared in your GFF3 file. I am unsure what parent type to infer for " +
+                                     f"'{feature.ftype}' features, so I cannot continue parsing. Sort your GFF3 file in " +
+                                     "conventional top-down hierarchical order before trying again.")
     
     def create_ncls_index(self, typeToIndex="mRNA"):
         '''
@@ -447,7 +323,7 @@ class GFF3:
             typeToIndex = [typeToIndex]
         
         for indexType in typeToIndex:
-            assert indexType in self.types, \
+            assert indexType in self.ftypes, \
                 "'{0}' not found as a feature type within the parsed GFF3 ('{1}')".format(indexType, self.fileLocation)
         
         nclsIndex = {}
@@ -456,7 +332,8 @@ class GFF3:
         # Add features of the specified type to our NCLS structure
         ongoingCount = 0
         for indexType in typeToIndex:
-            for feature in self.types[indexType]:
+            for featureID in self.ftypes[indexType]:
+                feature = self.features[featureID]
                 starts.append(feature.start)
                 ends.append(feature.end + 1) # NCLS indexes 0-based like a range so +1 to make this more logically compliant with gff3 1-based system
                 ids.append(ongoingCount)
@@ -513,112 +390,14 @@ class GFF3:
         # Return list
         return features
     
-    def retrieve_coords(self, feature_or_featureID, sequenceType):
-        '''
-        Using this GFF3 instance, retrieve the exon or CDS coordinates for the corresponding
-        sequenceID. Note that this function expects the provided sequenceID to directly
-        point to a feature that contains CDS and/or exon values. It used to be able to accept
-        gene features and return all the subfeature values, but this proved to be unwieldy.
-        
-        Parameters:
-            feature_or_featureID -- a string corresponding to a feature within this GFF3 object.
-                                    or just a feature object in general
-            sequenceType -- a string corresponding to the type of sequence to retrieve
-                            i.e., in the list ["CDS", "exon"]
-        Returns:
-            featureCoords -- a list of lists with format like:
-                             [
-                                 [start_1, end_1],
-                                 [start_2, end_2],
-                                 ...
-                             ]
-            startingFrames -- a list of integers indicating what the starting frame should
-                              be in any translations (if applicable)
-            featureTypes -- a list of strings indicating what type of feature's details
-                            have been returned e.g., "mRNA" or "lnc_RNA".
-        '''
-        VALID_TYPES = ["cds", "exon"]
-        assert sequenceType.lower() in VALID_TYPES, \
-            "'{0}' is not recognised as a valid sequenceType; should be in list {1}".format(sequenceType.lower(), VALID_TYPES)
-        
-        # Figure out if we're handling a feature or featureID
-        if isinstance(feature_or_featureID, str):
-            featureID = feature_or_featureID
-            assert featureID in self.features, \
-                "'{0}' is not recognised as a feature within this GFF3".format(featureID)
-            feature = self.features[featureID]
-        elif type(feature_or_featureID).__name__ == "Feature" \
-            or type(feature_or_featureID).__name__ == "ZS_GFF3IO.Feature" \
-            or (hasattr(feature_or_featureID, "isFeature") and feature_or_featureID.isFeature is True):
-                feature = feature_or_featureID
-                featureID = feature.ID
-        
-        # Validate that the feature contains the relevant fields
-        if sequenceType.lower() == "cds":
-            assert hasattr(feature, "CDS"), \
-                "CDS feature type is requested of feature '{0}' which lacks CDS".format(featureID)
-        elif sequenceType.lower() == "exon":
-            assert hasattr(feature, "exon"), \
-                "exon feature type is requested of feature '{0}' which lacks exon".format(featureID)
-        
-        # Get the coordinates required for sequenceType retrieval
-        if sequenceType.lower() == "exon":
-            featureCoord, featureFrame = GFF3._get_feature_coords(feature, "exon")
-            featureType = feature.type
-            featureID = feature.ID
-        elif sequenceType.lower() == "cds":
-            featureCoord, featureFrame = GFF3._get_feature_coords(feature, "CDS")
-            featureType = feature.type
-            featureID = feature.ID
-        
-        # Reverse the coord lists if we're looking at a '-' model so we start at the 3' end of the gene model
-        '''
-        I truly have no idea why I do this. It was in my legacy code I wrote years back,
-        and I have to assume I did it for a reason. I THINK it's because some GFF3s have
-        truncated sequences, and when it's truncated at the 3' end of a -ve stranded gene,
-        it won't accommodate that. So when we flip it, we need to take the final frame as
-        our starting frame unlike the usual, non-truncated case where it'll always start
-        in the 0-frame. Sorting beforehand is hence just a way of sorting the frames, not
-        the coords.
-        '''
-        if feature.strand == '-':
-            featureCoord.reverse()
-        
-        # Get the starting frame for the sequence
-        startingFrame = featureFrame[0]
-        return featureCoord, startingFrame, featureType
-    
-    def _index_products(self, feature):
-        '''
-        Hidden helper for indexing features with the .product attribute. These are found in
-        some GFF3 files, and often any protein files generated from these will have the
-        product ID associated to the translated features. This can prove problematic when
-        trying to find their coordinates in the GFF3 since we'll find no matches.
-        
-        This method will index the product so it's discoverable within the GFF3 object.
-        It won't be listed as a parentType (it should always be under a gene parent), and
-        
-        '''
-        if hasattr(feature, "Product"):
-            "We want the case of this to be predictable"
-            feature.product = feature.Product
-            delattr(feature, "Product")
-        if hasattr(feature, "product"):
-            self.features[feature.product] = feature
-            self.types.setdefault("product", [])
-            self.types["product"].append(feature)
-    
     def __getitem__(self, key):
         return self.features[key]
-    
-    def __setitem__(self, key, item):
-        self.features[key] = item
     
     def __len__(self):
         return len(self.features)
     
     def __iter__(self):
-        return iter(self.features)
+        return iter(self.features.values())
     
     def __contains__(self, item):
         return item.ID in self.features
@@ -636,8 +415,8 @@ class GFF3:
         return self.features.items()
     
     def __repr__(self):
-        return "<GFF3 object;file='{0}';num_contigs={1};{2}>".format(
+        return "<GFF3Graph object;file='{0}';num_contigs={1};{2}>".format(
             self.fileLocation,
             len(self.contigs),
-            ";".join(["num_{0}={1}".format(key, len(self.types[key])) for key in self.types.keys()])
+            ";".join(["num_{0}={1}".format(key, len(self.ftypes[key])) for key in self.ftypes.keys()])
         )
