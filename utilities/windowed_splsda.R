@@ -116,8 +116,15 @@ for (chromosome in unique(df$chrom))
     # Remove invariant sites
     windowDF <- windowDF[! rowSums(windowDF) %in% c(0, ncol(windowDF)),,drop=FALSE]
     
-    # Perform alternate process if insufficient variants are found in this window
-    if (nrow(windowDF) < 2)
+    # Skip windows with no variant presence
+    if (nrow(windowDF) == 0)
+    {
+        window.explanation[nrow(window.explanation) + 1,] <- c(chromosome, windowStart, 0.5) # BER=0.5
+        next
+    }
+    
+    # Perform alternate process if only 1 variant is found in this window
+    if (nrow(windowDF) == 1)
     {
         # Extract details for this single-feature window
         feature.row <- windowDF[1,]
