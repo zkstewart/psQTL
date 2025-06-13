@@ -206,12 +206,12 @@ def main():
     # Validate and impute regions
     args.regions = validate_regions(args, lengthsDict)
     
-    # Parse result and measurement type data
+    # Parse 'call' data if necessary
     dataDict = {}
     if "call" in args.inputType:
         dataDict["call"] = {}
+        # Parse 'call' Euclidean distance data
         if "ed" in args.measurementTypes:
-            # Parse the Euclidean distance data
             pickleFile = locations.variantEdPickleFile(args.missingFilter)
             if os.path.isfile(pickleFile) and os.path.isfile(pickleFile + ".ok"):
                 with open(pickleFile, "rb") as fileIn:
@@ -230,14 +230,17 @@ def main():
             "WindowedNCLS cannot be pickled so we need to do it like file->dict->WindowedNCLS"
             dataDict["call"]["ed"] = convert_dict_to_windowed_ncls(dataDict["call"]["ed"], 0) # windowSize = 0
         
+        # Parse 'call' sPLS-DA data
         if "splsda" in args.measurementTypes:
             # Parse the Sparse Partial Least Squares Discriminant Analysis data
             dataDict["call"]["selected"] = parse_selected_to_windowed_ncls(locations.variantSplsdaSelectedFile)
             dataDict["call"]["ber"], dataDict["call"]["ber_windowSize"] = parse_ber_to_windowed_ncls(locations.variantSplsdaBerFile)
+    
+    # Parse 'depth' data if necessary
     if "depth" in args.inputType:
         dataDict["depth"] = {}
+        # Parse 'depth' Euclidean distance data
         if "ed" in args.measurementTypes:
-            # Parse the Euclidean distance data
             pickleFile = locations.deletionEdPickleFile(args.missingFilter)
             if os.path.isfile(pickleFile) and os.path.isfile(pickleFile + ".ok"):
                 with open(pickleFile, "rb") as fileIn:
@@ -257,19 +260,19 @@ def main():
             # Convert dictionary to Euclidean distance NCLS data structure
             dataDict["depth"]["ed"] = convert_dict_to_windowed_ncls(dataDict["depth"]["ed"], args.windowSize)
         
+        # Parse 'depth' sPLS-DA data
         if "splsda" in args.measurementTypes:
-            # Parse the Sparse Partial Least Squares Discriminant Analysis data
             dataDict["depth"]["selected"] = parse_selected_to_windowed_ncls(locations.deletionSplsdaSelectedFile)
             dataDict["depth"]["ber"], dataDict["depth"]["ber_windowSize"] = parse_ber_to_windowed_ncls(locations.deletionSplsdaBerFile)
-    if "call" in args.inputType and "depth" in args.inputType:
-        if "splsda" in args.measurementTypes:
-            if os.path.isfile(locations.integrativeSplsdaSelectedFile):
-                # Parse the integrated Sparse Partial Least Squares Discriminant Analysis data
-                dataDict["call"]["integrated"], dataDict["depth"]["integrated"] = parse_integrated_to_windowed_ncls(
-                    locations.integrativeSplsdaSelectedFile)
+    
+    # Parse integrated sPLS-DA results if they exist
+    if "call" in args.inputType and "depth" in args.inputType and "splsda" in args.measurementTypes:
+        if os.path.isfile(locations.integrativeSplsdaSelectedFile):
+            dataDict["call"]["integrated"], dataDict["depth"]["integrated"] = parse_integrated_to_windowed_ncls(
+                locations.integrativeSplsdaSelectedFile)
     
     # Parse depth data if necessary
-    if "coverage" in args.plotTypes and "depth" in args.inputType:
+    if args.mode == "plot" and "coverage" in args.plotTypes and "depth" in args.inputType:
         depthFileDict = validate_depth_files(locations.depthDir, args.metadataDict, args.windowSize)
         coverageDict = parse_bins_as_dict(depthFileDict, args.windowSize)
         normalise_coverage_dict(coverageDict)
