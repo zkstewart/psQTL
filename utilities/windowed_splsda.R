@@ -261,10 +261,10 @@ if (ncol(selected.X) < 2)
     if (ncol(selected.X) < 10) {
         list.keepX <- c(1:ncol(selected.X)) # if fewer than 10 features, test all
     } else {
-        max.features <- ifelse(ncol(selected.X) < 30, ncol(selected.X), 30)
-        list.keepX <- c(1:9,  seq(10, max.features, 5)) # it is very improbable that more than 30 QTLs exist or can be meaningfully identified
+        max.features <- ifelse(ncol(selected.X) < 30, ncol(selected.X), 30) # it is very improbable that more than 30 QTLs exist or can be meaningfully identified
+        list.keepX <- c(1:9,  seq(10, max.features, 5))
     }
-
+    
     if (mixomicsVersion[2] <= 30) {
         tune.splsda.test <- tune.splsda(selected.X, Y, test.keepX = list.keepX,
                                         ncomp = 1, folds = 2, validation = 'Mfold',
@@ -278,13 +278,12 @@ if (ncol(selected.X) < 2)
                                         nrepeat = args$nrepeat, max.iter = args$maxiters,
                                         BPPARAM = BPPARAM)
     }
-    select.keepX <- tune.splsda.test$choice.keepX[1:ncomp]
+    select.keepX <- tune.splsda.test$choice.keepX[1:1] # 'tune.splsda.test$choice.ncomp$ncomp' won't be used as a single component is sufficient when discriminating two groups
 }
-ncomp <- 1 # 'tune.splsda.test$choice.ncomp$ncomp' won't be used as a single component is sufficient when discriminating two groups
 
 # Run sPLS-DA to select multi-QTLs and identify most important features
 final.splsda <- splsda(selected.X, Y, keepX = select.keepX,
-                       ncomp = ncomp,
+                       ncomp = 1,
                        scale = FALSE,
                        max.iter = args$maxiters)
 tryCatch(
