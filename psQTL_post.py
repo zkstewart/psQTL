@@ -291,33 +291,57 @@ def pmain(args, locations, dataDict):
     # Establish plotting object
     if args.plotStyle == "horizontal":
         plotter = HorizontalPlot(args.regions,
-            callED=dataDict["call"]["ed"] if "call" in dataDict and "ed" in dataDict["call"] else None,
-            depthED=dataDict["depth"]["ed"] if "depth" in dataDict and "ed" in dataDict["depth"] else None,
-            callSPLSDA=(dataDict["call"]["selected"], dataDict["call"]["ber"]) \
-                if "call" in dataDict and "selected" in dataDict["call"] else None,
-            depthSPLSDA=(dataDict["depth"]["selected"], dataDict["depth"]["ber"]) \
-                if "depth" in dataDict and "selected" in dataDict["depth"] else None,
-            integratedSPLSDA=(dataDict["call"]["integrated"], dataDict["depth"]["integrated"]) \
-                if "call" in dataDict and "integrated" in dataDict["call"] else None,
-            coverageNCLSDict=dataDict["depth"]["ncls"] if "depth" in dataDict and "ncls" in dataDict["depth"] else None,
-            annotationGFF3=args.gff3Obj if "genes" in args.plotTypes else None,
-            power=args.power, wmaSize=args.wmaSize, width=args.width, height=args.height,
-            coverageSamples=args.coverageSamples if "coverage" in args.plotTypes else None)
+            callED = dataDict["call"]["ed"] \
+                     if "call" in dataDict and "ed" in dataDict["call"] and ("line" in args.plotTypes or "scatter" in args.plotTypes) \
+                     else None,
+            depthED = dataDict["depth"]["ed"] \
+                      if "depth" in dataDict and "ed" in dataDict["depth"] and ("line" in args.plotTypes or "scatter" in args.plotTypes) \
+                      else None,
+            callSPLSDA = (dataDict["call"]["selected"], dataDict["call"]["ber"]) \
+                         if "call" in dataDict and "selected" in dataDict["call"] and ("line" in args.plotTypes or "scatter" in args.plotTypes) \
+                         else None,
+            depthSPLSDA = (dataDict["depth"]["selected"], dataDict["depth"]["ber"]) \
+                          if "depth" in dataDict and "selected" in dataDict["depth"] and ("line" in args.plotTypes or "scatter" in args.plotTypes) \
+                          else None,
+            integratedSPLSDA = (dataDict["call"]["integrated"], dataDict["depth"]["integrated"]) \
+                               if "call" in dataDict and "integrated" in dataDict["call"] and ("line" in args.plotTypes or "scatter" in args.plotTypes) \
+                               else None,
+            coverageNCLSDict = dataDict["depth"]["ncls"] \
+                               if "depth" in dataDict and "ncls" in dataDict["depth"] \
+                               else None,
+            annotationGFF3 = args.gff3Obj \
+                             if "genes" in args.plotTypes and "genes" in args.plotTypes \
+                             else None,
+            coverageSamples = args.coverageSamples if "coverage" in args.plotTypes \
+                              else None
+            power=args.power, wmaSize=args.wmaSize, width=args.width, height=args.height)
         plotter.plot(args.plotTypes, args.outputFileName)
     elif args.plotStyle == "circos":
         plotter = CircosPlot(args.regions,
-            callED=dataDict["call"]["ed"] if "call" in dataDict and "ed" in dataDict["call"] else None,
-            depthED=dataDict["depth"]["ed"] if "depth" in dataDict and "ed" in dataDict["depth"] else None,
-            callSPLSDA=(dataDict["call"]["selected"], dataDict["call"]["ber"]) \
-                if "call" in dataDict and "selected" in dataDict["call"] else None,
-            depthSPLSDA=(dataDict["depth"]["selected"], dataDict["depth"]["ber"]) \
-                if "depth" in dataDict and "selected" in dataDict["depth"] else None,
-            integratedSPLSDA=(dataDict["call"]["integrated"], dataDict["depth"]["integrated"]) \
-                if "call" in dataDict and "integrated" in dataDict["call"] else None,
-            coverageNCLSDict=dataDict["depth"]["ncls"] if "depth" in dataDict and "ncls" in dataDict["depth"] else None,
-            annotationGFF3=args.gff3Obj if "genes" in args.plotTypes else None,
-            power=args.power, wmaSize=args.wmaSize, width=args.width, height=args.height,
-            coverageSamples=args.coverageSamples if "coverage" in args.plotTypes else None)
+            callED = dataDict["call"]["ed"] \
+                     if "call" in dataDict and "ed" in dataDict["call"] and ("line" in args.plotTypes or "scatter" in args.plotTypes) \
+                     else None,
+            depthED = dataDict["depth"]["ed"] \
+                      if "depth" in dataDict and "ed" in dataDict["depth"] and ("line" in args.plotTypes or "scatter" in args.plotTypes) \
+                      else None,
+            callSPLSDA = (dataDict["call"]["selected"], dataDict["call"]["ber"]) \
+                         if "call" in dataDict and "selected" in dataDict["call"] and ("line" in args.plotTypes or "scatter" in args.plotTypes) \
+                         else None,
+            depthSPLSDA = (dataDict["depth"]["selected"], dataDict["depth"]["ber"]) \
+                          if "depth" in dataDict and "selected" in dataDict["depth"] and ("line" in args.plotTypes or "scatter" in args.plotTypes) \
+                          else None,
+            integratedSPLSDA = (dataDict["call"]["integrated"], dataDict["depth"]["integrated"]) \
+                               if "call" in dataDict and "integrated" in dataDict["call"] and ("line" in args.plotTypes or "scatter" in args.plotTypes) \
+                               else None,
+            coverageNCLSDict = dataDict["depth"]["ncls"] \
+                               if "depth" in dataDict and "ncls" in dataDict["depth"] \
+                               else None,
+            annotationGFF3 = args.gff3Obj \
+                             if "genes" in args.plotTypes and "genes" in args.plotTypes \
+                             else None,
+            coverageSamples = args.coverageSamples if "coverage" in args.plotTypes \
+                              else None
+            power=args.power, wmaSize=args.wmaSize, width=args.width, height=args.height)
         plotter.axisSpace = args.axisSpace
         plotter.plot(args.plotTypes, args.outputFileName)
     print("Plotting complete!")

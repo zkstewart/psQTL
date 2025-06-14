@@ -716,7 +716,6 @@ class HorizontalPlot(Plot):
                 raise ValueError(f"Invalid plot type '{plotType}'; must be one of {Plot.PLOT_TYPES}")
         if len(set(plotTypes)) != len(plotTypes):
             raise ValueError("plotTypes must not contain duplicate values")
-        self.nrow = len(plotTypes) # number of rows is equal to the number of plot types
         
         # Initialise the axes
         self.fig, self.axs = plt.subplots(nrows=self.nrow, ncols=self.ncol,
@@ -1442,7 +1441,6 @@ class CircosPlot(Plot):
                 raise ValueError(f"Invalid plot type '{plotType}'; must be one of {Plot.PLOT_TYPES}")
         if len(set(plotTypes)) != len(plotTypes):
             raise ValueError("plotTypes must not contain duplicate values")
-        self.nrow = len(plotTypes) # number of rows is equal to the number of plot types
         
         # Initialise the circos figure object
         seqid2size = {
