@@ -53,6 +53,30 @@ def gt_median_adjustment(genotypeLists):
         adjustedGenotypes.append(adjustedSublist)
     return adjustedGenotypes
 
+def possible_genotypes(gt1, gt2):
+    '''
+    Calculate all possible inheritable genotypes from two parent genotypes.
+    
+    Parameters:
+        gt1 / gt2 -- a list of integers representing the genotype values
+                     with format like:
+                     [0, 1, 2, ...]
+    Returns:
+        possibleGTs -- a set of frozensets containing all possible genotypes
+                       that can be formed from the two genotypes; sets
+                       mask duplicated alleles but allow for testing
+                       of genotype without regard to order
+    '''
+    numGt1 = int(len(gt1) / 2)
+    numGt2 = int(len(gt2) / 2)
+    
+    possibleGTs = []
+    for g1 in combinations(gt1, numGt1):
+        for g2 in combinations(gt2, numGt2):
+            possibleGTs.append(frozenset(g1 + g2))
+    
+    return set(possibleGTs)
+
 def calculate_segregant_ed(b1Gt, b2Gt, isCNV=False, parentsGT=None):
     '''
     Parameters:
@@ -86,18 +110,21 @@ def calculate_segregant_ed(b1Gt, b2Gt, isCNV=False, parentsGT=None):
         b1Gt = [ gt for gt in b1Gt if set(gt) in possibleGTs ]
         b2Gt = [ gt for gt in b2Gt if set(gt) in possibleGTs ]
     
-    # Calculate Euclidean distance between the two bulks with both methods
-    numAllelesB1, numAllelesB2, edist1 = calculate_allele_frequency_ed(b1Gt, b2Gt)
-    numSamplesB1, numSamplesB2, edist2 = calculate_genotype_frequency_ed(b1Gt, b2Gt)
+    # Calculate Euclidean distance between the two bulks
+    if parentsGT != None and len(parentsGT) == 2:
+        numAllelesB1, numAllelesB2, edist = calculate_inheritance_ed(b1Gt, b2Gt, parentsGT)
+    else:
+        numAllelesB1, numAllelesB2, edist = calculate_allele_frequency_ed(b1Gt, b2Gt)
     
     # Return the values
-    "Choose the method of comparison that yields the largest distance"
-    return numAllelesB1, numAllelesB2, max(edist1, edist2)
+    return numAllelesB1, numAllelesB2, edist
 
 def calculate_allele_frequency_ed(b1Gt, b2Gt):
     '''
-    Separate function to calculate the Euclidean distance between two bulks
-    based on the allele frequencies of the genotypes in each bulk.
+    Calculates the Euclidean distance between two bulks based on the allele
+    frequencies in each bulk. This is conceptually similar to BSA methods like
+    QTLseq, but substituting allele depth (AD) for the number of alleles
+    in genotype (GT) calls.
     
     Parameters:
         b1Gt / b2Gt -- a list of lists containing the genotype value as integers
@@ -148,6 +175,21 @@ def calculate_allele_frequency_ed(b1Gt, b2Gt):
 
 def calculate_genotype_frequency_ed(b1Gt, b2Gt):
     '''
+    Calculates the Euclidean distance between two bulks based on the
+    genotype frequencies in each bulk. Rather than breaking apart genotypes (GT)
+    into individual alleles as calculate_allele_frequency_ed() does, this method
+    treats each genotype as a single entity and compares the frequency of each
+    genotype in each bulk.
+    
+    However, although this sounds like a good idea, it has some problems. From
+    real data, this method tends to overestimate segregation between bulks. The
+    cause of this is unclear. My hunch is that reads, possibly originating from
+    repetitive regions in proximity to real QTLs, can contaminate those related
+    repeats throughout the rest of the genome, leading to signals of segregation
+    occurring throughout the whole genome rather than just at the QTL. Whatever
+    it is, this method is not recommended for use in real data analysis despite
+    it sounding fantastic in theory.
+    
     Parameters:
         b1Gt / b2Gt -- a list of lists containing the genotype value as integers
                        with format like:
@@ -193,33 +235,14 @@ def calculate_genotype_frequency_ed(b1Gt, b2Gt):
         # Return the values
         return numSamplesB1, numSamplesB2, edist
 
-def possible_genotypes(gt1, gt2):
-    '''
-    Calculate all possible inheritable genotypes from two parent genotypes.
-    
-    Parameters:
-        gt1 / gt2 -- a list of integers representing the genotype values
-                     with format like:
-                     [0, 1, 2, ...]
-    Returns:
-        possibleGTs -- a list of sets containing all possible genotypes
-                       that can be formed from the two genotypes; sets
-                       mask duplicated alleles but allow for testing
-                       of genotype without regard to order
-    '''
-    numGt1 = int(len(gt1) / 2)
-    numGt2 = int(len(gt2) / 2)
-    
-    possibleGTs = []
-    for g1 in combinations(gt1, numGt1):
-        for g2 in combinations(gt2, numGt2):
-            possibleGTs.append(set(g1 + g2))
-    
-    return possibleGTs
-
 def calculate_inheritance_ed(b1Gt, b2Gt, parentsGT):
     '''
-    DEPRECATED; use calculate_segregant_ed() instead.
+    Employs a method to calculate the Euclidean distance between two bulks
+    based on the likelihood of specific alleles/haplotypes being inherited
+    from each parent. This blends the allele frequency and genotype frequency
+    methods to provide a more accurate representation of _biased inheritance_
+    of specific alleles from parents to progeny, rather than a simple
+    comparison of genotype frequency.
     
     Parameters:
         b1Gt / b2Gt -- a list of lists containing the genotype value as integers
@@ -251,12 +274,8 @@ def calculate_inheritance_ed(b1Gt, b2Gt, parentsGT):
                          f"half of each parent's chromosomes ({sum(PARENT_FULLY_ASSIGNED.values())}); " +
                          "cannot calculate inheritance Euclidean distance with mismatched ploidy")
     
-    # Determine the possible progeny genotypes based on the parents' genotypes
-    possibleGTs = possible_genotypes(parentsGT[0], parentsGT[1])
-    
     # Assign alleles to parent haplotypes
     bulkSums = []
-    numSamples = [0, 0] # [numSamplesB1, numSamplesB2]
     for i, bulkGt in enumerate([b1Gt, b2Gt]): # for each bulk
         # Set up data structure to hold assigned allele counts across the bulk
         bulkSum = {
@@ -269,11 +288,6 @@ def calculate_inheritance_ed(b1Gt, b2Gt, parentsGT):
         }
         # For each sample, assign alleles to parents based on the most likely inheritance
         for gt in bulkGt:
-            # Detect samples that cannot be matched to parents
-            if not set(gt) in possibleGTs:
-                continue
-            numSamples[i] += 1 # increment the sample count for this bulk since it is valid
-            
             # Set up the data structure for holding this sample's assigned alleles
             sampleColumns = {
                 "p1": {
@@ -337,7 +351,7 @@ def calculate_inheritance_ed(b1Gt, b2Gt, parentsGT):
     b1Sum, b2Sum = bulkSums
     
     # Get the number of samples and alleles in each bulk
-    numSamplesB1, numSamplesB2 = numSamples # we might have skipped samples that don't match parent genotypes
+    numSamplesB1, numSamplesB2 = len(b1Gt), len(b2Gt)
     numAllelesB1 = numSamplesB1 * len(b1Gt[0]) if numSamplesB1 > 0 else 0 # num samples * ploidy of the samples
     numAllelesB2 = numSamplesB2 * len(b2Gt[0]) if numSamplesB2 > 0 else 0 # conforms to the calculate_segregant_ed() return values
     

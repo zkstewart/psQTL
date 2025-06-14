@@ -1,8 +1,7 @@
 #! python3
-# This is a succinct re-implementation of the ZS_GFF3IO Feature
-# and GFF3 classes that are part of the https://github.com/zkstewart/Various_scripts
-# repository. Only the attributes and methods necessary for psQTL
-# to function are retained.
+# This is a re-invention of the ZS_GFF3IO.GFF3 class from the Various_scripts
+# repository in the author's GitHub account. It applies a different logic to
+# parsing GFF3 files which should be much more flexible and robust.
 
 import re, sys, os
 import pandas as pd
@@ -423,12 +422,11 @@ class GFF3Graph:
         Runs a quality control check on the GFF3Graph to ensure that all
         features are properly linked.
         
-        Returns:
-            danglingFeatures -- a dictionary where keys are feature IDs
-                                and values are the number of dangling features
-                                that do not have a parent or child.
-            typesToCheck -- (OPTIONAL) a list of feature types to check for dangling features
-                            OR None to check all feature types.
+        Prints a warning if any features are found that have no parents or children.
+        
+        Parameters:
+            typesToCheck -- an iterable of strings indicating the feature types to check
+                            for dangling features. If None, all feature types are checked.
         '''
         danglingFeatures = {}
         for feature in self:
