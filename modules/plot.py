@@ -335,14 +335,29 @@ class Plot:
     
     @property
     def nrow(self):
-        return sum([
-            1 if self.callED is not None else 0,
-            1 if self.depthED is not None else 0,
-            1 if self.callSPLSDA is not None else 0,
-            1 if self.depthSPLSDA is not None else 0,
-            1 if self.coverageNCLSDict is not None else 0,
-            1 if self.annotationGFF3 is not None else 0
-        ])
+        if self._nrow == None:
+            return sum([
+                1 if self.callED is not None else 0,
+                1 if self.depthED is not None else 0,
+                1 if self.callSPLSDA is not None else 0,
+                1 if self.depthSPLSDA is not None else 0,
+                1 if self.coverageNCLSDict is not None else 0,
+                1 if self.annotationGFF3 is not None else 0
+            ])
+        else:
+            return self._nrow
+    
+    @nrow.setter
+    def nrow(self, value):
+        if value is None:
+            self._nrow = None
+            return
+        if not isinstance(value, int):
+            raise TypeError("nrow must be an integer")
+        if value < 1:
+            raise ValueError(f"nrow must be >= 1")
+        
+        self._nrow = value
     
     @property
     def width(self):
@@ -694,11 +709,14 @@ class HorizontalPlot(Plot):
             outputFileName -- a string indicating the file name to save the plot to
         '''
         # Validate plot types
+        if (plotTypes == None) or (not isinstance(plotTypes, list)) or (len(plotTypes) == 0):
+            raise ValueError("plotTypes must be a non-empty list of plot types")
         for plotType in plotTypes:
             if plotType not in Plot.PLOT_TYPES:
                 raise ValueError(f"Invalid plot type '{plotType}'; must be one of {Plot.PLOT_TYPES}")
         if len(set(plotTypes)) != len(plotTypes):
             raise ValueError("plotTypes must not contain duplicate values")
+        self.nrow = len(plotTypes) # number of rows is equal to the number of plot types
         
         # Initialise the axes
         self.fig, self.axs = plt.subplots(nrows=self.nrow, ncols=self.ncol,
@@ -1349,25 +1367,6 @@ class CircosPlot(Plot):
             self._height = value
     
     @property
-    def height(self):
-        if self._height is None:
-            return Plot.STANDARD_DIMENSION * self.nrow
-        return self._height
-    
-    @height.setter
-    def height(self, value):
-        if value == None:
-            self._height = None
-            return
-        else:
-            if not isinstance(value, int):
-                raise TypeError("height must be an integer")
-            if value < 1:
-                raise ValueError(f"height must be >= 1")
-
-            self._height = value
-    
-    @property
     def axisSpace(self):
         if self._axisSpace is None:
             return CircosPlot.AXIS_SPACE
@@ -1436,11 +1435,14 @@ class CircosPlot(Plot):
             outputFileName -- a string indicating the file name to save the plot to
         '''
         # Validate plot types
+        if (plotTypes == None) or (not isinstance(plotTypes, list)) or (len(plotTypes) == 0):
+            raise ValueError("plotTypes must be a non-empty list of plot types")
         for plotType in plotTypes:
             if plotType not in Plot.PLOT_TYPES:
                 raise ValueError(f"Invalid plot type '{plotType}'; must be one of {Plot.PLOT_TYPES}")
         if len(set(plotTypes)) != len(plotTypes):
             raise ValueError("plotTypes must not contain duplicate values")
+        self.nrow = len(plotTypes) # number of rows is equal to the number of plot types
         
         # Initialise the circos figure object
         seqid2size = {
