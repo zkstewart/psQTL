@@ -335,29 +335,14 @@ class Plot:
     
     @property
     def nrow(self):
-        if self._nrow == None:
-            return sum([
-                1 if self.callED is not None else 0,
-                1 if self.depthED is not None else 0,
-                1 if self.callSPLSDA is not None else 0,
-                1 if self.depthSPLSDA is not None else 0,
-                1 if self.coverageNCLSDict is not None else 0,
-                1 if self.annotationGFF3 is not None else 0
-            ])
-        else:
-            return self._nrow
-    
-    @nrow.setter
-    def nrow(self, value):
-        if value is None:
-            self._nrow = None
-            return
-        if not isinstance(value, int):
-            raise TypeError("nrow must be an integer")
-        if value < 1:
-            raise ValueError(f"nrow must be >= 1")
-        
-        self._nrow = value
+        return sum([
+            1 if self.callED is not None else 0,
+            1 if self.depthED is not None else 0,
+            1 if self.callSPLSDA is not None else 0,
+            1 if self.depthSPLSDA is not None else 0,
+            1 if self.coverageNCLSDict is not None else 0,
+            1 if self.annotationGFF3 is not None else 0
+        ])
     
     @property
     def width(self):
