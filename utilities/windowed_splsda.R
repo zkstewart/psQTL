@@ -13,6 +13,29 @@ fix_numeric_first_char <- function(x) {
   }
 }
 
+balanced_error_rate <- function(Ytrue, Ypred) {
+    # Prevent incompatible comparison
+    if (length(Ytrue) != length(Ypred)) {
+        stop("Ytrue and Ypred must have the same length")
+    }
+
+    if (length(unique(Ypred)) == 1)
+    {
+        BER <- 0.5
+    } else {
+        BER <- mean(diag(1 - (table(Ytrue, Ypred) / table(Ytrue, Ytrue))))
+    }
+    return (BER)
+}
+
+lda_prediction <- function(Ytrue, lm.df) {
+    lda.fit <- lda(Y ~ X, data=lm.df)
+    lda.pred <- predict(lda.fit, lm.df)
+    posterior <- as.data.frame(lda.pred$posterior)
+    predicted <- ifelse(posterior$bulk1 >= posterior$bulk2, "bulk1", "bulk2")
+    return (balanced_error_rate(Ytrue, predicted))
+}
+
 # Establish parser
 p <- arg_parser("Run PLS-DA in windows across a genome, using sPLS-DA to select features that contribute to the model")
 
@@ -91,6 +114,12 @@ if ((ncol(df)-2) != nrow(metadata.table)) # -2 to account for c("chrom", "pos")
 # Extract Y variable values
 Y <- metadata.table$V2
 
+# Discover issues with Y variable
+if (length(unique(Y)) != 2)
+{
+    stop(paste0("Y variable must have exactly two unique values, but found ", length(unique(Y)), " unique values: ", paste(unique(Y), collapse=", ")))
+}
+
 # Iterate over chromosomes and windows to run PLS-DA
 window.explanation <- data.frame("chrom" = numeric(0), "pos" = numeric(0), "BER" = numeric(0))
 selected.features <- data.frame("chrom" = numeric(0), "pos" = numeric(0), "BER" = numeric(0))
@@ -143,13 +172,17 @@ for (chromosome in unique(df$chrom))
                 window.ber <- 0 # complete segregation leads to perfect prediction
             }
         } else {
-            # Perform linear discriminant analysis
-            lda.fit <- lda(Y ~ X, data=lm.df)
-            lda.pred <- predict(lda.fit, lm.df)
-            posterior <- as.data.frame(lda.pred$posterior)
-            # Calculate an approximate measure of BER
-            predicted <- ifelse(posterior$bulk1 >= posterior$bulk2, "bulk1", "bulk2")
-            window.ber <- (1 - (sum(predicted == Y) / length(Y))) / 2
+            # Use LDA to predict BER for this window
+            window.ber <- tryCatch({
+                    lda_prediction(Y, lm.df)
+                }, error = function(e) {
+                    if (e$message == "group means are numerically identical") {
+                        return (0.5)
+                    } else {
+                        stop(paste0("Encountered unhandled error: ", e$message))
+                    }
+                }
+            )
         }
         
         # Store window and feature
