@@ -313,7 +313,7 @@ def pmain(args, locations, dataDict):
                              if "genes" in args.plotTypes and "genes" in args.plotTypes \
                              else None,
             coverageSamples = args.coverageSamples if "coverage" in args.plotTypes \
-                              else None
+                              else None,
             power=args.power, wmaSize=args.wmaSize, width=args.width, height=args.height)
         plotter.plot(args.plotTypes, args.outputFileName)
     elif args.plotStyle == "circos":
@@ -340,7 +340,7 @@ def pmain(args, locations, dataDict):
                              if "genes" in args.plotTypes and "genes" in args.plotTypes \
                              else None,
             coverageSamples = args.coverageSamples if "coverage" in args.plotTypes \
-                              else None
+                              else None,
             power=args.power, wmaSize=args.wmaSize, width=args.width, height=args.height)
         plotter.axisSpace = args.axisSpace
         plotter.plot(args.plotTypes, args.outputFileName)
