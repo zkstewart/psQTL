@@ -110,6 +110,11 @@ def main():
                          exceed to be included in the final VCF file (recommended: 30.0)""")
     
     # Depth-subparser arguments
+    dparser.add_argument("-p", dest="ploidyNum",
+                         required=True,
+                         type=int,
+                         help="""Specify the ploidy number of the samples being analysed e.g., 
+                         '2' for diploid, '4' for tetraploid, etc.""")
     dparser.add_argument("-f", dest="genomeFasta",
                          required=True,
                          help="""Specify the location of the genome FASTA file that BAM files
@@ -136,15 +141,15 @@ def main():
                          default=1)
     
     # Call-subparser arguments
-    cparser.add_argument("-f", dest="genomeFasta",
-                         required=True,
-                         help="""Specify the location of the genome FASTA file that BAM files
-                         are aligned to""")
-    cparser.add_argument("--ploidy", dest="ploidyNum",
+    cparser.add_argument("-p", dest="ploidyNum",
                          required=True,
                          type=int,
                          help="""Specify the ploidy number of the samples being analysed e.g., 
                          '2' for diploid, '4' for tetraploid, etc.""")
+    cparser.add_argument("-f", dest="genomeFasta",
+                         required=True,
+                         help="""Specify the location of the genome FASTA file that BAM files
+                         are aligned to""")
     cparser.add_argument("--qual", dest="qualFilter",
                          type=float,
                          required=False,
@@ -272,7 +277,7 @@ def dmain(args, locations):
     # Collate binned files into a VCF-like format of deletion calls
     if (not os.path.isfile(locations.finalDeletionFile)) or (not os.path.isfile(locations.finalDeletionFile + ".ok")):
         print("# Generating deletion file...")
-        call_deletions_from_depth(samplePairs, locations.finalDeletionFile, args.windowSize)
+        call_deletions_from_depth(samplePairs, locations.finalDeletionFile, args.windowSize, args.ploidyNum)
         open(locations.finalDeletionFile + ".ok", "w").close() # touch a .ok file to indicate success
     else:
         print(f"# Deletion file '{locations.finalDeletionFile}' exists; skipping ...")
@@ -303,6 +308,15 @@ def cmain(args, locations):
     # Merge params and args
     paramsCache = ParameterCache(locations.workingDirectory)
     paramsCache.merge(args) # raises FileNotFoundError if cache does not exist
+    
+    # Validate that the ploidy number is supported
+    if args.ploidyNum != 2:
+        raise ValueError(f"'psQTL_prep.py call' currently only supports diploid samples (--ploidy 2); " +
+                            "you are suggested to call polyploid variants using a different tool, " +
+                            "then use 'psQTL_prep.py initialise --fvcf' to import your VCF file " +
+                            "into the psQTL working directory. All downstream psQTL commands " +
+                            "will work with polyploid samples, it is only variant calling " +
+                            "that is not supported at this time.")
     
     # Validate that necessary parameters arguments are provided
     if args.bamFiles == None or args.bamFiles == []:

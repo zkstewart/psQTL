@@ -41,14 +41,8 @@ def validate_uncached(args):
         raise ValueError("Number of threads must be at least 1!")
     
     # Validate ploidy number (only for 'call' mode)
-    if args.mode == "call":
-        if args.ploidyNum != 2:
-            raise ValueError(f"'psQTL_prep.py call' currently only supports diploid samples (--ploidy 2); " +
-                             "you are suggested to call polyploid variants using a different tool, " +
-                             "then use 'psQTL_prep.py initialise --fvcf' to import your VCF file " +
-                             "into the psQTL working directory. All downstream psQTL commands " +
-                             "will work with polyploid samples, it is only variant calling " +
-                             "that is not supported at this time.")
+    if args.ploidyNum < 1:
+        raise ValueError(f"--ploidy value '{args.ploidyNum}' must be >= 1!")
     
     # Validate genome FASTA file
     args.genomeFasta = os.path.abspath(args.genomeFasta)

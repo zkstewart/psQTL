@@ -29,7 +29,7 @@ def get_median_value(values):
             medianValue = np.median(nonZeroValues)
     return medianValue
 
-def predict_deletions(binDict):
+def predict_deletions(binDict, ploidy=2):
     '''
     Receives a histogram dictionary and predicts regions of homozygous deletion,
     homozygous presence, and hemizygous regions on the basis of depth coverage.
@@ -42,13 +42,12 @@ def predict_deletions(binDict):
                          position2: depth2,
                              ...
                     }
+        ploidy -- (OPTIONAL) an integer indicating the ploidy number of the
+                  samples being analysed e.g., '2' for diploid, '4' for tetraploid, etc.
     Returns:
-        alleles -- a numpy array with the same length as the input dictionary,
+        alleles -- a list with the same length as the input dictionary,
                    where the integer value indicates the number of allele copies
-                   present (assuming diploidy). For example, 0 indicates
-                   homozygous deletion, 1 indicates hemizygous deletion, and 2
-                   indicates homozygous presence. Increasing values correspond to
-                   increasing copy number.
+                   present given the indicated ploidy number.
     '''
     depths = np.array(list(binDict.values()))
     
@@ -57,12 +56,23 @@ def predict_deletions(binDict):
     depths = depths / medianDepth
     
     # Round to nearest number of alleles
-    alleles = np.round(depths * 2)
+    alleles = np.round(depths * ploidy)
     
     # Return the results
-    return alleles
+    return [ int(x) for x in alleles ] # convert to a list of integers
 
-def convert_alleles_to_gt(alleles):
+def split_copynum_by_ploidy(n, k):
+    '''
+    See https://stackoverflow.com/questions/70392403/dividing-an-even-number-into-n-parts-each-part-being-a-multiple-of-2
+    
+    Parameters:
+        n -- an integer indicating the number of gene copies present
+        k -- an integer indicating the ploidy number of the samples
+    '''
+    d,r = divmod(n, k)
+    return [d+1]*r + [d]*(k-r)
+
+def convert_alleles_to_gt(alleles, ploidy=2):
     '''
     Converts the allele predictions to a genotype array, where 0 indicates
     homozygous deletion, 1 indicates heterozygous deletion, and 2 indicates
@@ -70,10 +80,9 @@ def convert_alleles_to_gt(alleles):
     
     Parameters:
         alleles -- a numpy array where the integer value indicates the number of
-                   allele copies present (assuming diploidy). For example, 0
-                   indicates homozygous deletion, 1 indicates hemizygous deletion,
-                   2 indicates homozygous presence, and increasing values correspond
-                   to increasing copy number.
+                   allele copies present (assuming the ploidy value).
+        ploidy -- (OPTIONAL) an integer indicating the ploidy number of the
+                  samples being analysed e.g., '2' for diploid, '4' for tetraploid, etc.
     Returns:
         genotypes -- a list of strings with the same length as the input array,
                      where each string is a VCF-encoded genotype where the
@@ -83,12 +92,13 @@ def convert_alleles_to_gt(alleles):
                      and so on.
     '''
     genotypes = [
-        f"{int(np.floor(allele/2))}/{int(np.ceil(allele/2))}"
+        "/".join(map(str, sorted(split_copynum_by_ploidy(allele, ploidy))))
         for allele in alleles
     ]
+    
     return genotypes
 
-def call_deletions_from_depth(samplePairs, outputFileName, windowSize):
+def call_deletions_from_depth(samplePairs, outputFileName, windowSize, ploidy=2):
     '''
     Calls homozygous and hemizygous deletions from binned depth files and writes
     the results to a VCF-like file.
@@ -100,6 +110,8 @@ def call_deletions_from_depth(samplePairs, outputFileName, windowSize):
         outputFileName -- the path to the output VCF-like file.
         windowSize -- an integer specifying the size of the bins in each binned depth
                       files.
+        ploidy -- (OPTIONAL) an integer indicating the ploidy number of the
+                  samples being analysed e.g., '2' for diploid, '4' for tetraploid, etc.
     '''
     genotypesDict = {}
     samples = []
@@ -114,8 +126,8 @@ def call_deletions_from_depth(samplePairs, outputFileName, windowSize):
         # Predict deletions
         genotypesDict[sampleName] = {}
         for contigID, binDict in histoDict.items():
-            alleles = predict_deletions(binDict)
-            genotypes = convert_alleles_to_gt(alleles)
+            alleles = predict_deletions(binDict, ploidy=ploidy)
+            genotypes = convert_alleles_to_gt(alleles, ploidy=ploidy)
             genotypesDict[sampleName][contigID] = genotypes
         samples.append(sampleName)
     

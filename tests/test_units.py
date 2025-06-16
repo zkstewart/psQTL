@@ -2,6 +2,7 @@
 
 import os, sys, unittest, time, math, shutil, subprocess
 import numpy as np
+from collections import Counter
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from modules.parsing import parse_metadata, vcf_header_to_metadata_validation, parse_vcf_genotypes, \
@@ -9,7 +10,7 @@ from modules.parsing import parse_metadata, vcf_header_to_metadata_validation, p
 from modules.ncls import WindowedNCLS
 from modules.ed import parse_vcf_for_ed, calculate_segregant_ed, gt_median_adjustment, \
     calculate_allele_frequency_ed, calculate_genotype_frequency_ed, calculate_inheritance_ed
-from modules.depth import get_median_value, predict_deletions
+from modules.depth import get_median_value, predict_deletions, call_deletions_from_depth
 from modules.samtools_handling import depth_to_histoDict
 from modules.splsda import recode_variant, recode_cnv, recode_vcf
 from modules.gff3 import GFF3Graph
@@ -260,6 +261,102 @@ class TestDepth(unittest.TestCase):
         self.assertIn("C.glau_01", histoDict, f"'{depthFile}' should contain 'C.glau_01'")
         self.assertEqual(len(histoDict["C.glau_01"]), 1, f"Should have 1 bin for 'C.glau_01' in {depthFile}")
         self.assertTrue(all(histoDict['C.glau_01'] == truth), f"Expected '{truth}' but got '{histoDict['C.glau_01']}'")
+    
+    def test_call_deletions_from_depth(self):
+        "Test that call_deletions_from_depth() works correctly with a binned depth file"
+        # Arrange
+        depthFile = os.path.join(dataDir, "depth.binned.1.tsv")
+        samplePairs = [["test", depthFile]]
+        
+        windowSize = 1000
+        ploidy = 2
+        
+        workDir = os.path.join(dataDir, "tmp")
+        outputFileName = os.path.join(workDir, "test_call_deletions_from_depth.tsv.gz")
+        
+        num00 = 4
+        num01 = 2
+        num11 = 6
+        num12 = 2
+        num22 = 4
+        
+        # Arrange: cleanup any previous work directory
+        if os.path.exists(workDir):
+            shutil.rmtree(workDir)
+        if not os.path.exists(workDir):
+            os.makedirs(workDir)
+        
+        # Act
+        call_deletions_from_depth(samplePairs, outputFileName, windowSize, ploidy=ploidy)
+        
+        # Assert
+        deletionContents = []
+        with read_gz_file(outputFileName) as fileIn:
+            for line in fileIn:
+                deletionContents.append(line.strip())
+        
+        genotypes = []
+        for line in deletionContents:
+            if line.startswith("#"):
+                continue
+            sl = line.split("\t")
+            genotypes.append(sl[-1])
+        numGenotypes = Counter(genotypes)
+        
+        self.assertEqual(numGenotypes["0/0"], num00, f"Expected {num00} '0/0' genotypes but got {numGenotypes['0/0']}")
+        self.assertEqual(numGenotypes["0/1"], num01, f"Expected {num01} '0/1' genotypes but got {numGenotypes['0/1']}")
+        self.assertEqual(numGenotypes["1/1"], num11, f"Expected {num11} '1/1' genotypes but got {numGenotypes['1/1']}")
+        self.assertEqual(numGenotypes["1/2"], num12, f"Expected {num12} '1/2' genotypes but got {numGenotypes['1/2']}")
+        self.assertEqual(numGenotypes["2/2"], num22, f"Expected {num22} '2/2' genotypes but got {numGenotypes['2/2']}")
+    
+    def test_call_deletions_from_depth_triploid(self):
+        "Test that call_deletions_from_depth() works correctly with a binned depth file"
+        # Arrange
+        depthFile = os.path.join(dataDir, "depth.binned.1.tsv")
+        samplePairs = [["test", depthFile]]
+        
+        windowSize = 1000
+        ploidy = 3
+        
+        workDir = os.path.join(dataDir, "tmp")
+        outputFileName = os.path.join(workDir, "test_call_deletions_from_depth.tsv.gz")
+        
+        num000 = 2
+        num001 = 2
+        num011 = 4
+        num111 = 2
+        num112 = 4
+        num222 = 2
+        
+        # Arrange: cleanup any previous work directory
+        if os.path.exists(workDir):
+            shutil.rmtree(workDir)
+        if not os.path.exists(workDir):
+            os.makedirs(workDir)
+        
+        # Act
+        call_deletions_from_depth(samplePairs, outputFileName, windowSize, ploidy=ploidy)
+        
+        # Assert
+        deletionContents = []
+        with read_gz_file(outputFileName) as fileIn:
+            for line in fileIn:
+                deletionContents.append(line.strip())
+        
+        genotypes = []
+        for line in deletionContents:
+            if line.startswith("#"):
+                continue
+            sl = line.split("\t")
+            genotypes.append(sl[-1])
+        numGenotypes = Counter(genotypes)
+        
+        self.assertEqual(numGenotypes["0/0/0"], num000, f"Expected {num000} '0/0/0' genotypes but got {numGenotypes['0/0/0']}")
+        self.assertEqual(numGenotypes["0/0/1"], num001, f"Expected {num001} '0/0/1' genotypes but got {numGenotypes['0/0/1']}")
+        self.assertEqual(numGenotypes["0/1/1"], num011, f"Expected {num011} '0/1/1' genotypes but got {numGenotypes['0/1/1']}")
+        self.assertEqual(numGenotypes["1/1/1"], num111, f"Expected {num111} '1/1/1' genotypes but got {numGenotypes['1/1/1']}")
+        self.assertEqual(numGenotypes["1/1/2"], num112, f"Expected {num112} '1/1/2' genotypes but got {numGenotypes['1/1/2']}")
+        self.assertEqual(numGenotypes["2/2/2"], num222, f"Expected {num222} '2/2/2' genotypes but got {numGenotypes['2/2/2']}")
 
 class TestED(unittest.TestCase):
     def test_parse_vcf_for_ed(self):
