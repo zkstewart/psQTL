@@ -140,6 +140,11 @@ def main():
                          required=True,
                          help="""Specify the location of the genome FASTA file that BAM files
                          are aligned to""")
+    cparser.add_argument("--ploidy", dest="ploidyNum",
+                         required=True,
+                         type=int,
+                         help="""Specify the ploidy number of the samples being analysed e.g., 
+                         '2' for diploid, '4' for tetraploid, etc.""")
     cparser.add_argument("--qual", dest="qualFilter",
                          type=float,
                          required=False,

@@ -144,7 +144,6 @@ rownames(df) <- make.names(paste0(df$chrom, "_", df$pos), unique=TRUE)
 
 # Drop any metadata samples not present in VCF
 metadata.table <- metadata.table[metadata.table$V1 %in% colnames(df),,drop=FALSE]
-Y <- metadata.table$V2
 
 # Extract Y variable values
 Y <- metadata.table$V2
