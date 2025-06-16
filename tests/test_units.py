@@ -11,7 +11,7 @@ from modules.ed import parse_vcf_for_ed, calculate_segregant_ed, gt_median_adjus
     calculate_allele_frequency_ed, calculate_genotype_frequency_ed, calculate_inheritance_ed
 from modules.depth import get_median_value, predict_deletions
 from modules.samtools_handling import depth_to_histoDict
-from modules.splsda import recode_variant, recode_cnv
+from modules.splsda import recode_variant, recode_cnv, recode_vcf
 from modules.gff3 import GFF3Graph
 
 # Specify data locations
@@ -267,10 +267,10 @@ class TestED(unittest.TestCase):
         # Arrange
         metadataDict = parse_metadata(metadataFile)
         vcfFile = os.path.join(dataDir, "deletions.1.vcf")
-        notCNV_truth = [0.478198599250326,0.5942205544782738,0.6083495165377463, # deprecated
-                        0.7877780740982955,0.6366455643787936,0.3733361028931871, # with the updates
+        notCNV_truth = [0.478198599250326,0.5942205544782738,0.6083495165377463,
+                        0.7877780740982955,0.6366455643787936,0.3733361028931871,
                         0.14110778338534205,0.396669657738795]
-        isCNV_truth = [0.478198599250326,0.40607684329781774,0.6914281385881762, # to ED calculation
+        isCNV_truth = [0.478198599250326,0.40607684329781774,0.6914281385881762,
                        0.888979035327655,0.7651177588005215,0.14110778338534202,
                        0.0,0.396669657738795]
         # notCNV_truth = [0.7716249967879256,0.7586519135256539,0.6083495165377463, # these values
@@ -296,6 +296,43 @@ class TestED(unittest.TestCase):
             self.assertAlmostEqual(v1, v2, places=5, msg=f"Expected {v2} but got {v1}")
         for v1, v2 in zip(isCNV_results, isCNV_truth):
             self.assertAlmostEqual(v1, v2, places=5, msg=f"Expected {v2} but got {v1}")
+    
+    def test_parse_vcf_for_ed_with_subset_metadata(self):
+        "Test parsing a VCF with deletions before and after subsetting metadata"
+        # Arrange #1
+        metadataDict = parse_metadata(metadataFile)
+        vcfFile = os.path.join(dataDir, "deletions.1.vcf")
+        
+        # Act #1
+        notCNV_results_1 = []
+        for contig, pos, variant, numAllelesB1, numAllelesB2, euclideanDist \
+        in parse_vcf_for_ed(vcfFile, metadataDict, isCNV=False, ignoreIdentical=True, quiet=True):
+            notCNV_results_1.append(euclideanDist)
+        
+        isCNV_results_1 = []
+        for contig, pos, variant, numAllelesB1, numAllelesB2, euclideanDist \
+        in parse_vcf_for_ed(vcfFile, metadataDict, isCNV=True, ignoreIdentical=True, quiet=True):
+            isCNV_results_1.append(euclideanDist)
+        
+        # Arrange #2
+        metadataDict["bulk1"] = ['S44', 'S48', 'S50', 'S54', 'S56', 'S59', 'S64', 'S69', 'S76', 'S77'] # drop S95
+        
+        # Act #2
+        notCNV_results_2 = []
+        for contig, pos, variant, numAllelesB1, numAllelesB2, euclideanDist \
+        in parse_vcf_for_ed(vcfFile, metadataDict, isCNV=False, ignoreIdentical=True, quiet=True):
+            notCNV_results_2.append(euclideanDist)
+        
+        isCNV_results_2 = []
+        for contig, pos, variant, numAllelesB1, numAllelesB2, euclideanDist \
+        in parse_vcf_for_ed(vcfFile, metadataDict, isCNV=True, ignoreIdentical=True, quiet=True):
+            isCNV_results_2.append(euclideanDist)
+        
+        # Assert
+        for v1, v2 in zip(notCNV_results_1[:-1], notCNV_results_2[:-1]): # last value will not change
+            self.assertNotEqual(v1, v2, f"Subsetting metadata should change results when isCNV=False")
+        for v1, v2 in zip(isCNV_results_1[:-2], isCNV_results_2[:-2]): # last two values will not change
+            self.assertNotEqual(v1, v2, f"Subsetting metadata should change results when isCNV=True")
     
     def test_parse_vcf_for_ed_tetraploid(self):
         "Test parsing a VCF (with tetraploid variants) with deletions where isCNV is True and False"
@@ -791,6 +828,103 @@ class TestSPLSDA(unittest.TestCase):
         
         # Assert
         self.assertEqual(recoded_cnv, truth, f"Expected {truth} but got {recoded_cnv}")
+    
+    def test_recode_vcf(self):
+        "Test that recoding a standard, diploid deletion VCF works correctly"
+        # Arrange
+        metadataDict = parse_metadata(metadataFile)
+        
+        workDir = os.path.join(dataDir, "tmp")
+        outputFile = os.path.join(workDir, "recode.vcf.gz")
+        vcfFile = os.path.join(dataDir, "deletions.1.vcf")
+        
+        numLines = 11
+        numHeaderColumns = 54
+        
+        # Arrange: cleanup any previous work directory
+        if os.path.exists(workDir):
+            shutil.rmtree(workDir)
+        if not os.path.exists(workDir):
+            os.makedirs(workDir)
+        
+        # Act
+        recode_vcf(vcfFile, outputFile, metadataDict, isCNV=True, quiet=True)
+        recodeContents = []
+        with read_gz_file(outputFile) as fileIn:
+            for line in fileIn:
+                recodeContents.append(line.strip())
+        
+        # Assert
+        self.assertTrue(len(recodeContents) == numLines, 
+                        f"Expected recode file to be {numLines} lines long but got {len(recodeContents)} lines")
+        lengthOfHeader = len(recodeContents[0].split("\t"))
+        self.assertTrue(lengthOfHeader == numHeaderColumns, 
+                        f"Expected recode file to have {numHeaderColumns} columns but got {lengthOfHeader} columns")
+    
+    def test_recode_vcf_with_subset_metadata(self):
+        "Test that recoding a standard, diploid deletion VCF works correctly when using a subset of metadata"
+        # Arrange
+        metadataDict = parse_metadata(metadataFile)
+        metadataDict["bulk1"] = ['S44', 'S48', 'S50', 'S54', 'S56', 'S59', 'S64', 'S69', 'S76', 'S77'] # drop S95
+        
+        workDir = os.path.join(dataDir, "tmp")
+        outputFile = os.path.join(workDir, "recode.vcf.gz")
+        vcfFile = os.path.join(dataDir, "deletions.1.vcf")
+        
+        numLines = 11
+        numHeaderColumns = 53 # 1 less than the full metadata
+        
+        # Arrange: cleanup any previous work directory
+        if os.path.exists(workDir):
+            shutil.rmtree(workDir)
+        if not os.path.exists(workDir):
+            os.makedirs(workDir)
+        
+        # Act
+        recode_vcf(vcfFile, outputFile, metadataDict, isCNV=True, quiet=True)
+        recodeContents = []
+        with read_gz_file(outputFile) as fileIn:
+            for line in fileIn:
+                recodeContents.append(line.strip())
+        
+        # Assert
+        self.assertTrue(len(recodeContents) == numLines, 
+                        f"Expected recode file to be {numLines} lines long but got {len(recodeContents)} lines")
+        lengthOfHeader = len(recodeContents[0].split("\t"))
+        self.assertTrue(lengthOfHeader == numHeaderColumns, 
+                        f"Expected recode file to have {numHeaderColumns} columns but got {lengthOfHeader} columns")
+    
+    def test_recode_vcf_tetraploid(self):
+        "Test that recoding a tetraploid deletion VCF works correctly; note that tetraploid VCFs won't be created by psQTL but may be input by user"
+        # Arrange
+        metadataDict = parse_metadata(metadataFile)
+        
+        workDir = os.path.join(dataDir, "tmp")
+        outputFile = os.path.join(workDir, "recode.vcf.gz")
+        vcfFile = os.path.join(dataDir, "deletions.2.vcf")
+        
+        numLines = 11
+        numHeaderColumns = 54
+        
+        # Arrange: cleanup any previous work directory
+        if os.path.exists(workDir):
+            shutil.rmtree(workDir)
+        if not os.path.exists(workDir):
+            os.makedirs(workDir)
+        
+        # Act
+        recode_vcf(vcfFile, outputFile, metadataDict, isCNV=True, quiet=True)
+        recodeContents = []
+        with read_gz_file(outputFile) as fileIn:
+            for line in fileIn:
+                recodeContents.append(line.strip())
+        
+        # Assert
+        self.assertTrue(len(recodeContents) == numLines, 
+                        f"Expected recode file to be {numLines} lines long but got {len(recodeContents)} lines")
+        lengthOfHeader = len(recodeContents[0].split("\t"))
+        self.assertTrue(lengthOfHeader == numHeaderColumns, 
+                        f"Expected recode file to have {numHeaderColumns} columns but got {lengthOfHeader} columns")
 
 class TestMain(unittest.TestCase):
     def test_empty_vcf(self):

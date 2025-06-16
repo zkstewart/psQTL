@@ -96,6 +96,19 @@ maf.cutoff <- ceiling((ncol(df) - 2) * args$MAF)
 df <- df[rowSums(df[,! colnames(df) %in% c("chrom", "pos")], na.rm=TRUE)>0,]
 rownames(df) <- make.names(paste0(df$chrom, "_", df$pos), unique=TRUE)
 
+# Drop any metadata samples not present in VCF
+metadata.table <- metadata.table[metadata.table$V1 %in% colnames(df),,drop=FALSE]
+Y <- metadata.table$V2
+
+# Extract Y variable values
+Y <- metadata.table$V2
+
+# Discover issues with Y variable
+if (length(unique(Y)) != 2)
+{
+    stop(paste0("Y variable must have exactly two unique values, but found ", length(unique(Y)), " unique values: ", paste(unique(Y), collapse=", ")))
+}
+
 # Drop any df values we are not analysing [Can occur if user metadata is a subset of VCF samples]
 df <- df[,c("chrom", "pos", metadata.table$V1)] # this also sorts df and metadata equivalently
 
@@ -109,15 +122,6 @@ if (nrow(df) == 0)
 if ((ncol(df)-2) != nrow(metadata.table)) # -2 to account for c("chrom", "pos")
 {
     stop(paste0("Encoded VCF column names (", paste(colnames(df[3:ncol(df)]), collapse=","), ") do not equal metadata sample labels (", paste(metadata.table$V1, collapse=","), "); incompatibility means sPLS-DA analysis cannot continue"))
-}
-
-# Extract Y variable values
-Y <- metadata.table$V2
-
-# Discover issues with Y variable
-if (length(unique(Y)) != 2)
-{
-    stop(paste0("Y variable must have exactly two unique values, but found ", length(unique(Y)), " unique values: ", paste(unique(Y), collapse=", ")))
 }
 
 # Iterate over chromosomes and windows to run PLS-DA

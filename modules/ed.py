@@ -449,7 +449,7 @@ def parse_vcf_for_ed(vcfFile, metadataDict, isCNV, parents=[], ignoreIdentical=T
             sampleFields = sl[9:]
             
             # Parse the genotypes out of the sample fields
-            snpDict = parse_vcf_genotypes(formatField, sampleFields, samples)
+            snpDict = parse_vcf_genotypes(formatField, sampleFields, samples) # extracts ALL sample genotypes, not just those in metadataDict
             
             # Figure out what type of variant this is
             if any([ x == "." for x in ref_alt ]):
@@ -462,7 +462,7 @@ def parse_vcf_for_ed(vcfFile, metadataDict, isCNV, parents=[], ignoreIdentical=T
                 variant = "snp"
             
             # Split sample genotypes into bulk1 and bulk2
-            bulk1 = [ snpDict[sample] for sample in metadataDict["bulk1"] if sample in snpDict and not sample in parents ]
+            bulk1 = [ snpDict[sample] for sample in metadataDict["bulk1"] if sample in snpDict and not sample in parents ] # subsets based on metadatDict
             bulk2 = [ snpDict[sample] for sample in metadataDict["bulk2"] if sample in snpDict and not sample in parents ]
             parentsGT = [ snpDict[parent] for parent in parents if parent in snpDict ] # if parents == [] this will always be empty
             

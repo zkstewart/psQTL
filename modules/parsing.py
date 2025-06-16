@@ -267,23 +267,25 @@ def vcf_header_to_metadata_validation(vcfSamples, metadataDict, strict=True, qui
             if strict:
                 raise ValueError(f"VCF file has samples not present in metadata file: {', '.join(vcfDiff)}")
             else:
-                print("# WARNING: In your VCF, the following samples exist which are " +
-                      "absent from the metadata: ", ", ".join(vcfDiff))
-                print("# These samples will not be considered when generating the resulting file.")
+                if not quiet:
+                    print("# WARNING: In your VCF, the following samples exist which are " +
+                        "absent from the metadata: ", ", ".join(vcfDiff))
+                    print("# These samples will not be considered when generating the resulting file.")
         if len(metadataDiff) > 0:
             if strict:
                 raise ValueError(f"Metadata file has samples not present in VCF file: {', '.join(metadataDiff)}")
             else:
-                print("# WARNING: In your metadata, the following samples exist which are " + 
-                      "absent from the VCF: ", ", ".join(metadataDiff))
-                print("# These samples will not be considered when generating the resulting file.")
+                if not quiet:
+                    print("# WARNING: In your metadata, the following samples exist which are " + 
+                        "absent from the VCF: ", ", ".join(metadataDiff))
+                    print("# These samples will not be considered when generating the resulting file.")
     
     # Error out if we don't have samples from both bulks
-    b1Samples = [ sample for sample in vcfSamples if sample in metadataDict["bulk1"] ]
+    b1Samples = sorted([ sample for sample in vcfSamples if sample in metadataDict["bulk1"] ])
     if len(b1Samples) == 0:
         raise ValueError("No samples from bulk 1 are present in the VCF file.")
     
-    b2Samples = [ sample for sample in vcfSamples if sample in metadataDict["bulk2"] ] 
+    b2Samples = sorted([ sample for sample in vcfSamples if sample in metadataDict["bulk2"] ] )
     if len(b2Samples) == 0:
         raise ValueError("No samples from bulk 2 are present in the VCF file.")
     
@@ -291,6 +293,9 @@ def vcf_header_to_metadata_validation(vcfSamples, metadataDict, strict=True, qui
     if not quiet:
         print(f"# Samples used as part of bulk 1 (n={len(b1Samples)}) include: " + ", ".join(b1Samples))
         print(f"# Samples used as part of bulk 2 (n={len(b2Samples)}) include: " + ", ".join(b2Samples))
+    
+    # Return the sample lists for further use
+    return b1Samples, b2Samples
 
 def parse_vcf_genotypes(formatField, sampleFields, samples):
     '''

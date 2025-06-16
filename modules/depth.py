@@ -137,7 +137,7 @@ def call_deletions_from_depth(samplePairs, outputFileName, windowSize):
     todaysDate = pd.Timestamp.now().strftime("%d-%m-%Y")
     with gzip.open(outputFileName, "wt") as fileOut:
         fileOut.write("##fileformat=VCF-like\n")
-        fileOut.write("##FORMAT=<ID=GT,Number=1,Type=String,Description=\"Sums to number of allele copies\">\n")
+        fileOut.write("##FORMAT=<ID=GT,Number=1,Type=String,Description=\"Sums to number of median-normalised allele copies\">\n")
         fileOut.write(f"##psQTL_prep;module=depth, version={__version__}, windowSize={windowSize}; DD-MM-YYYY={todaysDate}\n")
         exploded_df.to_csv(fileOut, sep="\t", index=False)
 

@@ -5,6 +5,7 @@ from collections import Counter
 from .parsing import read_gz_file
 from .ncls import WindowedNCLS
 from .ed import gt_median_adjustment
+from .parsing import vcf_header_to_metadata_validation
 
 def validate_r_exists():
     if not shutil.which("R"):
@@ -119,7 +120,7 @@ def recode_cnv(gtIndex, sampleFields):
         encodedGTs.append(encodedGT)
     return encodedGTs
 
-def recode_vcf(vcfFile, outputFileName, isCNV=False, sampleNames=None):
+def recode_vcf(vcfFile, outputFileName, metadataDict, isCNV=False, quiet=False):
     '''
     Recode a VCF file to a format suitable for sPLS-DA analysis.
     
@@ -139,9 +140,6 @@ def recode_vcf(vcfFile, outputFileName, isCNV=False, sampleNames=None):
         outputFileName -- a string indicating the location of the output file; will be gzipped
         isCNV -- (OPTIONAL) a boolean indicating whether the genotypes are for CNVs
                  (True) or SNPs/indels (False); default is False
-        sampleNames -- (OPTIONAL) a list of strings indicating the names of the samples
-                        If provided, the output will only include these samples in the order specified.
-                        If None, all samples in the VCF file will be included.
     '''
     with read_gz_file(vcfFile) as fileIn, gzip.open(outputFileName, "wt") as fileOut:
         for line in fileIn:
@@ -149,16 +147,16 @@ def recode_vcf(vcfFile, outputFileName, isCNV=False, sampleNames=None):
             
             # Handle #CHROM line
             if line.startswith("#CHROM"):
-                if sampleNames != None:
-                    sampleIndices = [ sl[9:].index(name) for name in sampleNames if name in sl[9:] ]
-                    if len(sampleIndices) != len(sampleNames):
-                        raise ValueError(f"Some sample names in the metadata bulks ({sampleNames}) are not found in the VCF file.")
-                else:
-                    sampleIndices = list(range(0, len(sl[9:])))
+                # Validate VCF header with respect to metadataDict and extract sample names
+                samples = sl[9:] # This gives us the ordered sample IDs
+                b1Samples, b2Samples = vcf_header_to_metadata_validation(samples, metadataDict, strict=False, quiet=quiet)
+                foundSampleNames = b1Samples + b2Samples
                 
+                # Identify the indices of the samples in the VCF header
+                sampleIndices = [ sl[9:].index(name) for name in foundSampleNames ]
+                
+                # Write the header line to the output file
                 fileOut.write("\t".join(["chrom", "pos"] + [ sl[9:][i] for i in sampleIndices ]) + "\n")
-                #fileOut.write("\t".join(["chrom", "pos"] + sl[9:][sampleIndices]) + "\n")
-                continue
             
             # Skip comment lines
             if line.startswith("#"):
