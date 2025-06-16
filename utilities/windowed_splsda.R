@@ -36,6 +36,52 @@ lda_prediction <- function(Ytrue, lm.df) {
     return (balanced_error_rate(Ytrue, predicted))
 }
 
+auto_rerun_tuning <- function(mixomicsVersion, selected.X, Y, list.keepX, nrep, maxiters, cpus, rerun=5) {
+    # Automatically rerun tuning if it fails, up to 'rerun' times
+    for (i in 1:rerun)
+    {
+        if (mixomicsVersion[2] <= 30)
+        {
+            tune.splsda.test <- tryCatch({
+                tune.splsda(selected.X, Y, test.keepX = list.keepX,
+                            ncomp = 1, folds = 2, validation = 'Mfold',
+                            scale = FALSE,
+                            nrepeat = nrep, max.iter = maxiters,
+                            cpus = cpus)
+            }, error = function(e) {
+                NA
+            })
+
+            if (! all(is.na(tune.splsda.test))) {
+                break
+            }
+        } else {
+            tune.splsda.test <- tryCatch({
+                tune.splsda(selected.X, Y, test.keepX = list.keepX,
+                            ncomp = 1, folds = 2, validation = 'Mfold',
+                            scale = FALSE,
+                            nrepeat = nrep, max.iter = maxiters,
+                            BPPARAM = cpus)
+            }, error = function(e) {
+                NA
+            })
+
+            if (! all(is.na(tune.splsda.test))) {
+                break
+            }
+        }
+    }
+
+    # Get tuned result if it worked, otherwise default to 1 feature
+    if (! all(is.na(tune.splsda.test))) {
+        select.keepX <- tune.splsda.test$choice.keepX[1:1] # 'tune.splsda.test$choice.ncomp$ncomp' won't be used as a single component is sufficient when discriminating two groups
+    } else {
+        select.keepX <- 1 # just pick the best feature if tuning isn't working
+    }
+
+    return (select.keepX)
+}
+
 # Establish parser
 p <- arg_parser("Run PLS-DA in windows across a genome, using sPLS-DA to select features that contribute to the model")
 
@@ -66,9 +112,9 @@ if (!requireNamespace("BiocParallel", quietly=TRUE))
     BiocManager::install("BiocParallel")
 library(BiocParallel)
 
-if (!requireNamespace("MASS", quietly=TRUE))
-    install.packages("MASS")
-library(MASS)
+if (!requireNamespace("dplyr", quietly=TRUE))
+    install.packages("dplyr")
+library(dplyr)
 
 # Set up parallel processing
 if (args$threads == 1) {
@@ -126,16 +172,17 @@ if ((ncol(df)-2) != nrow(metadata.table)) # -2 to account for c("chrom", "pos")
 
 # Iterate over chromosomes and windows to run PLS-DA
 window.explanation <- data.frame("chrom" = numeric(0), "pos" = numeric(0), "BER" = numeric(0))
-selected.features <- data.frame("chrom" = numeric(0), "pos" = numeric(0), "BER" = numeric(0))
+selected.features <- data.frame(matrix(ncol = ncol(df)+1, nrow=0)) # +1 for BER column
+colnames(selected.features) <- c(colnames(df)[1:2], "BER", colnames(df)[3:ncol(df)])
 for (chromosome in unique(df$chrom))
 {
   chromDF <- df[df$chrom == chromosome,]
-  chromLength <- max(chromDF$pos)
+  chromLength <- max(chromDF$pos)+1 # +1 to ensure we include the last position in the chromosome
   numWindows <- ceiling(chromLength / args$windowSize)
   for (windowIndex in 1:numWindows)
   {
     # Extract variants in window
-    windowStart <- (windowIndex-1) * args$windowSize
+    windowStart <- (windowIndex-1) * args$windowSize # 0-based index
     windowEnd <- windowIndex * args$windowSize
     windowDF <- chromDF[chromDF$pos >= windowStart & chromDF$pos < windowEnd,]
     windowDF <- windowDF[,! colnames(windowDF) %in% c("chrom", "pos"),drop=FALSE]
@@ -191,7 +238,7 @@ for (chromosome in unique(df$chrom))
         
         # Store window and feature
         window.explanation[nrow(window.explanation) + 1,] <- c(chromosome, windowStart, window.ber)
-        selected.features[nrow(selected.features) + 1,] <- c(chromosome, feature.pos, window.ber)
+        selected.features[nrow(selected.features) + 1,] <- c(chromosome, feature.pos, window.ber, lm.df$X)
         next
     }
 
@@ -234,11 +281,13 @@ for (chromosome in unique(df$chrom))
             NA
         }
     )
+
+    # If performance could not be calculated, skip this window
     if (all(is.na(window.perf))) {
         window.explanation[nrow(window.explanation) + 1,] <- c(chromosome, windowStart, 0.5) # BER=0.5
         next
     }
-    window.ber <- window.perf$error.rate$BER[[1]]
+    window.ber <- window.perf$error.rate$BER[[1]] # since we could calculate performance, we can extract BER
     
     # Locate the features contributing most to PLS-DA outcome
     if (mixomicsVersion[2] >= 30) {
@@ -259,23 +308,36 @@ for (chromosome in unique(df$chrom))
     }
     window.explanation[nrow(window.explanation) + 1,] <- c(chromosome, windowStart, window.ber)
     
+    # Set up df for feature encodings and ensure its compatibility with the feature positions
+    encodings.df <- windowDF[rownames(window.features),]
+    if (nrow(encodings.df) != nrow(window.features))
+    {
+        stop("Error with ordering of encoded and selected features")
+    }
+
     # Store best selected feature
     for (row.index in 1:nrow(window.features))
     {
         feature.row <- window.features[row.index,]
         feature.pos <- unlist(strsplit(rownames(feature.row), "_"))
         feature.pos <- as.numeric(feature.pos[length(feature.pos)])
-        selected.features[nrow(selected.features) + 1,] <- c(chromosome, feature.pos, window.ber)
+
+        encodings.row <- encodings.df[row.index,]
+        selected.features[nrow(selected.features) + 1,] <- c(chromosome, feature.pos, window.ber, as.numeric(encodings.row[1,]))
     }
   }
 }
-rownames(selected.features) <- paste0(selected.features$chrom, "_", format(as.numeric(selected.features$pos), scientific = FALSE, trim = TRUE))
-selected.features$pos <- as.numeric(selected.features$pos)
 selected.features$BER <- as.numeric(selected.features$BER)
 
 # Filter down feature table to those selected in windows
-selected.df <- df[match(rownames(selected.features[selected.features$BER <= args$berCutoff,]), rownames(df)),]
-selected.X <- t(selected.df[, ! colnames(selected.df) %in% c("chrom", "pos")])
+selected.df <- selected.features[selected.features$BER <= args$berCutoff,] # new df so we can track the number of lost features
+selected.df <- selected.df[, ! colnames(selected.df) %in% c("chrom", "pos", "BER")] # drop non-feature columns
+selected.df <- selected.df %>%
+  mutate(across(everything(), as.numeric)) # convert feature values back into numeric, since it gets changed along the way
+
+# Format features for sPLS-DA
+selected.X <- t(selected.df)
+colnames(selected.X) <- paste0(selected.features$chrom, "_", selected.features$pos)
 
 # Raise error if we've filtered out all features with BER cutoff
 if (nrow(selected.X) == 0)
@@ -295,27 +357,20 @@ if (ncol(selected.X) < 2)
     select.keepX <- ncol(selected.X) # this will be 1
     tune.splsda.test <- NULL
 } else {
+    # Identify the number of features to test
     if (ncol(selected.X) < 10) {
         list.keepX <- c(1:ncol(selected.X)) # if fewer than 10 features, test all
     } else {
         max.features <- ifelse(ncol(selected.X) < 30, ncol(selected.X), 30) # it is very improbable that more than 30 QTLs exist or can be meaningfully identified
         list.keepX <- c(1:9,  seq(10, max.features, 5))
     }
-    
+
+    # Run tuning of sPLS-DA, with automatic rerun if it fails with 'if (diff.value < tol | iter > max.iter)'
     if (mixomicsVersion[2] <= 30) {
-        tune.splsda.test <- tune.splsda(selected.X, Y, test.keepX = list.keepX,
-                                        ncomp = 1, folds = 2, validation = 'Mfold',
-                                        scale = FALSE,
-                                        nrepeat = args$nrepeat, max.iter = args$maxiters,
-                                        cpus = args$threads)
+        select.keepX <- auto_rerun_tuning(mixomicsVersion, selected.X, Y, list.keepX, args$nrepeat, args$maxiters, args$threads)
     } else {
-        tune.splsda.test <- tune.splsda(selected.X, Y, test.keepX = list.keepX,
-                                        ncomp = 1, folds = 2, validation = 'Mfold',
-                                        scale = FALSE,
-                                        nrepeat = args$nrepeat, max.iter = args$maxiters,
-                                        BPPARAM = BPPARAM)
+        select.keepX <- auto_rerun_tuning(mixomicsVersion, selected.X, Y, list.keepX, args$nrepeat, args$maxiters, BPPARAM)
     }
-    select.keepX <- tune.splsda.test$choice.keepX[1:1] # 'tune.splsda.test$choice.ncomp$ncomp' won't be used as a single component is sufficient when discriminating two groups
 }
 
 # Run sPLS-DA to select multi-QTLs and identify most important features
@@ -378,11 +433,11 @@ splsda.loadings$direction = ifelse(splsda.loadings$comp1 > 0, "right", "left")
 splsda.loadings$comp1 = abs(splsda.loadings$comp1)
 
 # Match loadings order to stability values
-splsda.loadings <- splsda.loadings[match(rownames(stability.table), rownames(splsda.loadings)),,drop=FALSE]
+splsda.loadings <- splsda.loadings[rownames(stability.table),,drop=FALSE]
 splsda.loadings <- na.omit(splsda.loadings)
 
 # Make sure stability and loading values match up
-stability.table <- stability.table[rownames(stability.table) %in% rownames(splsda.loadings),,drop=FALSE]
+stability.table <- stability.table[rownames(splsda.loadings),,drop=FALSE]
 
 # Join stability and loading values
 feature.details.table <- cbind(stability.table, splsda.loadings)
