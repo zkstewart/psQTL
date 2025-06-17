@@ -180,9 +180,9 @@ def main():
     rparser.add_argument("--radius", dest="radiusSize",
                          type=int,
                          required=False,
-                         help="""Optionally, specify the radius (in bp) surrounding a variant or
-                         deletion window that you want to consider as being 'proximal' to
-                         a gene (default: 50000)""",
+                         help="""Optionally, specify the radius (in bp) surrounding a 'call'
+                         variant or 'depth' CNV window that you want to consider as being
+                         'proximal' to a gene (default: 50000)""",
                          default=50000)
     
     args = subParentParser.parse_args()

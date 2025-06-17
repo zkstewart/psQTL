@@ -112,7 +112,7 @@ def main():
                          help="""Optionally, specify the number of threads to use when running
                          sPLS-DA analyses (default: 1)""",
                          default=1)
-    sparser.add_argument("--windowSize", dest="splsdaWindowSize",
+    sparser.add_argument("--splsdaWindowSize", dest="splsdaWindowSize",
                          type=int,
                          required=False,
                          help="""Optionally, specify the window size that sPLS-DA will
