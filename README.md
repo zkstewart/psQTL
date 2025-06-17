@@ -79,6 +79,7 @@ If you want to run sPLS-DA analysis on your data, you will also optionally requi
 - mixOmics (https://bioconductor.org/packages/release/bioc/html/mixOmics.html)
 - BiocParallel (https://www.bioconductor.org/packages/release/bioc/html/BiocParallel.html)
 - argparser (https://cran.r-project.org/web/packages/argparser/index.html)
+- dplyr (https://cran.r-project.org/web/packages/dplyr/index.html)
 
 psQTL was developed on Linux and within Windows Subsystem for Linux (WSL), although it should work on any system which can run Python, HTSlib, and vt. All external programs should be installed and locateable within your system PATH variable.
 
@@ -102,7 +103,9 @@ python /location/of/psQTL_post.py plot -h
 ... etc ...
 ```
 
-All parameters with a single dash e.g., `-d /location/to/run/the/analysis` need to be provided each time you call the program. Other parameters specified with double dashes e.g., `--meta metadata.tsv` are remembered or *cached* by psQTL within the analysis directory and only need to be provided once since the cached value is retrieved on subsequent use of psQTL ***in the analysis folder***. In other words, each analysis directory has its own cached values and parameters won't carry over between separate analyses.
+All parameters with a single dash e.g., `-d /location/to/run/the/analysis` need to be provided each time you call the program. Other parameters specified with double dashes are optional, with many having default values that should work in the majority of analyses.
+
+Some double-dashed parameters which indicate file locations e.g., `--meta metadata.tsv` are remembered or *cached* by psQTL within the analysis directory and only need to be provided once since the cached value is retrieved on subsequent use of psQTL ***in the analysis folder***. In other words, each analysis directory has its own cached values and parameters won't carry over between separate analyses.
 
 See the [Using psQTL wiki page](https://github.com/zkstewart/psQTL/wiki/Using-psQTL) for further details.
 
