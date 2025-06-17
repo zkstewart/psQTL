@@ -75,7 +75,7 @@ def main():
     iparser.add_argument("--meta", dest="metadataFile",
                          required=False,
                          help="""Optionally, specify the location of a metadata TSV file containing two
-                         columns indicating 1) sample ID and 2) the bulk it belongs to""")
+                         columns indicating 1) sample ID and 2) the group it belongs to""")
     iparser.add_argument("--vcf", dest="vcfFile",
                          required=False,
                          help="""Optionally, specify a VCF file containg per-sample variant
@@ -406,8 +406,8 @@ def vmain(args, locations):
             metadataCache.metadataFile = args.metadataFile
         
         print(f"Metadata file: {args.metadataFile}")
-        print(f"Bulk 1 samples (n={len(metadataCache.bulk1)}): {metadataCache.bulk1}")
-        print(f"Bulk 2 samples (n={len(metadataCache.bulk2)}): {metadataCache.bulk2}")
+        print(f"Group 1 samples (n={len(metadataCache.group1)}): {metadataCache.group1}")
+        print(f"Group 2 samples (n={len(metadataCache.group2)}): {metadataCache.group2}")
     else:
         print("Metadata file: None")
     
@@ -478,7 +478,7 @@ def vmain(args, locations):
     ## Sample issues
     keepFindingIssues = True
     try:
-        metaSamples = set(metadataCache.bulk1 + metadataCache.bulk2)
+        metaSamples = set(metadataCache.group1 + metadataCache.group2)
         if len(metaSamples) == 2:
             issues.append("Metadata only indicates two samples; analysis interpretation may be limited")
     except:

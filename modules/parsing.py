@@ -34,12 +34,12 @@ def parse_metadata(metadataFile):
     Returns:
         metadataDict -- a dictionary with structure like:
                         {
-                            "bulk1": [ "sample1", "sample2", ... ],
-                            "bulk2": [ "sample3", "sample4", ... ]
+                            "group1": [ "sample1", "sample2", ... ],
+                            "group2": [ "sample3", "sample4", ... ]
                         }
     '''
-    ACCEPTED_BULK1 = ['bulk1', '1', 'bulk 1', 'b1']
-    ACCEPTED_BULK2 = ['bulk2', '2', 'bulk 2', 'b2']
+    ACCEPTED_GROUP1 = ['bulk1', '1', 'bulk 1', 'b1', 'group1', 'g1', 'group 1']
+    ACCEPTED_GROUP2 = ['bulk2', '2', 'bulk 2', 'b2', 'group2', 'g2', 'group 2']
     
     metadataDict = {}
     foundSamples = set()
@@ -73,14 +73,14 @@ def parse_metadata(metadataFile):
                 raise ValueError(f"Metadata file does not have two columns; offending line is '{l}'")
             
             # Validate that the population is one of the expected values
-            if not pop in ACCEPTED_BULK1 + ACCEPTED_BULK2:
-                raise ValueError(f"'{pop}' is not in the expected format for denoting bulks; offending line is '{l}'")
+            if not pop in ACCEPTED_GROUP1 + ACCEPTED_GROUP2:
+                raise ValueError(f"'{pop}' is not in the expected format for denoting groups; offending line is '{l}'")
             
             # Unify the population names
-            if pop in ACCEPTED_BULK1:
-                pop = 'bulk1'
-            elif pop in ACCEPTED_BULK2:
-                pop = 'bulk2'
+            if pop in ACCEPTED_GROUP1:
+                pop = 'group1'
+            elif pop in ACCEPTED_GROUP2:
+                pop = 'group2'
             
             # Validate that the sample is non-redundant
             if sample in foundSamples:
@@ -93,10 +93,10 @@ def parse_metadata(metadataFile):
     
     # Make sure that the metadata file has the expected number of populations
     if len(metadataDict) == 0:
-        raise ValueError("Metadata file is empty; please provide at least two samples from different bulks")
+        raise ValueError("Metadata file is empty; please provide at least two samples from different groups")
     if len(metadataDict) == 1:
-        foundBulk = list(metadataDict.keys())[0]
-        raise ValueError(f"Metadata file should have 2 populations ('bulk1' and 'bulk2'); I only found '{foundBulk}'")
+        foundGroup = list(metadataDict.keys())[0]
+        raise ValueError(f"Metadata file should have 2 populations ('group1' and 'group2'); I only found '{foundGroup}'")
     
     # Reformat sets and lists then return
     for pop in metadataDict:
@@ -234,8 +234,8 @@ def vcf_header_to_metadata_validation(vcfSamples, metadataDict, strict=True, qui
         vcfSamples -- a list or set of strings indicating the sample IDs in the VCF file.
         metadataDict -- a dictionary with structure like:
                         {
-                            "bulk1": set([ "sample1", "sample2", ... ]),
-                            "bulk2": set([ "sample3", "sample4", ... ])
+                            "group1": set([ "sample1", "sample2", ... ]),
+                            "group1": set([ "sample3", "sample4", ... ])
                         }
         strict -- (OPTIONAL) a boolean indicating whether to error out if the files
                   show any discrepancies. Default is True.
@@ -280,19 +280,19 @@ def vcf_header_to_metadata_validation(vcfSamples, metadataDict, strict=True, qui
                         "absent from the VCF: ", ", ".join(metadataDiff))
                     print("# These samples will not be considered when generating the resulting file.")
     
-    # Error out if we don't have samples from both bulks
-    b1Samples = sorted([ sample for sample in vcfSamples if sample in metadataDict["bulk1"] ])
+    # Error out if we don't have samples from both groups
+    b1Samples = sorted([ sample for sample in vcfSamples if sample in metadataDict["group1"] ])
     if len(b1Samples) == 0:
-        raise ValueError("No samples from bulk 1 are present in the VCF file.")
+        raise ValueError("No samples from group 1 are present in the VCF file.")
     
-    b2Samples = sorted([ sample for sample in vcfSamples if sample in metadataDict["bulk2"] ] )
+    b2Samples = sorted([ sample for sample in vcfSamples if sample in metadataDict["group2"] ] )
     if len(b2Samples) == 0:
-        raise ValueError("No samples from bulk 2 are present in the VCF file.")
+        raise ValueError("No samples from group 2 are present in the VCF file.")
     
     # Notify user of samples that will be used
     if not quiet:
-        print(f"# Samples used as part of bulk 1 (n={len(b1Samples)}) include: " + ", ".join(b1Samples))
-        print(f"# Samples used as part of bulk 2 (n={len(b2Samples)}) include: " + ", ".join(b2Samples))
+        print(f"# Samples used as part of group 1 (n={len(b1Samples)}) include: " + ", ".join(b1Samples))
+        print(f"# Samples used as part of group 2 (n={len(b2Samples)}) include: " + ", ".join(b2Samples))
     
     # Return the sample lists for further use
     return b1Samples, b2Samples

@@ -655,8 +655,8 @@ class MetadataCache:
         self.workingDirectory = os.path.abspath(workingDirectory)
         
         self._metadataFile = None
-        self._bulk1 = None
-        self._bulk2 = None
+        self._group1 = None
+        self._group2 = None
     
     def establish(self):
         if not os.path.exists(self.cacheFile):
@@ -669,8 +669,8 @@ class MetadataCache:
             raise FileExistsError(f"Directory '{self.workingDirectory}' has already been initialised.")
         
         self.metadataFile = None
-        self._bulk1 = None # no setter for this and below
-        self._bulk2 = None
+        self._group1 = None # no setter for this and below
+        self._group2 = None
         self.save()
     
     def load(self):
@@ -682,21 +682,21 @@ class MetadataCache:
                     raise ValueError(f"Metadata cache file '{self.cacheFile}' is not a valid JSON file; see " +
                                      f"error message: {e}")
             # Validate data integrity
-            if "metadataFile" not in data or "bulk1" not in data or "bulk2" not in data:
+            if "metadataFile" not in data or "group1" not in data or "group2" not in data:
                 raise ValueError(f"Metadata cache file '{self.cacheFile}' is missing values; have you been manually editing it?")
             # Load data while circumventing the setters
             "Circumventing is only necessary here because of how None values are handled later"
             self._metadataFile = data["metadataFile"]
-            self._bulk1 = data["bulk1"]
-            self._bulk2 = data["bulk2"]
+            self._group1 = data["group1"]
+            self._group2 = data["group2"]
         else:
             raise FileNotFoundError(f"Working directory '{self.workingDirectory}' has not had its metadata cache initialised.")
     
     def save(self):
         data = {
             "metadataFile": self.metadataFile,
-            "bulk1": self.bulk1,
-            "bulk2": self.bulk2
+            "group1": self.group1,
+            "group2": self.group2
         }
         with open(self.cacheFile, "w") as fileOut:
             json.dump(data, fileOut)
@@ -705,7 +705,7 @@ class MetadataCache:
         if self.metadataFile == None or not os.path.isfile(self.metadataFile):
             raise FileNotFoundError(f"Metadata file '{self.metadataFile}' is not a file.")
         metadataDict = parse_metadata(self.metadataFile)
-        self._bulk1, self._bulk2 = metadataDict["bulk1"], metadataDict["bulk2"]
+        self._group1, self._group2 = metadataDict["group1"], metadataDict["group2"]
     
     @property
     def cacheFile(self):
@@ -724,8 +724,8 @@ class MetadataCache:
         if value == None:
             print(f"# Metadata cache: 'metadataFile' being blanked to '{value}'")
             self._metadataFile = None
-            self._bulk1 = None
-            self._bulk2 = None
+            self._group1 = None
+            self._group2 = None
             self.save()
             return
         # Validate file existence
@@ -743,9 +743,9 @@ class MetadataCache:
         print(updateMsg)
     
     @property
-    def bulk1(self):
-        return self._bulk1
+    def group1(self):
+        return self._group1
     
     @property
-    def bulk2(self):
-        return self._bulk2
+    def group2(self):
+        return self._group2

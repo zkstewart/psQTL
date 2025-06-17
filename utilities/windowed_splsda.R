@@ -13,6 +13,26 @@ fix_numeric_first_char <- function(x) {
   }
 }
 
+unify_accepted_y_values <- function(Y) {
+  # Unify all variants of group1
+  Y[Y == "bulk1"] <- "group1"
+  Y[Y == "bulk 1"] <- "group1"
+  Y[Y == "b1"] <- "group1"
+  Y[Y == "g1"] <- "group1"
+  Y[Y == "group 1"] <- "group1"
+  Y[Y == "1"] <- "group1"
+  
+  # Unify all variants of group2
+  Y[Y == "bulk2"] <- "group2"
+  Y[Y == "bulk 2"] <- "group2"
+  Y[Y == "b2"] <- "group2"
+  Y[Y == "g2"] <- "group2"
+  Y[Y == "group 2"] <- "group2"
+  Y[Y == "2"] <- "group2"
+  
+  return (Y)
+}
+
 balanced_error_rate <- function(Ytrue, Ypred) {
     # Prevent incompatible comparison
     if (length(Ytrue) != length(Ypred)) {
@@ -32,7 +52,7 @@ lda_prediction <- function(Ytrue, lm.df) {
     lda.fit <- lda(Y ~ X, data=lm.df)
     lda.pred <- predict(lda.fit, lm.df)
     posterior <- as.data.frame(lda.pred$posterior)
-    predicted <- ifelse(posterior$bulk1 >= posterior$bulk2, "bulk1", "bulk2")
+    predicted <- ifelse(posterior$group1 >= posterior$group2, "group1", "group2")
     return (balanced_error_rate(Ytrue, predicted))
 }
 
@@ -145,13 +165,18 @@ rownames(df) <- make.names(paste0(df$chrom, "_", df$pos), unique=TRUE)
 # Drop any metadata samples not present in VCF
 metadata.table <- metadata.table[metadata.table$V1 %in% colnames(df),,drop=FALSE]
 
-# Extract Y variable values
+# Extract and unify Y variable values to 'group1' and 'group2'
 Y <- metadata.table$V2
+Y <- unify_accepted_y_values(Y)
 
 # Discover issues with Y variable
 if (length(unique(Y)) != 2)
 {
     stop(paste0("Y variable must have exactly two unique values, but found ", length(unique(Y)), " unique values: ", paste(unique(Y), collapse=", ")))
+}
+if (length(union(c("group1", "group2"), Y)) != 2)
+{
+    stop(paste0("Y variable is expected to only have 'group1' and 'group2' values, but found : ", paste(unique(Y), collapse=", ")))
 }
 
 # Drop any df values we are not analysing [Can occur if user metadata is a subset of VCF samples]
@@ -212,11 +237,11 @@ for (chromosome in unique(df$chrom))
         lm.df <- data.frame("X" = as.numeric(feature.row), "Y" = Y)
         
         # Run LDA, or skip if complete similarity or segregation exists
-        bulk1Values <- unique(lm.df[lm.df$Y == "bulk1",]$X)
-        bulk2Values <- unique(lm.df[lm.df$Y == "bulk2",]$X)
-        if (length(bulk1Values) == 1 & length(bulk2Values) == 1)
+        group1Values <- unique(lm.df[lm.df$Y == "group1",]$X)
+        group2Values <- unique(lm.df[lm.df$Y == "group2",]$X)
+        if (length(group1Values) == 1 & length(group2Values) == 1)
         {
-            if (bulk1Values == bulk2Values) {
+            if (group1Values == group2Values) {
                 window.ber <- 0.5 # cannot distinguish in an identical region
             } else {
                 window.ber <- 0 # complete segregation leads to perfect prediction

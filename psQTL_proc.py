@@ -1,7 +1,7 @@
 #! python3
 # psQTL_proc.py
 # Represents step 2 in the psQTL pipeline, where the user can take a VCF or VCF-like file and
-# 'proc'ess it to calculate Euclidean distance values of variants or deletions among bulks.
+# 'proc'ess it to calculate Euclidean distance values of variants or CNVs among groups.
 # These results can then be used as input to psQTL_post.py to plot and tabulate relevant details.
 
 import os, argparse, sys, gzip
@@ -23,13 +23,13 @@ def generate_ed_file(vcfFile, metadataDict, outputFileName, parentSamples=[], is
         isCNV -- (OPTIONAL) a boolean indicating whether the VCF file contains CNV data
                  (default: False, meaning the VCF file contains variant calls)
         ignoreIdentical -- (OPTIONAL) a boolean indicating whether to ignore variants
-                           where both bulks are identical
+                           where both groups are identical
     '''
     with gzip.open(outputFileName, "wt") as fileOut:
         # Write header line
         fileOut.write("{0}\n".format("\t".join([
             "CHROM", "POSI", "variant",
-            "bulk1_alleles", "bulk2_alleles", 
+            "group1_alleles", "group2_alleles", 
             "euclideanDist"
         ])))
         
@@ -44,7 +44,7 @@ def generate_ed_file(vcfFile, metadataDict, outputFileName, parentSamples=[], is
 
 def main():
     usage = """%(prog)s processes VCF or VCF-like files to calculate Euclidean distance values
-    of variants or deletions among bulks. The input directory is expected to have been
+    of variants or deletions among groups. The input directory is expected to have been
     'initialise'd by psQTL_prep.py such that all necessary files have been validated and
     prepared for analysis.
     """
@@ -91,7 +91,7 @@ def main():
                          required=False,
                          nargs=2,
                          help="""Optionally, provide the names of the two parents used to
-                         generate the bulks; this is used to apply an alternative form of ED
+                         generate the groups; this is used to apply an alternative form of ED
                          which leverages the parents' genotypes to extract more signal out of
                          your data. If not provided, the standard ED will be used.""",
                          default=[])
@@ -99,8 +99,8 @@ def main():
                          required=False,
                          action="store_true",
                          help="""Optionally, provide this flag to prevent filtration of
-                         variants where both bulks' genotypes are identical; this can
-                         occur when both bulks have the same variant with respect to
+                         variants where both groups' genotypes are identical; this can
+                         occur when both groups have the same variant with respect to
                          the reference genome. Not recommended unless you have a
                          specific reason to do so.""",
                          default=False)

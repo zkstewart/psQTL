@@ -158,18 +158,18 @@ def parse_bins_as_dict(depthFileDict, windowSize):
     Parameters:
         depthFileDict -- a dictionary with structure like:
                          {
-                             "bulk1": [
+                             "group1": [
                                  ["sample1", "depthFile1"],
                                  ["sample2", "depthFile2"],
                                  ...
                             ],
-                             "bulk2": [ ... ]
+                             "group2": [ ... ]
                          }
         windowSize -- an integer indicating the size of the windows used for binning
     Returns:
         coverageDict -- a dictionary with structure like:
                   {
-                      "bulk1": {
+                      "group1": {
                           "sample1": {
                               "chr1": [[pos1, pos2, ...], [coverage1, coverage2, ...]],
                               "chr2": [[pos1, pos2, ...], [coverage1, coverage2, ...]],
@@ -178,15 +178,15 @@ def parse_bins_as_dict(depthFileDict, windowSize):
                             "sample2": { ... },
                             ...
                       },
-                      "bulk2": { ... }
+                      "group2": { ... }
                   }
     '''
     coverageDict = {}
-    for bulk, depthFiles in depthFileDict.items():
-        coverageDict[bulk] = {}
-        # Iterate through bulk files
+    for group, depthFiles in depthFileDict.items():
+        coverageDict[group] = {}
+        # Iterate through group files
         for sampleID, depthFile in depthFiles:
-            coverageDict[bulk][sampleID] = {}
+            coverageDict[group][sampleID] = {}
             # Parse binned depth file
             with open(depthFile, "r") as fileIn:
                 for line in fileIn:
@@ -202,10 +202,10 @@ def parse_bins_as_dict(depthFileDict, windowSize):
                         raise ValueError(f"Coverage '{coverage}' is not an integer in file '{depthFile}'")
                     
                     # Store the coverage
-                    if not contigID in coverageDict[bulk][sampleID]:
-                        coverageDict[bulk][sampleID][contigID] = [[], []]
-                    coverageDict[bulk][sampleID][contigID][0].append(pos)
-                    coverageDict[bulk][sampleID][contigID][1].append(coverage)
+                    if not contigID in coverageDict[group][sampleID]:
+                        coverageDict[group][sampleID][contigID] = [[], []]
+                    coverageDict[group][sampleID][contigID][0].append(pos)
+                    coverageDict[group][sampleID][contigID][1].append(coverage)
     return coverageDict
 
 def normalise_coverage_dict(coverageDict):
@@ -215,7 +215,7 @@ def normalise_coverage_dict(coverageDict):
     Parameters:
         coverageDict -- a dictionary with structure like:
                   {
-                      "bulk1": {
+                      "group1": {
                           "sample1": {
                               "chr1": [[pos1, pos2, ...], [coverage1, coverage2, ...]],
                               "chr2": [[pos1, pos2, ...], [coverage1, coverage2, ...]],
@@ -224,10 +224,10 @@ def normalise_coverage_dict(coverageDict):
                             "sample2": { ... },
                             ...
                       },
-                      "bulk2": { ... }
+                      "group2": { ... }
                   }
     '''
-    for bulk, sampleDict in coverageDict.items():
+    for group, sampleDict in coverageDict.items():
         for sampleID, depthDict in sampleDict.items():
             for chrom, value in depthDict.items():
                 coverages = np.array(value[1])
@@ -237,14 +237,14 @@ def normalise_coverage_dict(coverageDict):
                 
                 # Normalise the coverage values and store them
                 coverages = coverages / medianCoverage
-                coverageDict[bulk][sampleID][chrom][1] = coverages
+                coverageDict[group][sampleID][chrom][1] = coverages
 
 def convert_dict_to_depthncls(coverageDict, windowSize):
     '''
     Parameters:
         coverageDict -- a dictionary with structure like:
                   {
-                      "bulk1": {
+                      "group1": {
                           "sample1": {
                               "chr1": [[pos1, pos2, ...], [coverage1, coverage2, ...]],
                               "chr2": [[pos1, pos2, ...], [coverage1, coverage2, ...]],
@@ -253,28 +253,28 @@ def convert_dict_to_depthncls(coverageDict, windowSize):
                             "sample2": { ... },
                             ...
                       },
-                      "bulk2": { ... }
+                      "group2": { ... }
                   }
         windowSize -- an integer indicating the size of the windows used for binning
     Returns:
         depthNCLSDict -- a dictionary with structure like:
                          {
-                             "bulk1": {
+                             "group1": {
                                  "sample1": WindowedNCLS,
                                  "sample2": WindowedNCLS,
                                  ...
                             },
-                             "bulk2": { ... }
+                             "group2": { ... }
                          }
     '''
     depthNCLSDict = {}
-    for bulk, sampleDict in coverageDict.items():
-        depthNCLSDict[bulk] = {}
+    for group, sampleDict in coverageDict.items():
+        depthNCLSDict[group] = {}
         for sampleID, depthDict in sampleDict.items():
             windowedNCLS = WindowedNCLS(windowSize)
             for chrom, value in depthDict.items():
                 positions = np.array(value[0])
                 edValues = np.array(value[1])
                 windowedNCLS.add(chrom, positions, edValues)
-                depthNCLSDict[bulk][sampleID] = windowedNCLS
+                depthNCLSDict[group][sampleID] = windowedNCLS
     return depthNCLSDict

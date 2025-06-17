@@ -43,11 +43,11 @@ class TestParsing(unittest.TestCase):
         
         # Assert
         self.assertIsInstance(metadataDict, dict, "Metadata should be a dictionary")
-        self.assertIn("bulk1", metadataDict, "Metadata should contain 'bulk1'")
-        self.assertIn("bulk2", metadataDict, "Metadata should contain 'bulk2'")
-        self.assertEqual(len(metadataDict), 2, "Should have 2 bulks in metadata")
-        self.assertEqual(len(metadataDict["bulk1"]), 11, "Bulk1 should have 11 entries")
-        self.assertEqual(len(metadataDict["bulk2"]), 41, "Bulk2 should have 41 entries")
+        self.assertIn("group1", metadataDict, "Metadata should contain 'group1'")
+        self.assertIn("group2", metadataDict, "Metadata should contain 'group2'")
+        self.assertEqual(len(metadataDict), 2, "Should have 2 groups in metadata")
+        self.assertEqual(len(metadataDict["group1"]), 11, "Group1 should have 11 entries")
+        self.assertEqual(len(metadataDict["group2"]), 41, "Group2 should have 41 entries")
     
     def test_vcf_header_to_metadata_validation(self):
         "Test that the VCF header matches the metadata"
@@ -412,7 +412,7 @@ class TestED(unittest.TestCase):
             isCNV_results_1.append(euclideanDist)
         
         # Arrange #2
-        metadataDict["bulk1"] = ['S44', 'S48', 'S50', 'S54', 'S56', 'S59', 'S64', 'S69', 'S76', 'S77'] # drop S95
+        metadataDict["group1"] = ['S44', 'S48', 'S50', 'S54', 'S56', 'S59', 'S64', 'S69', 'S76', 'S77'] # drop S95
         
         # Act #2
         notCNV_results_2 = []
@@ -552,8 +552,8 @@ class TestED(unittest.TestCase):
     def test_calculate_inheritance_ed_dip_dip_parents(self):
         # Arrange
         parentsGT = [ [0, 1], [0, 2] ] # represents "A/T" and "A/G" parents
-        b1Gt = [[0, 2], [1, 2], [0, 2], [0, 0]] # represents "A/G", "T/G", "A/G", "A/A" genotypes in bulk 1
-        b2Gt = [[1, 2], [0, 1], [0, 0], [0, 0]] # represents "T/G", "A/T", "A/A", "A/A" genotypes in bulk 2
+        b1Gt = [[0, 2], [1, 2], [0, 2], [0, 0]] # represents "A/G", "T/G", "A/G", "A/A" genotypes in group 1
+        b2Gt = [[1, 2], [0, 1], [0, 0], [0, 0]] # represents "T/G", "A/T", "A/A", "A/A" genotypes in group 2
         # truth = 0.7905694150420949 # calculated by hand on the plane from WA to Brisbane!
         truth = 0.5590169943749475 # after adjustment of dividing sum by 2 prior to sqrt() operation
         
@@ -563,8 +563,8 @@ class TestED(unittest.TestCase):
         # Assert
         self.assertAlmostEqual(ed, truth, places=5, 
                              msg=f"Expected ED to be approximately {truth} but got {ed}")
-        self.assertEqual(b1Alleles, 8, "Expected 8 alleles in bulk 1")
-        self.assertEqual(b2Alleles, 8, "Expected 8 alleles in bulk 2")
+        self.assertEqual(b1Alleles, 8, "Expected 8 alleles in group 1")
+        self.assertEqual(b2Alleles, 8, "Expected 8 alleles in group 2")
     
     def test_calculate_inheritance_ed_tet_tet_parents_1(self):
         "Non-segregation should still give ED==0 with tetraploid parents and samples"
@@ -622,8 +622,8 @@ class TestED(unittest.TestCase):
         
         # Assert
         self.assertEqual(ed, truth, f"Expected ED to be zero but got {ed}")
-        self.assertEqual(b1Alleles, 0, "Expected 0 alleles in bulk 1")
-        self.assertEqual(b2Alleles, 0, "Expected 0 alleles in bulk 2")
+        self.assertEqual(b1Alleles, 0, "Expected 0 alleles in group 1")
+        self.assertEqual(b2Alleles, 0, "Expected 0 alleles in group 2")
     
     def test_calculate_inheritance_ed_with_impossible_progeny_2(self):
         "Test for impossible progeny (allele combination cannot be inherited from parents)"
@@ -638,8 +638,8 @@ class TestED(unittest.TestCase):
         
         # Assert
         self.assertEqual(ed, truth, f"Expected ED to be zero but got {ed}")
-        self.assertEqual(b1Alleles, 0, "Expected 0 alleles in bulk 1")
-        self.assertEqual(b2Alleles, 8, "Expected 0 alleles in bulk 2")
+        self.assertEqual(b1Alleles, 0, "Expected 0 alleles in group 1")
+        self.assertEqual(b2Alleles, 8, "Expected 0 alleles in group 2")
     
     def test_calculate_inheritance_ed_with_impossible_progeny_3(self):
         "Test for impossible progeny (alleles could only be from a clone)"
@@ -654,8 +654,8 @@ class TestED(unittest.TestCase):
         
         # Assert
         self.assertEqual(ed, truth, f"Expected ED to be zero but got {ed}")
-        self.assertEqual(b1Alleles, 0, "Expected 0 alleles in bulk 1")
-        self.assertEqual(b2Alleles, 0, "Expected 0 alleles in bulk 2")
+        self.assertEqual(b1Alleles, 0, "Expected 0 alleles in group 1")
+        self.assertEqual(b2Alleles, 0, "Expected 0 alleles in group 2")
     
     def test_calculate_ed_for_results_stability_1(self):
         "Tests done with the program in a state where the results are trustworthy; future changes should not affect the results"
@@ -717,7 +717,7 @@ class TestED(unittest.TestCase):
         self.assertAlmostEqual(ed_2, alleleTruth, places=5, msg=f"Expected allele frequency ED to be {alleleTruth} but got {ed_2}")
         self.assertAlmostEqual(ed_3, genotypeTruth, places=5, msg=f"Expected genotype frequency ED to be {genotypeTruth} but got {ed_3}")
     
-    def test_calculate_inheritance_ed_with_empty_bulk(self):
+    def test_calculate_inheritance_ed_with_empty_group(self):
         "Test for impossible progeny (alleles could only be from a clone)"
         # Arrange
         parentsGT = [ [1, 2], [0, 0] ]
@@ -730,10 +730,10 @@ class TestED(unittest.TestCase):
         
         # Assert
         self.assertEqual(ed, truth, f"Expected ED to be zero but got {ed}")
-        self.assertEqual(b1Alleles, 0, "Expected 0 alleles in bulk 1")
-        self.assertEqual(b2Alleles, 2, "Expected 0 alleles in bulk 2")
+        self.assertEqual(b1Alleles, 0, "Expected 0 alleles in group 1")
+        self.assertEqual(b2Alleles, 2, "Expected 0 alleles in group 2")
     
-    def test_calculate_segregant_ed_with_empty_bulk(self):
+    def test_calculate_segregant_ed_with_empty_group(self):
         "Test for impossible progeny (alleles could only be from a clone)"
         # Arrange
         parentsGT = [ [1, 2], [0, 0] ]
@@ -746,11 +746,11 @@ class TestED(unittest.TestCase):
         
         # Assert
         self.assertEqual(ed, truth, f"Expected ED to be zero but got {ed}")
-        self.assertEqual(b1Alleles, 0, "Expected 0 alleles in bulk 1")
-        self.assertEqual(b2Alleles, 2, "Expected 0 alleles in bulk 2")
+        self.assertEqual(b1Alleles, 0, "Expected 0 alleles in group 1")
+        self.assertEqual(b2Alleles, 2, "Expected 0 alleles in group 2")
     
     def test_calculate_gt_median_adjustment_1(self):
-        "Test that median adjustment for CNVs works correctly (bulks segregate evenly)"
+        "Test that median adjustment for CNVs works correctly (groups segregate evenly)"
         # Arrange
         b1Gt = [[0, 0], [0, 0], [0, 0], [0, 0]]
         b2Gt = [[100, 100], [100, 100], [100, 100], [100, 100]]
@@ -761,8 +761,8 @@ class TestED(unittest.TestCase):
         b1AdjGt, b2AdjGt = gt_median_adjustment([b1Gt, b2Gt])
         
         # Assert
-        self.assertTrue(all([ allele == b1Truth for gt in b1AdjGt for allele in gt ]), f"Expected adjusted bulk 1 to be {b1Truth}")
-        self.assertTrue(all([ allele == b2Truth for gt in b2AdjGt for allele in gt ]), f"Expected adjusted bulk 2 to be {b2Truth}")
+        self.assertTrue(all([ allele == b1Truth for gt in b1AdjGt for allele in gt ]), f"Expected adjusted group 1 to be {b1Truth}")
+        self.assertTrue(all([ allele == b2Truth for gt in b2AdjGt for allele in gt ]), f"Expected adjusted group 2 to be {b2Truth}")
     
     def test_calculate_gt_median_adjustment_2(self):
         "Test that median adjustment for CNVs works correctly (all alleles are zero)"
@@ -776,8 +776,8 @@ class TestED(unittest.TestCase):
         b1AdjGt, b2AdjGt = gt_median_adjustment([b1Gt, b2Gt])
         
         # Assert
-        self.assertTrue(all([ allele == b1Truth for gt in b1AdjGt for allele in gt ]), f"Expected adjusted bulk 1 to be {b1Truth}")
-        self.assertTrue(all([ allele == b2Truth for gt in b2AdjGt for allele in gt ]), f"Expected adjusted bulk 2 to be {b2Truth}")
+        self.assertTrue(all([ allele == b1Truth for gt in b1AdjGt for allele in gt ]), f"Expected adjusted group 1 to be {b1Truth}")
+        self.assertTrue(all([ allele == b2Truth for gt in b2AdjGt for allele in gt ]), f"Expected adjusted group 2 to be {b2Truth}")
     
     def test_calculate_gt_median_adjustment_3(self):
         "Test that median adjustment for CNVs works correctly (all alleles are one)"
@@ -791,8 +791,8 @@ class TestED(unittest.TestCase):
         b1AdjGt, b2AdjGt = gt_median_adjustment([b1Gt, b2Gt])
         
         # Assert
-        self.assertTrue(all([ allele == b1Truth for gt in b1AdjGt for allele in gt ]), f"Expected adjusted bulk 1 to be {b1Truth}")
-        self.assertTrue(all([ allele == b2Truth for gt in b2AdjGt for allele in gt ]), f"Expected adjusted bulk 2 to be {b2Truth}")
+        self.assertTrue(all([ allele == b1Truth for gt in b1AdjGt for allele in gt ]), f"Expected adjusted group 1 to be {b1Truth}")
+        self.assertTrue(all([ allele == b2Truth for gt in b2AdjGt for allele in gt ]), f"Expected adjusted group 2 to be {b2Truth}")
     
     def test_calculate_gt_median_adjustment_4(self):
         "Test that median adjustment for CNVs works correctly (one genotype is different)"
@@ -806,8 +806,8 @@ class TestED(unittest.TestCase):
         b1AdjGt, b2AdjGt = gt_median_adjustment([b1Gt, b2Gt])
         
         # Assert
-        self.assertTrue(all([ allele == b1Truth for gt in b1AdjGt for allele in gt ]), f"Expected adjusted bulk 1 to be {b1Truth}")
-        self.assertFalse(all([ allele == b2Truth for gt in b2AdjGt for allele in gt ]), f"Expected adjusted bulk 2 to NOT be all {b2Truth}")
+        self.assertTrue(all([ allele == b1Truth for gt in b1AdjGt for allele in gt ]), f"Expected adjusted group 1 to be {b1Truth}")
+        self.assertFalse(all([ allele == b2Truth for gt in b2AdjGt for allele in gt ]), f"Expected adjusted group 2 to NOT be all {b2Truth}")
     
     def test_calculate_gt_median_adjustment_with_dots(self):
         "Test that median adjustment handles dot values safely"
@@ -819,7 +819,7 @@ class TestED(unittest.TestCase):
         b1AdjGt = gt_median_adjustment([b1Gt])[0]
         
         # Assert
-        self.assertEqual(b1AdjGt, b1Truth, f"Expected adjusted bulk 1 to be {b1Truth}")
+        self.assertEqual(b1AdjGt, b1Truth, f"Expected adjusted group 1 to be {b1Truth}")
 
 class TestSPLSDA(unittest.TestCase):
     def test_recode_variant_with_pipes(self):
@@ -962,7 +962,7 @@ class TestSPLSDA(unittest.TestCase):
         "Test that recoding a standard, diploid deletion VCF works correctly when using a subset of metadata"
         # Arrange
         metadataDict = parse_metadata(metadataFile)
-        metadataDict["bulk1"] = ['S44', 'S48', 'S50', 'S54', 'S56', 'S59', 'S64', 'S69', 'S76', 'S77'] # drop S95
+        metadataDict["group1"] = ['S44', 'S48', 'S50', 'S54', 'S56', 'S59', 'S64', 'S69', 'S76', 'S77'] # drop S95
         
         workDir = os.path.join(dataDir, "tmp")
         outputFile = os.path.join(workDir, "recode.vcf.gz")

@@ -275,26 +275,26 @@ def validate_depth_files(depthDir, metadataDict, windowSize):
                     depth files
         metadataDict -- a dictionary with structure like:
                         {
-                            "bulk1": [sampleID, ...],
-                            "bulk2": [sampleID, ...]
+                            "group1": [sampleID, ...],
+                            "group2": [sampleID, ...]
                         }
         windowSize -- the window size used when generating the depth files
     Returns:
         depthFileDict --  a dictionary with structure like:
                           {
-                              "bulk1": [[sampleID, depthFile], ...],
-                              "bulk2": [[sampleID, depthFile], ...]
+                              "group1": [[sampleID, depthFile], ...],
+                              "group2": [[sampleID, depthFile], ...]
                           }
     '''
     notFound = []
-    depthFileDict = {"bulk1": [], "bulk2": []}
-    for bulk, sampleList in metadataDict.items():
+    depthFileDict = {"group1": [], "group2": []}
+    for group, sampleList in metadataDict.items():
         for sample in sampleList:
             depthFile = os.path.join(depthDir, f"{sample}.binned.{windowSize}.tsv")
             if not os.path.isfile(depthFile):
                 notFound.append(sample)
             else:
-                depthFileDict[bulk].append([sample, depthFile])
+                depthFileDict[group].append([sample, depthFile])
     if notFound != []:
         raise FileNotFoundError(f"Could not find depth files with bin size of {windowSize} " +
                                 f"for samples: {', '.join(notFound)}")
@@ -336,7 +336,7 @@ def validate_p(args):
     # Validate samples for coverage plot
     if "coverage" in args.plotTypes:
         for sampleID in args.coverageSamples:
-            if not sampleID in args.metadataDict["bulk1"] + args.metadataDict["bulk2"]:
+            if not sampleID in args.metadataDict["group1"] + args.metadataDict["group2"]:
                 raise ValueError(f"Sample '{sampleID}' specified in --coverageSamples not found in metadata!")
         if len(args.coverageSamples) > NUM_SAMPLE_LINES:
             raise ValueError(f"Cannot plot more than {NUM_SAMPLE_LINES} samples using --coverageSamples (for clarity reasons)!")

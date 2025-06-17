@@ -91,7 +91,7 @@ def main():
                    type=float,
                    required=False,
                    help="""Optionally, specify the proportion of missing data that is
-                   tolerated in either bulk population before a variant is filtered out
+                   tolerated in either group before a variant is filtered out
                    (recommended: 0.5)""",
                    default=0.5)
     p.add_argument("-v", "--version",
@@ -148,7 +148,7 @@ def main():
                          nargs="+",
                          help="""COVERAGE PLOT: Optionally, specify one or more samples
                          to plot coverage data as individual lines; these samples will
-                         be omitted from the bulk group values""",
+                         be omitted from the group values""",
                          default=[])
     ## Style arguments
     pparser.add_argument("--width", dest="width",

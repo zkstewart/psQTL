@@ -105,12 +105,12 @@ class Plot:
                                 selected features from 'call' and 'depth simultaneously.
             coverageNCLSDict -- a dictionary with structure like:
                                 {
-                                    "bulk1": {
+                                    "group1": {
                                         "sample1": WindowedNCLS,
                                         "sample2": WindowedNCLS,
                                         ...
                                     },
-                                    "bulk2": { ... }
+                                    "group2": { ... }
                                 }
             coverageSamples -- a list of sample names available in coverageNCLSDict
                                that should be plotted individually OR None to not
@@ -243,9 +243,9 @@ class Plot:
             return
         if not isinstance(value, dict):
             raise TypeError("coverageNCLSDict must be a dictionary")
-        if not set(value.keys()) == {"bulk1", "bulk2"}:
-            raise ValueError("coverageNCLSDict must have keys 'bulk1' and 'bulk2'")
-        for bulk, sampleDict in value.items():
+        if not set(value.keys()) == {"group1", "group2"}:
+            raise ValueError("coverageNCLSDict must have keys 'group1' and 'group2'")
+        for group, sampleDict in value.items():
             for sampleID, sampleValue in sampleDict.items():
                 if not hasattr(sampleValue, "isWindowedNCLS") or not sampleValue.isWindowedNCLS:
                     raise TypeError("coverageNCLSDict must index WindowedNCLS objects")
@@ -598,12 +598,12 @@ class Plot:
         Parameters:
             depthNCLSDict -- a dictionary with structure like:
                          {
-                             "bulk1": {
+                             "group1": {
                                  "sample1": WindowedNCLS,
                                  "sample2": WindowedNCLS,
                                  ...
                             },
-                             "bulk2": { ... }
+                             "group2": { ... }
                          }
             samples -- a list of sample names to plot individually; provide
                        an empty list to not plot individual samples
@@ -613,13 +613,13 @@ class Plot:
         '''
         coverageData = {}
         
-        # Get the data for each bulk
-        for bulk in ["bulk1", "bulk2"]:
-            sampleDict = depthNCLSDict[bulk]
-            coverageData[bulk] = {}
+        # Get the data for each group
+        for group in ["group1", "group2"]:
+            sampleDict = depthNCLSDict[group]
+            coverageData[group] = {}
             
-            # Get the average and upper/lower quantiles of each bulk's coverage values
-            bulkValues = []
+            # Get the average and upper/lower quantiles of each group's coverage values
+            groupValues = []
             for sample, windowedNCLS in sampleDict.items():
                 # Skip any samples being individually plotted
                 if sample in samples:
@@ -628,16 +628,16 @@ class Plot:
                 # Get values within this region
                 overlappingBins = list(windowedNCLS.find_overlap(contigID, start, end))
                 y = [ stat for _, _, stat in overlappingBins ]
-                bulkValues.append(y)
-            bulkValues = np.array(bulkValues)
+                groupValues.append(y)
+            groupValues = np.array(groupValues)
             
             # Skip if there are no values
-            if bulkValues.size == 0:
-                coverageData[bulk] = None
+            if groupValues.size == 0:
+                coverageData[group] = None
                 continue
             
             # Get the median and Q1/Q3 quantiles
-            q1, median, q3 = np.percentile(bulkValues, [25, 50, 75], axis=0)
+            q1, median, q3 = np.percentile(groupValues, [25, 50, 75], axis=0)
             
             # Figure out the x values
             x = []
@@ -645,7 +645,7 @@ class Plot:
                 x.append(windowStart + (windowEnd - windowStart)/2)
             
             # Store the data
-            coverageData[bulk] = {
+            coverageData[group] = {
                 "x": x,
                 "q1": q1,
                 "median": median,
@@ -655,13 +655,13 @@ class Plot:
         # Get the data for individual samples
         for sampleIndex, sample in enumerate(samples):
             # Get values within this region
-            sampleWindowedNCLS = depthNCLSDict["bulk1"][sample] \
-                if sample in depthNCLSDict["bulk1"] \
-                else depthNCLSDict["bulk2"][sample]
+            sampleWindowedNCLS = depthNCLSDict["group1"][sample] \
+                if sample in depthNCLSDict["group1"] \
+                else depthNCLSDict["group2"][sample]
             y = [ stat for _, _, stat in sampleWindowedNCLS.find_overlap(contigID, start, end) ]
             
             # Store the data
-            coverageData[sample] = y # x can be reused from the bulk data
+            coverageData[sample] = y # x can be reused from the group data
         
         # Return the data
         return coverageData
@@ -1133,12 +1133,12 @@ class HorizontalPlot(Plot):
         Parameters:
             depthNCLSDict -- a dictionary with structure like:
                             {
-                                "bulk1": {
+                                "group1": {
                                     "sample1": EDNCLS,
                                     "sample2": EDNCLS,
                                     ...
                                 },
-                                "bulk2": { ... }
+                                "group2": { ... }
                             }
             samples -- a list of strings indicating the sample names to plot individual
                        lines for
@@ -1151,37 +1151,37 @@ class HorizontalPlot(Plot):
         minY = 0 # to set y limits at end
         maxY = 0
         for colNum, (contigID, start, end, reverse) in enumerate(self.regions):
-            coverageData = self.coverage(depthNCLSDict, samples, contigID, start, end) # keys: bulk1, bulk2, [*samples]
+            coverageData = self.coverage(depthNCLSDict, samples, contigID, start, end) # keys: group1, group2, [*samples]
             
-            # Plot each bulk
-            for bulk in ["bulk1", "bulk2"]:
-                bulkData = coverageData[bulk] # keys: x, q1, median, q3
+            # Plot each group
+            for group in ["group1", "group2"]:
+                groupData = coverageData[group] # keys: x, q1, median, q3
                 
                 # Skip if there are no values
-                if bulkData == None:
-                    print(f"WARNING: No coverage values found for region '{contigID, start, end}' for '{bulk}'")
+                if groupData == None:
+                    print(f"WARNING: No coverage values found for region '{contigID, start, end}' for '{group}'")
                     continue
                 
                 # Extend tails for better visualisation
-                x = np.concatenate(([start], bulkData["x"], [end]))
+                x = np.concatenate(([start], groupData["x"], [end]))
                 median = np.concatenate((
-                    [bulkData["median"][0]], bulkData["median"], [bulkData["median"][-1]]
+                    [groupData["median"][0]], groupData["median"], [groupData["median"][-1]]
                 ))
                 q1 = np.concatenate((
-                    [bulkData["q1"][0]], bulkData["q1"], [bulkData["q1"][-1]]
+                    [groupData["q1"][0]], groupData["q1"], [groupData["q1"][-1]]
                 ))
                 q3 = np.concatenate((
-                    [bulkData["q3"][0]], bulkData["q3"], [bulkData["q3"][-1]]
+                    [groupData["q3"][0]], groupData["q3"], [groupData["q3"][-1]]
                 ))
                 
                 # Plot median and Q1/Q3 lines
                 self.axs[self.rowNum, colNum].plot(
                     x, median, linewidth=linewidth,
-                    color=COVERAGE_COLOURS[0] if bulk == "bulk1" else COVERAGE_COLOURS[1])
+                    color=COVERAGE_COLOURS[0] if group == "group1" else COVERAGE_COLOURS[1])
                 
                 self.axs[self.rowNum, colNum].fill_between(
                     x, q1, q3, alpha = 0.5,
-                    color=COVERAGE_COLOURS[0] if bulk == "bulk1" else COVERAGE_COLOURS[1],
+                    color=COVERAGE_COLOURS[0] if group == "group1" else COVERAGE_COLOURS[1],
                     label="_nolegend_")
                 
                 # Get the maximum Y value for this region
@@ -1189,7 +1189,7 @@ class HorizontalPlot(Plot):
             
             # Plot individual samples
             for sampleIndex, sample in enumerate(samples):
-                "x can be reused from the bulk plot"
+                "x can be reused from the group plot"
                 y = coverageData[sample]
                 
                 # Extend tails for better visualisation
@@ -1230,7 +1230,7 @@ class HorizontalPlot(Plot):
                 self.axs[self.rowNum, colNum].set_ylim(np.floor(minY), np.ceil(maxY))
         
         # Set legend
-        legendLabels = ["bulk1", "bulk2"] + samples # samples can be []
+        legendLabels = ["group1", "group2"] + samples # samples can be []
         self.axs[self.rowNum, colNum].legend( # colNum is the last column
             legendLabels, loc="center left", bbox_to_anchor=(1, 0.5), ncol=1)
     
@@ -1799,12 +1799,12 @@ class CircosPlot(Plot):
         Parameters:
             depthNCLSDict -- a dictionary with structure like:
                             {
-                                "bulk1": {
+                                "group1": {
                                     "sample1": EDNCLS,
                                     "sample2": EDNCLS,
                                     ...
                                 },
-                                "bulk2": { ... }
+                                "group2": { ... }
                             }
             samples -- a list of strings indicating the sample names to plot individual
                        lines for
@@ -1816,10 +1816,10 @@ class CircosPlot(Plot):
         maxY = 0
         for contigID, start, end, reverse in self.regions:
             coverageData = self.coverage(depthNCLSDict, samples, contigID, start, end)
-            for bulk in ["bulk1", "bulk2"]:
-                bulkData = coverageData[bulk]
-                if bulkData != None:
-                    maxY = max(maxY, np.percentile(bulkData["median"], 90)) # 90th percentile to trim outliers
+            for group in ["group1", "group2"]:
+                groupData = coverageData[group]
+                if groupData != None:
+                    maxY = max(maxY, np.percentile(groupData["median"], 90)) # 90th percentile to trim outliers
         if maxY == 0:
             maxY = 1 # this can occur if all values are 0
         
@@ -1829,59 +1829,59 @@ class CircosPlot(Plot):
         
         # Plot each region
         for colNum, (contigID, start, end, reverse) in enumerate(self.regions):
-            coverageData = self.coverage(depthNCLSDict, samples, contigID, start, end) # keys: bulk1, bulk2, [*samples]
+            coverageData = self.coverage(depthNCLSDict, samples, contigID, start, end) # keys: group1, group2, [*samples]
             
-            # Plot each bulk
+            # Plot each group
             extendStart = False
             extendEnd = False
-            for bulk in ["bulk1", "bulk2"]:
-                bulkData = coverageData[bulk] # keys: x, q1, median, q3
+            for group in ["group1", "group2"]:
+                groupData = coverageData[group] # keys: x, q1, median, q3
                 
                 # Skip if there are no values
-                if bulkData == None:
-                    print(f"WARNING: No coverage values found for region '{contigID, start, end}' for '{bulk}'")
+                if groupData == None:
+                    print(f"WARNING: No coverage values found for region '{contigID, start, end}' for '{group}'")
                     continue
                 
                 # Extend tails for better visualisation
-                if bulkData["x"][0] < start:
-                    bulkData["x"][0] = start
+                if groupData["x"][0] < start:
+                    groupData["x"][0] = start
                 else:
-                    bulkData["x"] = np.concatenate(([start], bulkData["x"]))
-                    bulkData["median"] = np.concatenate(([bulkData["median"][0]], bulkData["median"]))
-                    bulkData["q1"] = np.concatenate(([bulkData["q1"][0]], bulkData["q1"]))
-                    bulkData["q3"] = np.concatenate(([bulkData["q3"][0]], bulkData["q3"]))
+                    groupData["x"] = np.concatenate(([start], groupData["x"]))
+                    groupData["median"] = np.concatenate(([groupData["median"][0]], groupData["median"]))
+                    groupData["q1"] = np.concatenate(([groupData["q1"][0]], groupData["q1"]))
+                    groupData["q3"] = np.concatenate(([groupData["q3"][0]], groupData["q3"]))
                     extendStart = True
                 
-                if bulkData["x"][-1] > end:
-                    bulkData["x"][-1] = end
+                if groupData["x"][-1] > end:
+                    groupData["x"][-1] = end
                 else:
-                    bulkData["x"] = np.concatenate((bulkData["x"], [end]))
-                    bulkData["median"] = np.concatenate((bulkData["median"], [bulkData["median"][-1]]))
-                    bulkData["q1"] = np.concatenate((bulkData["q1"], [bulkData["q1"][-1]]))
-                    bulkData["q3"] = np.concatenate((bulkData["q3"], [bulkData["q3"][-1]]))
+                    groupData["x"] = np.concatenate((groupData["x"], [end]))
+                    groupData["median"] = np.concatenate((groupData["median"], [groupData["median"][-1]]))
+                    groupData["q1"] = np.concatenate((groupData["q1"], [groupData["q1"][-1]]))
+                    groupData["q3"] = np.concatenate((groupData["q3"], [groupData["q3"][-1]]))
                     extendEnd = True
                 
                 # Cap values at maxY
-                bulkData["median"] = np.clip(bulkData["median"], 0, maxY)
-                bulkData["q1"] = np.clip(bulkData["q1"], 0, maxY)
-                bulkData["q3"] = np.clip(bulkData["q3"], 0, maxY)
+                groupData["median"] = np.clip(groupData["median"], 0, maxY)
+                groupData["q1"] = np.clip(groupData["q1"], 0, maxY)
+                groupData["q3"] = np.clip(groupData["q3"], 0, maxY)
                 
                 # Plot median and Q1/Q3 lines
                 self.axs[self.rowNum, colNum].fill_between(
-                    bulkData["x"], bulkData["q1"], bulkData["q3"], vmax=maxY,
-                    alpha = 0.5, color=COVERAGE_COLOURS[0] if bulk == "bulk1" else COVERAGE_COLOURS[1],
+                    groupData["x"], groupData["q1"], groupData["q3"], vmax=maxY,
+                    alpha = 0.5, color=COVERAGE_COLOURS[0] if group == "group1" else COVERAGE_COLOURS[1],
                     label="_nolegend_", zorder=0)
                 self.axs[self.rowNum, colNum].line(
-                    bulkData["x"], bulkData["median"], vmax=maxY,
-                    color=COVERAGE_COLOURS[0] if bulk == "bulk1" else COVERAGE_COLOURS[1],
+                    groupData["x"], groupData["median"], vmax=maxY,
+                    color=COVERAGE_COLOURS[0] if group == "group1" else COVERAGE_COLOURS[1],
                     linewidth=linewidth, zorder=1)
                 
-                self.coverageHandles.append([COVERAGE_COLOURS[0] if bulk == "bulk1" else COVERAGE_COLOURS[1],
-                                             "Bulk 1" if bulk == "bulk1" else "Bulk 2", "solid"])
+                self.coverageHandles.append([COVERAGE_COLOURS[0] if group == "group1" else COVERAGE_COLOURS[1],
+                                             "Group 1" if group == "group1" else "Group 2", "solid"])
             
             # Plot individual samples
             for sampleIndex, sample in enumerate(samples):
-                "x can be reused from the bulk plot"
+                "x can be reused from the group plot"
                 y = coverageData[sample]
                 
                 # Extend tails for better visualisation
@@ -1898,7 +1898,7 @@ class CircosPlot(Plot):
                 
                 # Plot the line
                 self.axs[self.rowNum, colNum].line(
-                    bulkData["x"], y, vmax=maxY, 
+                    groupData["x"], y, vmax=maxY, 
                     color=lineColour, linestyle=lineType,
                     linewidth=linewidth, zorder=2)
                 self.coverageHandles.append([lineColour, sample, lineType])

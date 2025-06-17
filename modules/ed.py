@@ -77,10 +77,10 @@ def possible_genotypes(gt1, gt2):
     
     return set(possibleGTs)
 
-def calculate_segregant_ed(b1Gt, b2Gt, isCNV=False, parentsGT=None):
+def calculate_segregant_ed(g1Gt, g2Gt, isCNV=False, parentsGT=None):
     '''
     Parameters:
-        b1Gt / b2Gt -- a list of lists containing the genotype value as integers
+        g1Gt / g2Gt -- a list of lists containing the genotype value as integers
                        with format like:
                        [
                            [0, 1],
@@ -96,38 +96,38 @@ def calculate_segregant_ed(b1Gt, b2Gt, isCNV=False, parentsGT=None):
                      OR None if no parents are available or specified to
                      filter out non-inheritable genotypes
     Returns:
-        numAllelesB1 -- the number of genotyped alleles in bulk 1
-        numAllelesB2 -- the number of genotyped alleles in bulk 2
-        edist -- a float of the the Euclidean distance between the two bulks
+        numAllelesG1 -- the number of genotyped alleles in group 1
+        numAllelesG2 -- the number of genotyped alleles in group 2
+        edist -- a float of the the Euclidean distance between the two groups
     '''
     # Adjust values if this is a CNV
     if isCNV:
-        b1Gt, b2Gt = gt_median_adjustment([b1Gt, b2Gt])
+        g1Gt, g2Gt = gt_median_adjustment([g1Gt, g2Gt])
     
     # Filter impossible progeny genotypes based on the parents' genotypes
     if parentsGT != None and len(parentsGT) == 2:
         possibleGTs = possible_genotypes(parentsGT[0], parentsGT[1])
-        b1Gt = [ gt for gt in b1Gt if set(gt) in possibleGTs ]
-        b2Gt = [ gt for gt in b2Gt if set(gt) in possibleGTs ]
+        g1Gt = [ gt for gt in g1Gt if set(gt) in possibleGTs ]
+        g2Gt = [ gt for gt in g2Gt if set(gt) in possibleGTs ]
     
-    # Calculate Euclidean distance between the two bulks
+    # Calculate Euclidean distance between the two groups
     if parentsGT != None and len(parentsGT) == 2:
-        numAllelesB1, numAllelesB2, edist = calculate_inheritance_ed(b1Gt, b2Gt, parentsGT)
+        numAllelesG1, numAllelesG2, edist = calculate_inheritance_ed(g1Gt, g2Gt, parentsGT)
     else:
-        numAllelesB1, numAllelesB2, edist = calculate_allele_frequency_ed(b1Gt, b2Gt)
+        numAllelesG1, numAllelesG2, edist = calculate_allele_frequency_ed(g1Gt, g2Gt)
     
     # Return the values
-    return numAllelesB1, numAllelesB2, edist
+    return numAllelesG1, numAllelesG2, edist
 
-def calculate_allele_frequency_ed(b1Gt, b2Gt):
+def calculate_allele_frequency_ed(g1Gt, g2Gt):
     '''
-    Calculates the Euclidean distance between two bulks based on the allele
-    frequencies in each bulk. This is conceptually similar to BSA methods like
+    Calculates the Euclidean distance between two groups based on the allele
+    frequencies in each group. This is conceptually similar to BSA methods like
     QTLseq, but substituting allele depth (AD) for the number of alleles
     in genotype (GT) calls.
     
     Parameters:
-        b1Gt / b2Gt -- a list of lists containing the genotype value as integers
+        g1Gt / g2Gt -- a list of lists containing the genotype value as integers
                        with format like:
                        [
                            [0, 1],
@@ -136,53 +136,53 @@ def calculate_allele_frequency_ed(b1Gt, b2Gt):
                            ...
                        ]
     Returns:
-        numAllelesB1 -- the number of genotyped alleles in bulk 1
-        numAllelesB2 -- the number of genotyped alleles in bulk 2
-        edist -- a float of the the Euclidean distance between the two bulks
+        numAllelesG1 -- the number of genotyped alleles in group 1
+        numAllelesG2 -- the number of genotyped alleles in group 2
+        edist -- a float of the the Euclidean distance between the two groups
     '''
     # Get all the unique alleles
-    alleles = [ allele for gt in b1Gt + b2Gt for allele in gt ]
+    alleles = [ allele for gt in g1Gt + g2Gt for allele in gt ]
     uniqueAlleles = list(set(alleles))
     
-    # Tally for bulk 1
+    # Tally for group 1
     b1Count = { allele: 0 for allele in uniqueAlleles }
-    for gt in b1Gt:
+    for gt in g1Gt:
         for allele in gt:
             b1Count[allele] += 1
     
-    # Tally for bulk 2
+    # Tally for group 2
     b2Count = { allele: 0 for allele in uniqueAlleles }
-    for gt in b2Gt:
+    for gt in g2Gt:
         for allele in gt:
             b2Count[allele] += 1
     
-    # Sum the number of genotyped alleles for each bulk
-    numAllelesB1 = sum(b1Count.values())
-    numAllelesB2 = sum(b2Count.values())
+    # Sum the number of genotyped alleles for each group
+    numAllelesG1 = sum(b1Count.values())
+    numAllelesG2 = sum(b2Count.values())
     
-    # Calculate the Euclidean distance between the two bulks if possible
-    if numAllelesB1 == 0 or numAllelesB2 == 0:
-        return numAllelesB1, numAllelesB2, 0 # euclidean distance cannot be calculated
+    # Calculate the Euclidean distance between the two groups if possible
+    if numAllelesG1 == 0 or numAllelesG2 == 0:
+        return numAllelesG1, numAllelesG2, 0 # euclidean distance cannot be calculated
     else:
         # Derive our euclidean distance value
         "Refer to 'Euclidean distance calculation' in Hill et al. 2013"
         edist = sqrt(sum([
-            ((b1Count[allele] / numAllelesB1) - (b2Count[allele] / numAllelesB2))**2
+            ((b1Count[allele] / numAllelesG1) - (b2Count[allele] / numAllelesG2))**2
             for allele in uniqueAlleles
         ]))
         # Return the values
-        return numAllelesB1, numAllelesB2, edist
+        return numAllelesG1, numAllelesG2, edist
 
-def calculate_genotype_frequency_ed(b1Gt, b2Gt):
+def calculate_genotype_frequency_ed(g1Gt, g2Gt):
     '''
-    Calculates the Euclidean distance between two bulks based on the
-    genotype frequencies in each bulk. Rather than breaking apart genotypes (GT)
+    Calculates the Euclidean distance between two groups based on the
+    genotype frequencies in each group. Rather than breaking apart genotypes (GT)
     into individual alleles as calculate_allele_frequency_ed() does, this method
     treats each genotype as a single entity and compares the frequency of each
-    genotype in each bulk.
+    genotype in each group.
     
     However, although this sounds like a good idea, it has some problems. From
-    real data, this method tends to overestimate segregation between bulks. The
+    real data, this method tends to overestimate segregation between groups. The
     cause of this is unclear. My hunch is that reads, possibly originating from
     repetitive regions in proximity to real QTLs, can contaminate those related
     repeats throughout the rest of the genome, leading to signals of segregation
@@ -191,7 +191,7 @@ def calculate_genotype_frequency_ed(b1Gt, b2Gt):
     it sounding fantastic in theory.
     
     Parameters:
-        b1Gt / b2Gt -- a list of lists containing the genotype value as integers
+        g1Gt / g2Gt -- a list of lists containing the genotype value as integers
                        with format like:
                        [
                            [0, 1],
@@ -200,44 +200,44 @@ def calculate_genotype_frequency_ed(b1Gt, b2Gt):
                            ...
                        ]
     Returns:
-        numSamplesB1 -- the number of genotyped samples in bulk 1
-        numSamplesB2 -- the number of genotyped samples in bulk 2
-        edist -- a float of the the Euclidean distance between the two bulks
+        numSamplesG1 -- the number of genotyped samples in group 1
+        numSamplesG2 -- the number of genotyped samples in group 2
+        edist -- a float of the the Euclidean distance between the two groups
     '''
     # Get all the unique genotypes
-    uniqueGts = set(tuple(sorted(gt)) for gt in b1Gt + b2Gt)
+    uniqueGts = set(tuple(sorted(gt)) for gt in g1Gt + g2Gt)
     
-    # Tally for bulk 1
-    b1GtCount = { gt: 0 for gt in uniqueGts }
-    for gt in b1Gt:
-        b1GtCount[tuple(sorted(gt))] += 1
+    # Tally for group 1
+    g1GtCount = { gt: 0 for gt in uniqueGts }
+    for gt in g1Gt:
+        g1GtCount[tuple(sorted(gt))] += 1
     
-    # Tally for bulk 2
-    b2GtCount = { gt: 0 for gt in uniqueGts }
-    for gt in b2Gt:
-        b2GtCount[tuple(sorted(gt))] += 1
+    # Tally for group 2
+    g2GtCount = { gt: 0 for gt in uniqueGts }
+    for gt in g2Gt:
+        g2GtCount[tuple(sorted(gt))] += 1
     
-    # Sum the number of genotyped samples for each bulk
-    numSamplesB1 = len(b1Gt)
-    numSamplesB2 = len(b2Gt)
+    # Sum the number of genotyped samples for each group
+    numSamplesG1 = len(g1Gt)
+    numSamplesG2 = len(g2Gt)
     
-    # Calculate the Euclidean distance between the two bulks if possible
-    if numSamplesB1 == 0 or numSamplesB2 == 0:
-        return numSamplesB1, numSamplesB2, 0 # euclidean distance cannot be calculated
+    # Calculate the Euclidean distance between the two groups if possible
+    if numSamplesG1 == 0 or numSamplesG2 == 0:
+        return numSamplesG1, numSamplesG2, 0 # euclidean distance cannot be calculated
     else:
         # Derive our euclidean distance value
         "This is the same as in calculate_allele_frequency_ed(), but for genotypes instead of alleles"
         edist = sqrt(sum([
-            ((b1GtCount[gt] / numSamplesB1) - (b2GtCount[gt] / numSamplesB2))**2
+            ((g1GtCount[gt] / numSamplesG1) - (g2GtCount[gt] / numSamplesG2))**2
             for gt in uniqueGts
         ]))
         
         # Return the values
-        return numSamplesB1, numSamplesB2, edist
+        return numSamplesG1, numSamplesG2, edist
 
-def calculate_inheritance_ed(b1Gt, b2Gt, parentsGT):
+def calculate_inheritance_ed(g1Gt, g2Gt, parentsGT):
     '''
-    Employs a method to calculate the Euclidean distance between two bulks
+    Employs a method to calculate the Euclidean distance between two groups
     based on the likelihood of specific alleles/haplotypes being inherited
     from each parent. This blends the allele frequency and genotype frequency
     methods to provide a more accurate representation of _biased inheritance_
@@ -245,7 +245,7 @@ def calculate_inheritance_ed(b1Gt, b2Gt, parentsGT):
     comparison of genotype frequency.
     
     Parameters:
-        b1Gt / b2Gt -- a list of lists containing the genotype value as integers
+        g1Gt / g2Gt -- a list of lists containing the genotype value as integers
                        with format like:
                        [
                            [0, 1],
@@ -257,9 +257,9 @@ def calculate_inheritance_ed(b1Gt, b2Gt, parentsGT):
                      for the parents with format like:
                      [ [0, 1], [1, 2] ]
     Returns:
-        numAllelesB1 -- the number of genotyped alleles in bulk 1
-        numAllelesB2 -- the number of genotyped alleles in bulk 2
-        edist -- a float of the the Euclidean distance between the two bulks
+        numAllelesG1 -- the number of genotyped alleles in group 1
+        numAllelesG2 -- the number of genotyped alleles in group 2
+        edist -- a float of the the Euclidean distance between the two groups
     '''
     # Raise error for unmanageable ploidy values
     for i, gt in enumerate(parentsGT):
@@ -268,17 +268,17 @@ def calculate_inheritance_ed(b1Gt, b2Gt, parentsGT):
                              "cannot calculate inheritance Euclidean distance with odd ploidy")
     PARENT_FULLY_ASSIGNED = { f"p{i+1}" : int(len(gt) / 2) for i, gt in enumerate(parentsGT) }
     
-    if (len(b1Gt) > 0 and len(b1Gt[0]) != sum(PARENT_FULLY_ASSIGNED.values())) or \
-       (len(b2Gt) > 0 and len(b2Gt[0]) != sum(PARENT_FULLY_ASSIGNED.values())):
+    if (len(g1Gt) > 0 and len(g1Gt[0]) != sum(PARENT_FULLY_ASSIGNED.values())) or \
+       (len(g2Gt) > 0 and len(g2Gt[0]) != sum(PARENT_FULLY_ASSIGNED.values())):
         raise ValueError("Progeny samples must have a number of alleles equal to the summed value of " +
                          f"half of each parent's chromosomes ({sum(PARENT_FULLY_ASSIGNED.values())}); " +
                          "cannot calculate inheritance Euclidean distance with mismatched ploidy")
     
     # Assign alleles to parent haplotypes
-    bulkSums = []
-    for i, bulkGt in enumerate([b1Gt, b2Gt]): # for each bulk
-        # Set up data structure to hold assigned allele counts across the bulk
-        bulkSum = {
+    groupSums = []
+    for i, groupGt in enumerate([g1Gt, g2Gt]): # for each group
+        # Set up data structure to hold assigned allele counts across the group
+        groupSum = {
             "p1": {
                 gt: 0 for gt in parentsGT[0]
             },
@@ -287,7 +287,7 @@ def calculate_inheritance_ed(b1Gt, b2Gt, parentsGT):
             }
         }
         # For each sample, assign alleles to parents based on the most likely inheritance
-        for gt in bulkGt:
+        for gt in groupGt:
             # Set up the data structure for holding this sample's assigned alleles
             sampleColumns = {
                 "p1": {
@@ -335,41 +335,41 @@ def calculate_inheritance_ed(b1Gt, b2Gt, parentsGT):
             # Update the column sums using this sample
             for parent, assignedDict in sampleColumns.items():
                 for allele, assigned in assignedDict.items():
-                    bulkSum[parent][allele] += assigned
+                    groupSum[parent][allele] += assigned
         
-        # Set aside results for this bulk
-        bulkSums.append(bulkSum)
+        # Set aside results for this group
+        groupSums.append(groupSum)
     
-    # Format bulkSums to ensure all alleles are present [makes it easier to calculate ED without nested if statements]
+    # Format groupSums to ensure all alleles are present [makes it easier to calculate ED without nested if statements]
     uniqueAlleles = list(set([ allele for gt in parentsGT for allele in gt ]))
     for allele in uniqueAlleles:
-        for bSum in bulkSums:
+        for bSum in groupSums:
             if allele not in bSum["p1"]:
                 bSum["p1"][allele] = 0
             if allele not in bSum["p2"]:
                 bSum["p2"][allele] = 0
-    b1Sum, b2Sum = bulkSums
+    b1Sum, b2Sum = groupSums
     
-    # Get the number of samples and alleles in each bulk
-    numSamplesB1, numSamplesB2 = len(b1Gt), len(b2Gt)
-    numAllelesB1 = numSamplesB1 * len(b1Gt[0]) if numSamplesB1 > 0 else 0 # num samples * ploidy of the samples
-    numAllelesB2 = numSamplesB2 * len(b2Gt[0]) if numSamplesB2 > 0 else 0 # conforms to the calculate_segregant_ed() return values
+    # Get the number of samples and alleles in each group
+    numSamplesG1, numSamplesG2 = len(g1Gt), len(g2Gt)
+    numAllelesG1 = numSamplesG1 * len(g1Gt[0]) if numSamplesG1 > 0 else 0 # num samples * ploidy of the samples
+    numAllelesG2 = numSamplesG2 * len(g2Gt[0]) if numSamplesG2 > 0 else 0 # conforms to the calculate_segregant_ed() return values
     
     # Calculate the Euclidean distance between the parental inherited alleles if possible
     """Note that values are divied by the number of samples, not the number of alleles;
     doing so gives results in the same scale as the standard segregant ED calculation,
     but the rationale is difficult for me to articulate"""
-    if numSamplesB1 == 0 or numSamplesB2 == 0:
-        return numAllelesB1, numAllelesB2, 0 # euclidean distance cannot be calculated
+    if numSamplesG1 == 0 or numSamplesG2 == 0:
+        return numAllelesG1, numAllelesG2, 0 # euclidean distance cannot be calculated
     else:
         edist = sqrt(sum([
-            ((b1Sum[parent][allele] / numSamplesB1) - (b2Sum[parent][allele] / numSamplesB2))**2
+            ((b1Sum[parent][allele] / numSamplesG1) - (b2Sum[parent][allele] / numSamplesG2))**2
             for parent in ["p1", "p2"]
             for allele in uniqueAlleles
-        ])/2) # divide by 2 since there are two parents and 2x the number of comparions made across bulks
+        ])/2) # divide by 2 since there are two parents and 2x the number of comparions made across groups
     
     # Return the values
-    return numAllelesB1, numAllelesB2, edist
+    return numAllelesG1, numAllelesG2, edist
 
 def parse_vcf_for_ed(vcfFile, metadataDict, isCNV, parents=[], ignoreIdentical=True, quiet=False):
     '''
@@ -377,8 +377,8 @@ def parse_vcf_for_ed(vcfFile, metadataDict, isCNV, parents=[], ignoreIdentical=T
         vcfFile -- a string pointing to the VCF or VCF-like file to parse
         metadataDict -- a dictionary with structure like:
                         {
-                            "bulk1": set([ "sample1", "sample2", ... ]),
-                            "bulk2": set([ "sample3", "sample4", ... ])
+                            "group1": set([ "sample1", "sample2", ... ]),
+                            "group2": set([ "sample3", "sample4", ... ])
                         }
         isCNV -- a boolean indicating whether the VCF file is for CNVs ("depth"; True)
                  or SNPs/indels ("call"; False)
@@ -395,9 +395,9 @@ def parse_vcf_for_ed(vcfFile, metadataDict, isCNV, parents=[], ignoreIdentical=T
         contig -- the contig name for the variant
         pos -- the position of the variant
         variant -- the type of variant (snp or indel)
-        numAllelesB1 -- the number of genotyped alleles in bulk 1
-        numAllelesB2 -- the number of genotyped alleles in bulk 2
-        euclideanDist -- the Euclidean distance between the two bulks
+        numAllelesG1 -- the number of genotyped alleles in group 1
+        numAllelesG2 -- the number of genotyped alleles in group 2
+        euclideanDist -- the Euclidean distance between the two groups
     '''
     # Validations
     if parents == None: # just in case
@@ -406,8 +406,8 @@ def parse_vcf_for_ed(vcfFile, metadataDict, isCNV, parents=[], ignoreIdentical=T
     if parents != [] and len(parents) != 2:
         raise ValueError("Parents must be a list with zero (standard ED) or two sample IDs (haplotype inheritance ED)")
         for parent in parents:
-            if parent not in metadataDict["bulk1"] and parent not in metadataDict["bulk2"]:
-                raise ValueError(f"Parent sample '{parent}' is not in either bulk; cannot calculate haplotype inheritance ED")
+            if parent not in metadataDict["group1"] and parent not in metadataDict["group2"]:
+                raise ValueError(f"Parent sample '{parent}' is not in either group; cannot calculate haplotype inheritance ED")
     
     # Iterate through the VCF file
     samples = None
@@ -461,25 +461,25 @@ def parse_vcf_for_ed(vcfFile, metadataDict, isCNV, parents=[], ignoreIdentical=T
             else:
                 variant = "snp"
             
-            # Split sample genotypes into bulk1 and bulk2
-            bulk1 = [ snpDict[sample] for sample in metadataDict["bulk1"] if sample in snpDict and not sample in parents ] # subsets based on metadatDict
-            bulk2 = [ snpDict[sample] for sample in metadataDict["bulk2"] if sample in snpDict and not sample in parents ]
+            # Split sample genotypes into group1 and group2
+            group1 = [ snpDict[sample] for sample in metadataDict["group1"] if sample in snpDict and not sample in parents ] # subsets based on metadatDict
+            group2 = [ snpDict[sample] for sample in metadataDict["group2"] if sample in snpDict and not sample in parents ]
             parentsGT = [ snpDict[parent] for parent in parents if parent in snpDict ] # if parents == [] this will always be empty
             
             # Calculate Euclidean distance
-            numAllelesB1, numAllelesB2, euclideanDist = calculate_segregant_ed(bulk1, bulk2,
+            numAllelesG1, numAllelesG2, euclideanDist = calculate_segregant_ed(group1, group2,
                                                                                isCNV=isCNV, parentsGT=parentsGT)
             
-            # Skip if both bulks are identical
+            # Skip if both groups are identical
             if ignoreIdentical and euclideanDist == 0:
-                bulk1Dedup = set(( tuple(x) for x in bulk1 ))
-                bulk2Dedup = set(( tuple(x) for x in bulk2 ))
+                group1Dedup = set(( tuple(x) for x in group1 ))
+                group2Dedup = set(( tuple(x) for x in group2 ))
                 "if both have set len==1, are the same, and have 0 Euclidean distance, they are identical non-reference alleles"
-                if len(bulk1Dedup) == 1 and bulk1Dedup == bulk2Dedup:
+                if len(group1Dedup) == 1 and group1Dedup == group2Dedup:
                     continue
             
             # Yield results
-            yield contig, pos, variant, numAllelesB1, numAllelesB2, euclideanDist
+            yield contig, pos, variant, numAllelesG1, numAllelesG2, euclideanDist
 
 def parse_ed_as_dict(edFile, metadataDict, missingFilter=0.5):
     '''
@@ -487,11 +487,11 @@ def parse_ed_as_dict(edFile, metadataDict, missingFilter=0.5):
         edFile -- a string indicating the path to an ED file
         metadataDict -- a dictionary with structure like:
                         {
-                            "bulk1": set([ "sample1", "sample2", ... ]),
-                            "bulk2": set([ "sample3", "sample4", ... ])
+                            "group1": set([ "sample1", "sample2", ... ]),
+                            "group2": set([ "sample3", "sample4", ... ])
                         } OR None if no filtering is desired
         missingFilter -- OPTIONAL; a float indicating the maximum allowed missing data
-                         calculated for each bulk
+                         calculated for each group
     Returns:
         edDict -- a dictionary with structure like:
                   {
@@ -500,24 +500,25 @@ def parse_ed_as_dict(edFile, metadataDict, missingFilter=0.5):
                       ...
                   }
     '''
-    HEADER = ["CHROM", "POSI", "variant", "bulk1_alleles", "bulk2_alleles", "euclideanDist"]
+    HEADER = ["CHROM", "POSI", "variant", "group1_alleles", "group2_alleles", "euclideanDist"]
+    COMPATIBILITY_HEADER = ["CHROM", "POSI", "variant", "bulk1_alleles", "bulk2_alleles", "euclideanDist"] # for older psQTL versions
     
     # Make sure the metadata is valid if missingFilter is > 0
     if missingFilter > 0:
         if metadataDict == None:
             raise ValueError("Cannot filter for missing data without metadata")
-        if not all([ x in metadataDict for x in ["bulk1", "bulk2"] ]):
-            raise ValueError("Metadata dictionary must contain keys 'bulk1' and 'bulk2'")
+        if not all([ x in metadataDict for x in ["group1", "group2"] ]):
+            raise ValueError("Metadata dictionary must contain keys 'group1' and 'group2'")
     
-    # Calculate how many alleles in each bulk
+    # Calculate how many alleles in each group
     if metadataDict != None:
-        BULK1_ALLELES = len(metadataDict["bulk1"]) * 2
-        BULK2_ALLELES = len(metadataDict["bulk2"]) * 2
+        GROUP1_ALLELES = len(metadataDict["group1"]) * 2
+        GROUP2_ALLELES = len(metadataDict["group2"]) * 2
         
-        # Alert user to number of samples needed to pass filtration in each bulk
-        print(f"# Filtering for missing data: up to {missingFilter*100}% missing data allowed in each bulk")
-        print(f"# For bulk 1: {BULK1_ALLELES} alleles are possible; {ceil(BULK1_ALLELES * missingFilter)} needed to pass")
-        print(f"# For bulk 2: {BULK2_ALLELES} alleles are possible; {ceil(BULK2_ALLELES * missingFilter)} needed to pass")
+        # Alert user to number of samples needed to pass filtration in each group
+        print(f"# Filtering for missing data: up to {missingFilter*100}% missing data allowed in each group")
+        print(f"# For group 1: {GROUP1_ALLELES} alleles are possible; {ceil(GROUP1_ALLELES * missingFilter)} needed to pass")
+        print(f"# For group 2: {GROUP2_ALLELES} alleles are possible; {ceil(GROUP2_ALLELES * missingFilter)} needed to pass")
     
     # Parse the ED file
     edDict = {}
@@ -527,13 +528,13 @@ def parse_ed_as_dict(edFile, metadataDict, missingFilter=0.5):
         for line in fileIn:
             sl = line.rstrip("\r\n").split("\t")
             if firstLine:
-                if not sl == HEADER:
+                if (not sl == HEADER) and not (sl == COMPATIBILITY_HEADER):
                     raise ValueError(f"ED file is improperly formatted; header line '{sl}' " + 
                                      f"does not match expected header '{HEADER}'")
                 firstLine = False
             else:
                 # Parse relevant details and validate format
-                chrom, posi, variant, bulk1_alleles, bulk2_alleles, euclideanDistance = sl
+                chrom, posi, variant, group1_alleles, group2_alleles, euclideanDistance = sl
                 try:
                     posi = int(posi)
                 except:
@@ -543,15 +544,15 @@ def parse_ed_as_dict(edFile, metadataDict, missingFilter=0.5):
                 except:
                     raise ValueError(f"Euclidean distance '{euclideanDistance}' is not a float; offending line is '{line}'")
                 try:
-                    bulk1_alleles = int(bulk1_alleles)
-                    bulk2_alleles = int(bulk2_alleles)
+                    group1_alleles = int(group1_alleles)
+                    group2_alleles = int(group2_alleles)
                 except:
-                    raise ValueError(f"Bulk allele counts '{bulk1_alleles}' or '{bulk2_alleles}' are not integers; " + 
+                    raise ValueError(f"Group allele counts '{group1_alleles}' or '{group2_alleles}' are not integers; " + 
                                      f"offending line is '{line}'")
                 
                 # Skip if missing data exceeds threshold
                 if metadataDict != None:
-                    if (bulk1_alleles / BULK1_ALLELES) < missingFilter or (bulk2_alleles / BULK2_ALLELES) < missingFilter:
+                    if (group1_alleles / GROUP1_ALLELES) < missingFilter or (group2_alleles / GROUP2_ALLELES) < missingFilter:
                         continue
                 
                 # Store in dictionary
