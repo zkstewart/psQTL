@@ -23,8 +23,9 @@ def main():
     A working directory must be 'initialise'd before downstream processing and post-
     processing takes place. An analysis directory can be 'view'ed to see what samples
     are present. Otherwise, if you have not done so already, you may optionally
-    use this script to 'call' variants or calculate the 'depth' of coverage for your
-    samples before proceeding with the psQTL pipeline.
+    use this script to 'call' variants or calculate the 'depth' of coverage (and CNV
+    predictions arising from that) for your samples before proceeding on to use the
+    psQTL_proc.py script for further analysis.
     """
     # Establish main parser
     p = argparse.ArgumentParser()
@@ -413,7 +414,7 @@ def vmain(args, locations):
     
     # Present VCF cache
     print() # blank line for spacing
-    print("# Variants VCF details:")
+    print("# 'Call' VCF details:")
     if args.vcfFile is not None:
         vcfCache = VcfCache(locations.workingDirectory)
         vcfCache.establish()
@@ -429,7 +430,7 @@ def vmain(args, locations):
         print("VCF file: None")
     
     print() # blank line for spacing
-    print("# Filtered variants VCF details:")
+    print("# Filtered 'call' VCF details:")
     if args.filteredVcfFile is not None:
         vcfCache = VcfCache(locations.workingDirectory)
         vcfCache.establish()

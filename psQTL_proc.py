@@ -43,10 +43,10 @@ def generate_ed_file(vcfFile, metadataDict, outputFileName, parentSamples=[], is
                             f"{numAllelesB2}\t{euclideanDist}\n")
 
 def main():
-    usage = """%(prog)s processes VCF or VCF-like files to calculate Euclidean distance values
-    of variants or deletions among groups. The input directory is expected to have been
-    'initialise'd by psQTL_prep.py such that all necessary files have been validated and
-    prepared for analysis.
+    usage = """%(prog)s processes VCF or VCF-like files containing variant or CNV
+    predictions for samples belonging to two groups. The working directory is expected
+    to have been 'initialise'd by psQTL_prep.py such that all necessary files have been
+    validated and prepared for analysis.
     """
     # Establish parser
     p = argparse.ArgumentParser()
@@ -77,13 +77,13 @@ def main():
     eparser = subparsers.add_parser("ed",
                                     parents=[p],
                                     add_help=False,
-                                    help="Compute Euclidean distance of call and/or depth variants")
+                                    help="Compute Euclidean distance of 'call' and/or 'depth' variants")
     eparser.set_defaults(func=emain)
     
     sparser = subparsers.add_parser("splsda",
                                     parents=[p],
                                     add_help=False,
-                                    help="Compute local sPLS-DA of call and/or depth variants")
+                                    help="Compute local sPLS-DA of 'call' and/or 'depth' variants")
     sparser.set_defaults(func=smain)
     
     # ED-subparser arguments
@@ -225,11 +225,11 @@ def smain(args, metadataDict, locations):
 def call_splsda(args, metadataDict, locations):
     # Encode variant calls for sPLS-DA analysis
     if (not os.path.isfile(locations.variantRecodedFile)) or (not os.path.isfile(locations.variantRecodedFile + ".ok")):
-        print("# Encoding variant calls for sPLS-DA analysis ...")
+        print("# Encoding 'call' variants for sPLS-DA analysis ...")
         recode_vcf(args.vcfFile, locations.variantRecodedFile, metadataDict, isCNV=False)
         open(locations.variantRecodedFile + ".ok", "w").close() # touch a .ok file to indicate success
     else:
-        print("# Variant calls already encoded for sPLS-DA analysis; skipping ...")
+        print("# 'call' variants already encoded for sPLS-DA analysis; skipping ...")
     
     # Run windowed sPLS-DA for variant calls
     if (not os.path.isfile(locations.variantSplsdaSelectedFile) or \
@@ -238,7 +238,7 @@ def call_splsda(args, metadataDict, locations):
         not os.path.isfile(locations.variantSplsdaBerFile + ".ok")) or \
         (not os.path.isfile(locations.variantSplsdaRdataFile) or \
         not os.path.isfile(locations.variantSplsdaRdataFile + ".ok")):
-            print("# Running windowed sPLS-DA for variant calls ...")
+            print("# Running windowed sPLS-DA for 'call' variants ...")
             run_windowed_splsda(args.metadataFile, locations.variantRecodedFile,
                                 locations.variantSplsdaSelectedFile,
                                 locations.variantSplsdaBerFile,
@@ -249,18 +249,18 @@ def call_splsda(args, metadataDict, locations):
             open(locations.variantSplsdaSelectedFile + ".ok", "w").close()
             open(locations.variantSplsdaBerFile + ".ok", "w").close()
             open(locations.variantSplsdaRdataFile + ".ok", "w").close()
-            print("Variant call sPLS-DA analysis complete!")
+            print("'call' sPLS-DA analysis complete!")
     else:
-        print("# Variant calls already processed for sPLS-DA analysis; skipping ...")
+        print("# 'call' variants already processed for sPLS-DA analysis; skipping ...")
 
 def depth_splsda(args, metadataDict, locations):
     # Encode deletion variants for sPLS-DA analysis
     if (not os.path.isfile(locations.deletionRecodedFile)) or (not os.path.isfile(locations.deletionRecodedFile + ".ok")):
-        print("# Encoding deletion variants for sPLS-DA analysis ...")
+        print("# Encoding 'depth' CNVs for sPLS-DA analysis ...")
         recode_vcf(args.deletionFile, locations.deletionRecodedFile, metadataDict, isCNV=True)
         open(locations.deletionRecodedFile + ".ok", "w").close() # touch a .ok file to indicate success
     else:
-        print("# Deletion variants already encoded for sPLS-DA analysis; skipping ...")
+        print("# 'depth' CNVs already encoded for sPLS-DA analysis; skipping ...")
     
     # Run windowed sPLS-DA for deletion variants
     if (not os.path.isfile(locations.deletionSplsdaSelectedFile) or \
@@ -269,7 +269,7 @@ def depth_splsda(args, metadataDict, locations):
         not os.path.isfile(locations.deletionSplsdaBerFile + ".ok")) or \
         (not os.path.isfile(locations.deletionSplsdaRdataFile) or \
         not os.path.isfile(locations.deletionSplsdaRdataFile + ".ok")):
-            print("# Running windowed sPLS-DA for deletion variants ...")
+            print("# Running windowed sPLS-DA for 'depth' CNVs ...")
             run_windowed_splsda(args.metadataFile, locations.deletionRecodedFile,
                                 locations.deletionSplsdaSelectedFile,
                                 locations.deletionSplsdaBerFile,
@@ -280,21 +280,21 @@ def depth_splsda(args, metadataDict, locations):
             open(locations.deletionSplsdaSelectedFile + ".ok", "w").close()
             open(locations.deletionSplsdaBerFile + ".ok", "w").close()
             open(locations.deletionSplsdaRdataFile + ".ok", "w").close()
-            print("Deletion variant sPLS-DA analysis complete!")
+            print("'depth' sPLS-DA analysis complete!")
     else:
-        print("# Deletion variants already processed for sPLS-DA analysis; skipping ...")
+        print("# 'depth' CNVs already processed for sPLS-DA analysis; skipping ...")
 
 def integrative_splsda(args, metadataDict, locations):
     # Check if it is possible to run integrative sPLS-DA
     if (not os.path.isfile(locations.variantSplsdaRdataFile) or \
         not os.path.isfile(locations.deletionSplsdaRdataFile)):
-        raise FileNotFoundError(f"Cannot run integrative sPLS-DA without both variant ({locations.variantSplsdaRdataFile}) " + 
-                                f"and deletion ({locations.deletionSplsdaRdataFile}) sPLS-DA RData files!")
+        raise FileNotFoundError(f"Cannot run integrative sPLS-DA without both 'call' ({locations.variantSplsdaRdataFile}) " + 
+                                f"and 'depth' ({locations.deletionSplsdaRdataFile}) sPLS-DA RData files!")
     
     # Run integrative sPLS-DA for variant calls
     if (not os.path.isfile(locations.integrativeSplsdaSelectedFile) or \
         not os.path.isfile(locations.integrativeSplsdaSelectedFile + ".ok")):
-            print("# Running integration of sPLS-DA for variants and deletions ...")
+            print("# Running integration of sPLS-DA for 'call' and 'depth' variants ...")
             run_integrative_splsda(locations.variantSplsdaRdataFile, locations.deletionSplsdaRdataFile,
                                    locations.integrativeSplsdaSelectedFile,
                                    locations.integrativeSplsdaRscript,
@@ -302,7 +302,7 @@ def integrative_splsda(args, metadataDict, locations):
             open(locations.integrativeSplsdaSelectedFile + ".ok", "w").close()
             print("Integrative sPLS-DA analysis complete!")
     else:
-        print("# Integrative sPLS-DA of variants and deletions already processed; skipping ...")
+        print("# Integrative sPLS-DA of variants already processed; skipping ...")
 
 if __name__ == "__main__":
     main()

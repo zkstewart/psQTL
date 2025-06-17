@@ -1091,7 +1091,7 @@ class TestMain(unittest.TestCase):
         #self.assertTrue(returncode == 0, f"Expected returncode 0 but got: {returncode}")
         self.assertTrue(stderr == "", f"Expected no stderr output but got: {stderr}")
         
-        edFile = os.path.join(workDir, "psQTL_variants.ed.tsv.gz")
+        edFile = os.path.join(workDir, "psQTL_call.ed.tsv.gz")
         edContents = []
         with read_gz_file(edFile) as fileIn:
             for line in fileIn:
@@ -1109,17 +1109,17 @@ class TestMain(unittest.TestCase):
         self.assertTrue(stderr == "", f"Expected no stderr output but got: {stderr}")
         
         # Assert: check that the output files are correctly generated
-        berFile = os.path.join(workDir, "splsda", "psQTL_variants.BER.tsv")
+        berFile = os.path.join(workDir, "splsda", "psQTL_call.BER.tsv")
         with open(berFile) as fileIn:
             berContents = fileIn.readlines()
         self.assertTrue(berContents[1] == berTruth, f"Expected BER file to contain '{berTruth}' but got: {berContents[1]}")
         
-        selectedFile = os.path.join(workDir, "splsda", "psQTL_variants.selected.tsv")
+        selectedFile = os.path.join(workDir, "splsda", "psQTL_call.selected.tsv")
         with open(selectedFile) as fileIn:
             selectedContents = fileIn.readlines()
         self.assertTrue(selectedContents[1] == selectedTruth, f"Expected selected file to contain '{selectedTruth}' but got: {selectedContents[1]}")
         
-        recodeFile = os.path.join(workDir, "splsda", "psQTL_variants.recode.tsv.gz")
+        recodeFile = os.path.join(workDir, "splsda", "psQTL_call.recode.tsv.gz")
         recodeContents = []
         with read_gz_file(recodeFile) as fileIn:
             for line in fileIn:
@@ -1167,7 +1167,7 @@ class TestMain(unittest.TestCase):
         #self.assertTrue(returncode == 0, f"Expected returncode 0 but got: {returncode}")
         self.assertTrue(stderr == "", f"Expected no stderr output but got: {stderr}")
         
-        edFile = os.path.join(workDir, "psQTL_variants.ed.tsv.gz")
+        edFile = os.path.join(workDir, "psQTL_call.ed.tsv.gz")
         edContents = []
         with read_gz_file(edFile) as fileIn:
             for line in fileIn:
@@ -1185,17 +1185,17 @@ class TestMain(unittest.TestCase):
         self.assertTrue(stderr == "", f"Expected no stderr output but got: {stderr}")
         
         # Assert: check that the output files are correctly generated
-        berFile = os.path.join(workDir, "splsda", "psQTL_variants.BER.tsv")
+        berFile = os.path.join(workDir, "splsda", "psQTL_call.BER.tsv")
         with open(berFile) as fileIn:
             berContents = fileIn.readlines()
         self.assertTrue(berContents[1] == berTruth, f"Expected BER file to contain '{berTruth}' but got: {berContents[1]}")
         
-        selectedFile = os.path.join(workDir, "splsda", "psQTL_variants.selected.tsv")
+        selectedFile = os.path.join(workDir, "splsda", "psQTL_call.selected.tsv")
         with open(selectedFile) as fileIn:
             selectedContents = fileIn.readlines()
         self.assertTrue(selectedContents[1] == selectedTruth, f"Expected selected file to contain '{selectedTruth}' but got: {selectedContents[1]}")
         
-        recodeFile = os.path.join(workDir, "splsda", "psQTL_variants.recode.tsv.gz")
+        recodeFile = os.path.join(workDir, "splsda", "psQTL_call.recode.tsv.gz")
         recodeContents = []
         with read_gz_file(recodeFile) as fileIn:
             for line in fileIn:
@@ -1243,7 +1243,7 @@ class TestMain(unittest.TestCase):
         #self.assertTrue(returncode == 0, f"Expected returncode 0 but got: {returncode}")
         self.assertTrue(stderr == "", f"Expected no stderr output but got: {stderr}")
         
-        edFile = os.path.join(workDir, "psQTL_variants.ed.tsv.gz")
+        edFile = os.path.join(workDir, "psQTL_call.ed.tsv.gz")
         edContents = []
         with read_gz_file(edFile) as fileIn:
             for line in fileIn:
@@ -1261,17 +1261,17 @@ class TestMain(unittest.TestCase):
         self.assertTrue(stderr == "", f"Expected no stderr output but got: {stderr}")
         
         # Assert: check that the output files are correctly generated
-        berFile = os.path.join(workDir, "splsda", "psQTL_variants.BER.tsv")
+        berFile = os.path.join(workDir, "splsda", "psQTL_call.BER.tsv")
         with open(berFile) as fileIn:
             berContents = fileIn.readlines()
         self.assertTrue(berContents[1] == berTruth, f"Expected BER file to contain '{berTruth}' but got: {berContents[1]}")
         
-        selectedFile = os.path.join(workDir, "splsda", "psQTL_variants.selected.tsv")
+        selectedFile = os.path.join(workDir, "splsda", "psQTL_call.selected.tsv")
         with open(selectedFile) as fileIn:
             selectedContents = fileIn.readlines()
         self.assertTrue(selectedContents[1] == selectedTruth, f"Expected selected file to contain '{selectedTruth}' but got: {selectedContents[1]}")
         
-        recodeFile = os.path.join(workDir, "splsda", "psQTL_variants.recode.tsv.gz")
+        recodeFile = os.path.join(workDir, "splsda", "psQTL_call.recode.tsv.gz")
         recodeContents = []
         with read_gz_file(recodeFile) as fileIn:
             for line in fileIn:
@@ -1319,7 +1319,7 @@ class TestMain(unittest.TestCase):
         #self.assertTrue(returncode == 0, f"Expected returncode 0 but got: {returncode}")
         self.assertTrue(stderr == "", f"Expected no stderr output but got: {stderr}")
         
-        edFile = os.path.join(workDir, "psQTL_variants.ed.tsv.gz")
+        edFile = os.path.join(workDir, "psQTL_call.ed.tsv.gz")
         edContents = []
         with read_gz_file(edFile) as fileIn:
             for line in fileIn:
@@ -1337,17 +1337,17 @@ class TestMain(unittest.TestCase):
         self.assertTrue(stderr == "", f"Expected no stderr output but got: {stderr}")
         
         # Assert: check that the output files are correctly generated
-        berFile = os.path.join(workDir, "splsda", "psQTL_variants.BER.tsv")
+        berFile = os.path.join(workDir, "splsda", "psQTL_call.BER.tsv")
         with open(berFile) as fileIn:
             berContents = fileIn.readlines()
         self.assertTrue(berContents[1] == berTruth, f"Expected BER file to contain '{berTruth}' but got: {berContents[1]}")
         
-        selectedFile = os.path.join(workDir, "splsda", "psQTL_variants.selected.tsv")
+        selectedFile = os.path.join(workDir, "splsda", "psQTL_call.selected.tsv")
         with open(selectedFile) as fileIn:
             selectedContents = fileIn.readlines()
         self.assertTrue(selectedContents[1] == selectedTruth, f"Expected selected file to contain '{selectedTruth}' but got: {selectedContents[1]}")
         
-        recodeFile = os.path.join(workDir, "splsda", "psQTL_variants.recode.tsv.gz")
+        recodeFile = os.path.join(workDir, "splsda", "psQTL_call.recode.tsv.gz")
         recodeContents = []
         with read_gz_file(recodeFile) as fileIn:
             for line in fileIn:
@@ -1395,7 +1395,7 @@ class TestMain(unittest.TestCase):
         self.assertTrue(returncode == 0, f"Expected returncode 0 but got: {returncode}")
         self.assertTrue(stderr == "", f"Expected no stderr output but got: {stderr}")
         
-        edFile = os.path.join(workDir, "psQTL_variants.ed.tsv.gz")
+        edFile = os.path.join(workDir, "psQTL_call.ed.tsv.gz")
         edContents = []
         with read_gz_file(edFile) as fileIn:
             for line in fileIn:
@@ -1413,17 +1413,17 @@ class TestMain(unittest.TestCase):
         self.assertTrue(stderr == "", f"Expected no stderr output but got: {stderr}")
         
         # Assert: check that the output files are correctly generated
-        berFile = os.path.join(workDir, "splsda", "psQTL_variants.BER.tsv")
+        berFile = os.path.join(workDir, "splsda", "psQTL_call.BER.tsv")
         with open(berFile) as fileIn:
             berContents = fileIn.readlines()
         self.assertTrue(berContents[1] == berTruth, f"Expected BER file to contain '{berTruth}' but got: {berContents[1]}")
         
-        selectedFile = os.path.join(workDir, "splsda", "psQTL_variants.selected.tsv")
+        selectedFile = os.path.join(workDir, "splsda", "psQTL_call.selected.tsv")
         with open(selectedFile) as fileIn:
             selectedContents = fileIn.readlines()
         self.assertTrue(selectedContents[1] == selectedTruth, f"Expected selected file to contain '{selectedTruth}' but got: {selectedContents[1]}")
         
-        recodeFile = os.path.join(workDir, "splsda", "psQTL_variants.recode.tsv.gz")
+        recodeFile = os.path.join(workDir, "splsda", "psQTL_call.recode.tsv.gz")
         recodeContents = []
         with read_gz_file(recodeFile) as fileIn:
             for line in fileIn:
@@ -1471,7 +1471,7 @@ class TestMain(unittest.TestCase):
         #self.assertTrue(returncode == 0, f"Expected returncode 0 but got: {returncode}")
         self.assertTrue(stderr == "", f"Expected no stderr output but got: {stderr}")
         
-        edFile = os.path.join(workDir, "psQTL_variants.ed.tsv.gz")
+        edFile = os.path.join(workDir, "psQTL_call.ed.tsv.gz")
         edContents = []
         with read_gz_file(edFile) as fileIn:
             for line in fileIn:
@@ -1489,17 +1489,17 @@ class TestMain(unittest.TestCase):
         self.assertTrue(stderr == "", f"Expected no stderr output but got: {stderr}")
         
         # Assert: check that the output files are correctly generated
-        berFile = os.path.join(workDir, "splsda", "psQTL_variants.BER.tsv")
+        berFile = os.path.join(workDir, "splsda", "psQTL_call.BER.tsv")
         with open(berFile) as fileIn:
             berContents = fileIn.readlines()
         self.assertTrue(berContents[1] == berTruth, f"Expected BER file to contain '{berTruth}' but got: {berContents[1]}")
         
-        selectedFile = os.path.join(workDir, "splsda", "psQTL_variants.selected.tsv")
+        selectedFile = os.path.join(workDir, "splsda", "psQTL_call.selected.tsv")
         with open(selectedFile) as fileIn:
             selectedContents = fileIn.readlines()
         self.assertTrue(selectedContents[1] == selectedTruth, f"Expected selected file to contain '{selectedTruth}' but got: {selectedContents[1]}")
         
-        recodeFile = os.path.join(workDir, "splsda", "psQTL_variants.recode.tsv.gz")
+        recodeFile = os.path.join(workDir, "splsda", "psQTL_call.recode.tsv.gz")
         recodeContents = []
         with read_gz_file(recodeFile) as fileIn:
             for line in fileIn:

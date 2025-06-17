@@ -35,7 +35,7 @@ class Locations:
     
     @property
     def finalDeletionFile(self):
-        return os.path.join(self.depthDir, "psQTL_deletions.vcf.gz") # Make sure this is gzipped
+        return os.path.join(self.depthDir, "psQTL_depth.vcf.gz")
     
     @property
     def bamListFile(self):
@@ -43,31 +43,31 @@ class Locations:
     
     @property
     def vcfFile(self):
-        return os.path.join(self.callDir, "psQTL_variants.vcf.gz")
+        return os.path.join(self.callDir, "psQTL_call.vcf.gz")
     
     @property
     def filteredVcfFile(self):
-        return os.path.join(self.callDir, "psQTL_variants.filtered.vcf.gz")
+        return os.path.join(self.callDir, "psQTL_call.filtered.vcf.gz")
     
     @property
     def variantEdFile(self):
-        return os.path.join(self.workingDirectory, "psQTL_variants.ed.tsv.gz")
+        return os.path.join(self.workingDirectory, "psQTL_call.ed.tsv.gz")
     
     @property
     def variantRecodedFile(self):
-        return os.path.join(self.splsdaDir, "psQTL_variants.recode.tsv.gz")
+        return os.path.join(self.splsdaDir, "psQTL_call.recode.tsv.gz")
     
     @property
     def variantSplsdaSelectedFile(self):
-        return os.path.join(self.splsdaDir, "psQTL_variants.selected.tsv")
+        return os.path.join(self.splsdaDir, "psQTL_call.selected.tsv")
     
     @property
     def variantSplsdaBerFile(self):
-        return os.path.join(self.splsdaDir, "psQTL_variants.BER.tsv")
+        return os.path.join(self.splsdaDir, "psQTL_call.BER.tsv")
     
     @property
     def variantSplsdaRdataFile(self):
-        return os.path.join(self.splsdaDir, "psQTL_variants.Rdata")
+        return os.path.join(self.splsdaDir, "psQTL_call.Rdata")
     
     @property
     def deletionEdFile(self):
@@ -103,7 +103,7 @@ class Locations:
 
     # Attributes with value input
     def variantEdPickleFile(self, value):
-        return os.path.join(self.workingDirectory, f"psQTL_variants.ed.{value}.pkl")
+        return os.path.join(self.workingDirectory, f"psQTL_call.ed.{value}.pkl")
 
     def deletionEdPickleFile(self, value):
         return os.path.join(self.workingDirectory, f"psQTL_depth.ed.{value}.pkl")

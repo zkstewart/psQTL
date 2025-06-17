@@ -38,10 +38,10 @@ def raise_to_power(edDict, power):
 def main():
     usage = """%(prog)s processes the output of psQTL_proc.py to either 1) plot segregation
     statistics or 2) report on gene proximity to potential QTLs. The segregation statistics
-    can be plotted in as a combination of line plots, scatter plots, alignment coverage plots,
+    can be plotted as a combination of line plots, scatter plots, alignment coverage plots,
     and/or gene locations. The gene proximity report will identify genes that are proximal to or
-    contained within potential QTLs (in the case of deletions). The input directory is expected
-    to have been 'initialise'd by psQTL_prep.py and 'process'ed by psQTL_proc.py.
+    contained within potential QTL regions. The input directory is expected to have been
+    'initialise'd by psQTL_prep.py and 'process'ed by psQTL_proc.py.
     """
     # Establish main parser
     p = argparse.ArgumentParser()
