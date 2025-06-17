@@ -640,9 +640,7 @@ class Plot:
             q1, median, q3 = np.percentile(groupValues, [25, 50, 75], axis=0)
             
             # Figure out the x values
-            x = []
-            for index, (windowStart, windowEnd, _) in enumerate(overlappingBins):
-                x.append(windowStart + (windowEnd - windowStart)/2)
+            x = [ windowStart for windowStart, _, _ in overlappingBins ]
             
             # Store the data
             coverageData[group] = {
