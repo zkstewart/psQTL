@@ -8,7 +8,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from modules.parsing import parse_metadata, vcf_header_to_metadata_validation, parse_vcf_genotypes, \
     parse_vcf_stats, parse_samtools_depth_tsv, parse_binned_tsv, read_gz_file
 from modules.ncls import WindowedNCLS
-from modules.ed import parse_vcf_for_ed, calculate_segregant_ed, gt_median_adjustment, \
+from modules.ed import parse_vcf_for_ed, gt_median_adjustment, filter_impossible_genotypes, \
     calculate_allele_frequency_ed, calculate_genotype_frequency_ed, calculate_inheritance_ed
 from modules.depth import get_median_value, predict_deletions, call_deletions_from_depth
 from modules.samtools_handling import depth_to_histoDict
@@ -367,9 +367,9 @@ class TestED(unittest.TestCase):
         notCNV_truth = [0.478198599250326,0.5942205544782738,0.6083495165377463,
                         0.7877780740982955,0.6366455643787936,0.3733361028931871,
                         0.14110778338534205,0.396669657738795]
-        isCNV_truth = [0.478198599250326,0.40607684329781774,0.6914281385881762,
-                       0.888979035327655,0.7651177588005215,0.14110778338534202,
-                       0.0,0.396669657738795]
+        isCNV_truth = [0.478198599250326,0.5942205544782738,0.6914281385881762,
+                       0.888979035327655,0.6626410942564203,0.3733361028931871,
+                       0.14110778338534205,0.396669657738795]
         # notCNV_truth = [0.7716249967879256,0.7586519135256539,0.6083495165377463, # these values
         #                 0.8019437941637759,0.6764821026903794,0.6951352124261518, # are for if
         #                 0.2324038163770089,0.79333931547759]
@@ -379,14 +379,12 @@ class TestED(unittest.TestCase):
         
         # Act & Assert
         notCNV_results = []
-        for contig, pos, variant, g1Alleles, g2Alleles, g1Filtered, g2Filtered, aED, gED, iED \
-        in parse_vcf_for_ed(vcfFile, metadataDict, isCNV=False, ignoreIdentical=True, quiet=True):
-            notCNV_results.append(aED)
+        for resultsDict in parse_vcf_for_ed(vcfFile, metadataDict, isCNV=False, ignoreIdentical=True, quiet=True):
+            notCNV_results.append(resultsDict["alleleED"])
         
         isCNV_results = []
-        for contig, pos, variant, g1Alleles, g2Alleles, g1Filtered, g2Filtered, aED, gED, iED \
-        in parse_vcf_for_ed(vcfFile, metadataDict, isCNV=True, ignoreIdentical=True, quiet=True):
-            isCNV_results.append(aED)
+        for resultsDict in parse_vcf_for_ed(vcfFile, metadataDict, isCNV=True, ignoreIdentical=True, quiet=True):
+            isCNV_results.append(resultsDict["alleleED"])
         
         # Assert
         for v1, v2 in zip(notCNV_results, notCNV_truth):
@@ -402,28 +400,24 @@ class TestED(unittest.TestCase):
         
        # Act & Assert
         notCNV_results_1 = []
-        for contig, pos, variant, g1Alleles, g2Alleles, g1Filtered, g2Filtered, aED, gED, iED \
-        in parse_vcf_for_ed(vcfFile, metadataDict, isCNV=False, ignoreIdentical=True, quiet=True):
-            notCNV_results_1.append(aED)
+        for resultsDict in parse_vcf_for_ed(vcfFile, metadataDict, isCNV=False, ignoreIdentical=True, quiet=True):
+            notCNV_results_1.append(resultsDict["alleleED"])
         
         isCNV_results_1 = []
-        for contig, pos, variant, g1Alleles, g2Alleles, g1Filtered, g2Filtered, aED, gED, iED \
-        in parse_vcf_for_ed(vcfFile, metadataDict, isCNV=True, ignoreIdentical=True, quiet=True):
-            isCNV_results_1.append(aED)
+        for resultsDict in parse_vcf_for_ed(vcfFile, metadataDict, isCNV=True, ignoreIdentical=True, quiet=True):
+            isCNV_results_1.append(resultsDict["alleleED"])
         
         # Arrange #2
         metadataDict["group1"] = ['S44', 'S48', 'S50', 'S54', 'S56', 'S59', 'S64', 'S69', 'S76', 'S77'] # drop S95
         
         # Act #2
         notCNV_results_2 = []
-        for contig, pos, variant, g1Alleles, g2Alleles, g1Filtered, g2Filtered, aED, gED, iED \
-        in parse_vcf_for_ed(vcfFile, metadataDict, isCNV=False, ignoreIdentical=True, quiet=True):
-            notCNV_results_2.append(aED)
+        for resultsDict in parse_vcf_for_ed(vcfFile, metadataDict, isCNV=False, ignoreIdentical=True, quiet=True):
+            notCNV_results_2.append(resultsDict["alleleED"])
         
         isCNV_results_2 = []
-        for contig, pos, variant, g1Alleles, g2Alleles, g1Filtered, g2Filtered, aED, gED, iED \
-        in parse_vcf_for_ed(vcfFile, metadataDict, isCNV=True, ignoreIdentical=True, quiet=True):
-            isCNV_results_2.append(aED)
+        for resultsDict in parse_vcf_for_ed(vcfFile, metadataDict, isCNV=True, ignoreIdentical=True, quiet=True):
+            isCNV_results_2.append(resultsDict["alleleED"])
         
         # Assert
         for v1, v2 in zip(notCNV_results_1[:-1], notCNV_results_2[:-1]): # last value will not change
@@ -439,9 +433,9 @@ class TestED(unittest.TestCase):
         notCNV_truth = [0.478198599250326,0.5942205544782738,0.6083495165377463,
                         0.7877780740982955,0.6366455643787936,0.3733361028931871,
                         0.14110778338534205,0.396669657738795]
-        isCNV_truth = [0.478198599250326,0.40607684329781774,0.6914281385881762,
-                       0.888979035327655,0.7651177588005215,0.14110778338534202,
-                       0.0,0.396669657738795]
+        isCNV_truth = [0.478198599250326,0.5942205544782738,0.6914281385881762,
+                       0.888979035327655,0.6626410942564203,0.3733361028931871,
+                       0.14110778338534205,0.396669657738795]
         # notCNV_truth = [0.7716249967879256,0.7586519135256539,0.6083495165377463,
         #                 0.8019437941637759,0.6764821026903794,0.6951352124261518,
         #                 0.2324038163770089,0.79333931547759]
@@ -451,14 +445,12 @@ class TestED(unittest.TestCase):
         
         # Act & Assert
         notCNV_results = []
-        for contig, pos, variant, g1Alleles, g2Alleles, g1Filtered, g2Filtered, aED, gED, iED \
-        in parse_vcf_for_ed(vcfFile, metadataDict, isCNV=False, ignoreIdentical=True, quiet=True):
-            notCNV_results.append(aED)
+        for resultsDict in parse_vcf_for_ed(vcfFile, metadataDict, isCNV=False, ignoreIdentical=True, quiet=True):
+            notCNV_results.append(resultsDict["alleleED"])
         
         isCNV_results = []
-        for contig, pos, variant, g1Alleles, g2Alleles, g1Filtered, g2Filtered, aED, gED, iED \
-        in parse_vcf_for_ed(vcfFile, metadataDict, isCNV=True, ignoreIdentical=True, quiet=True):
-            isCNV_results.append(aED)
+        for resultsDict in parse_vcf_for_ed(vcfFile, metadataDict, isCNV=True, ignoreIdentical=True, quiet=True):
+            isCNV_results.append(resultsDict["alleleED"])
         
         # Assert
         for v1, v2 in zip(notCNV_results, notCNV_truth):
@@ -466,23 +458,24 @@ class TestED(unittest.TestCase):
         for v1, v2 in zip(isCNV_results, isCNV_truth):
             self.assertAlmostEqual(v1, v2, places=5, msg=f"Expected {v2} but got {v1}")
     
-    def test_calculate_segregant_ed_1(self):
-        "Test that segregation ED is different for isCNV True and False under certain conditions"
+    def test_calculate_allele_frequency_ed_1(self):
+        "Test that allele frequency ED is different for isCNV True and False under certain conditions"
         # Arrange
         g1Gt = [[2, 2],[0, 1],[0, 0],[1, 2],[0, 1],[0, 0],[0, 1],[0, 0],[0, 0],[1, 2],[0, 0]]
         g2Gt = [[0, 0],[2, 2],[0, 0],[0, 0],[0, 0],[0, 0],[0, 0],[0, 0],[0, 0],[0, 0],[0, 1],
                 [1, 2],[0, 0],[2, 2],[1, 2],[0, 0],[1, 2],[2, 2],[0, 0],[1, 2],[0, 0],[1, 2],
                 [0, 0],[0, 0],[0, 0],[0, 0],[0, 1],[1, 2],[1, 2],[2, 2],[1, 2],[1, 2],[2, 2],
                 [0, 0],[0, 0],[0, 0],[0, 0],[0, 0],[0, 0],[2, 2],[1, 2]]
+        g1Gt_cnv, g2Gt_cnv = gt_median_adjustment([g1Gt, g2Gt])
         
         # Act
-        g1Alleles_1, g2Alleles_1, g1Filtered_1, g2Filtered_2, aED_1, gED_1, iED_1 = calculate_segregant_ed(g1Gt, g2Gt, isCNV=True)
-        g1Alleles_2, g2Alleles_2, g1Filtered_1, g2Filtered_2, aED_2, gED_2, iED_2 = calculate_segregant_ed(g1Gt, g2Gt, isCNV=False)
+        g1Alleles_1, g2Alleles_1, aED_1 = calculate_allele_frequency_ed(g1Gt_cnv, g2Gt_cnv)
+        g1Alleles_2, g2Alleles_2, aED_2 = calculate_allele_frequency_ed(g1Gt, g2Gt)
         
         # Assert
         self.assertNotEqual(aED_1, aED_2, "ED should not be the same for isCNV True and False")
     
-    def test_calculate_segregant_ed_2(self):
+    def test_calculate_allele_frequency_ed_2(self):
         "Test that segregation ED is the same for isCNV True and False under certain conditions"
         # Arrange
         g1Gt = [[0, 1],[0, 1],[0, 1],[0, 1],[0, 1],[0, 1],[0, 1],[0, 1],[0, 1],[1, 1],[0, 1]]
@@ -490,10 +483,11 @@ class TestED(unittest.TestCase):
                 [0, 1],[0, 0],[0, 1],[0, 1],[0, 0],[0, 0],[0, 0],[0, 1],[0, 1],[0, 1],[0, 0],
                 [0, 0],[0, 0],[0, 0],[0, 0],[0, 1],[0, 0],[0, 1],[0, 0],[0, 0],[0, 0],[0, 0],
                 [0, 1],[0, 0],[0, 1],[0, 0],[0, 0],[0, 0],[0, 0],[0, 0]]
+        g1Gt_cnv, g2Gt_cnv = gt_median_adjustment([g1Gt, g2Gt])
         
         # Act
-        g1Alleles_1, g2Alleles_1, g1Filtered_1, g2Filtered_2, aED_1, gED_1, iED_1 = calculate_segregant_ed(g1Gt, g2Gt, isCNV=True)
-        g1Alleles_2, g2Alleles_2, g1Filtered_1, g2Filtered_2, aED_2, gED_2, iED_2 = calculate_segregant_ed(g1Gt, g2Gt, isCNV=False)
+        g1Alleles_1, g2Alleles_1, aED_1 = calculate_allele_frequency_ed(g1Gt_cnv, g2Gt_cnv)
+        g1Alleles_2, g2Alleles_2, aED_2 = calculate_allele_frequency_ed(g1Gt, g2Gt)
         
         # Assert
         self.assertEqual(aED_1, aED_2, "ED should be the same for isCNV True and False")
@@ -508,7 +502,8 @@ class TestED(unittest.TestCase):
         aEDTruth = 0
         
         # Act
-        g1Alleles, g2Alleles, g1Filtered, g2Filtered, aED, gED, iED = calculate_segregant_ed(g1Gt, g2Gt)
+        g1Alleles_1, g2Alleles_1, aED = calculate_allele_frequency_ed(g1Gt, g2Gt)
+        g1Alleles_2, g2Alleles_2, gED = calculate_genotype_frequency_ed(g1Gt, g2Gt)
         
         # Assert
         self.assertEqual(gED, gEDTruth, f"Expected genotypes ED to {gEDTruth} but got {gED}")
@@ -523,12 +518,14 @@ class TestED(unittest.TestCase):
         truth = 0
         
         # Act
-        g1Alleles, g2Alleles, g1Filtered, g2Filtered, aED, gED, iED = calculate_segregant_ed(g1Gt, g2Gt)
+        g1Alleles_1, g2Alleles_1, aED = calculate_allele_frequency_ed(g1Gt, g2Gt)
+        g1Gt, g2Gt = filter_impossible_genotypes(g1Gt, g2Gt, parentsGT)
+        g1Filtered, g2Filtered, iED = calculate_inheritance_ed(g1Gt, g2Gt, parentsGT)
         
         # Assert
         self.assertEqual(aED, truth, "Allele ED should be 0 for identical genotypes")
-        self.assertEqual(gED, truth, "Inheritance ED should be 0 for identical genotypes")
-        self.assertEqual(aED, gED, "Both ED methods should be equal for zero segregation")
+        self.assertEqual(iED, truth, "Inheritance ED should be 0 for identical genotypes")
+        self.assertEqual(aED, iED, "Both ED methods should be equal for zero segregation")
     
     def test_inheritance_versus_allele_frequency_equality_2(self):
         "Both ED methods should be equal for maximal segregation"
@@ -539,7 +536,9 @@ class TestED(unittest.TestCase):
         truth = MAXIMAL_SEGREGATION
         
         # Act
-        g1Alleles, g2Alleles, g1Filtered, g2Filtered, aED, gED, iED = calculate_segregant_ed(g1Gt, g2Gt, parentsGT=parentsGT)
+        g1Alleles_1, g2Alleles_1, aED = calculate_allele_frequency_ed(g1Gt, g2Gt)
+        g1Gt, g2Gt = filter_impossible_genotypes(g1Gt, g2Gt, parentsGT)
+        g1Filtered, g2Filtered, iED = calculate_inheritance_ed(g1Gt, g2Gt, parentsGT)
         
         # Assert
         self.assertAlmostEqual(aED, truth, places=5, msg="Alleles ED should be ~1.41421 for identical genotypes")
@@ -551,17 +550,19 @@ class TestED(unittest.TestCase):
         parentsGT = [ [0, 1], [0, 2] ] # represents "A/T" and "A/G" parents
         g1Gt = [[0, 2], [1, 2], [0, 2], [0, 0]] # represents "A/G", "T/G", "A/G", "A/A" genotypes in group 1
         g2Gt = [[1, 2], [0, 1], [0, 0], [0, 0]] # represents "T/G", "A/T", "A/A", "A/A" genotypes in group 2
+        
         # truth = 0.7905694150420949 # calculated by hand on the plane from WA to Brisbane!
         truth = 0.5590169943749475 # after adjustment of dividing sum by 2 prior to sqrt() operation
         
         # Act
-        g1Alleles, g2Alleles, g1Filtered, g2Filtered, aED, gED, iED = calculate_segregant_ed(g1Gt, g2Gt, parentsGT=parentsGT)
-        
+        g1Gt, g2Gt = filter_impossible_genotypes(g1Gt, g2Gt, parentsGT)
+        g1Filtered, g2Filtered, iED = calculate_inheritance_ed(g1Gt, g2Gt, parentsGT)
+                
         # Assert
         self.assertAlmostEqual(iED, truth, places=5, 
                              msg=f"Expected ED to be approximately {truth} but got {iED}")
-        self.assertEqual(g1Alleles, 8, "Expected 8 alleles in group 1")
-        self.assertEqual(g2Alleles, 8, "Expected 8 alleles in group 2")
+        self.assertEqual(g1Filtered, 8, "Expected 8 alleles in group 1")
+        self.assertEqual(g2Filtered, 8, "Expected 8 alleles in group 2")
     
     def test_calculate_inheritance_ed_tet_tet_parents_1(self):
         "Non-segregation should still give ED==0 with tetraploid parents and samples"
@@ -572,8 +573,9 @@ class TestED(unittest.TestCase):
         truth = 0
         
         # Act
-        g1Alleles, g2Alleles, g1Filtered, g2Filtered, aED, gED, iED = calculate_segregant_ed(g1Gt, g2Gt, parentsGT=parentsGT)
-        
+        g1Gt, g2Gt = filter_impossible_genotypes(g1Gt, g2Gt, parentsGT)
+        g1Filtered, g2Filtered, iED = calculate_inheritance_ed(g1Gt, g2Gt, parentsGT)
+                
         # Assert
         self.assertEqual(iED, truth, f"Expected ED to be zero but got {iED}")
     
@@ -586,7 +588,8 @@ class TestED(unittest.TestCase):
         truth = MAXIMAL_SEGREGATION
         
         # Act
-        g1Alleles, g2Alleles, g1Filtered, g2Filtered, aED, gED, iED = calculate_segregant_ed(g1Gt, g2Gt, parentsGT=parentsGT)
+        g1Gt, g2Gt = filter_impossible_genotypes(g1Gt, g2Gt, parentsGT)
+        g1Filtered, g2Filtered, iED = calculate_inheritance_ed(g1Gt, g2Gt, parentsGT)
         
         # Assert
         self.assertEqual(iED, truth, f"Expected ED to be zero but got {iED}")
@@ -600,7 +603,8 @@ class TestED(unittest.TestCase):
         truth = 0
         
         # Act
-        g1Alleles, g2Alleles, g1Filtered, g2Filtered, aED, gED, iED = calculate_segregant_ed(g1Gt, g2Gt, parentsGT=parentsGT)
+        g1Gt, g2Gt = filter_impossible_genotypes(g1Gt, g2Gt, parentsGT)
+        g1Filtered, g2Filtered, iED = calculate_inheritance_ed(g1Gt, g2Gt, parentsGT)
         
         # Assert
         self.assertEqual(iED, truth, f"Expected ED to be zero but got {iED}")
@@ -612,17 +616,14 @@ class TestED(unittest.TestCase):
         g1Gt = [[0, 1, 2, 4], [0, 1, 2, 4], [0, 1, 3, 5], [0, 1, 3, 5]]
         g2Gt = [[0, 1, 3, 5], [0, 1, 3, 5], [0, 1, 2, 4], [0, 1, 2, 4]]
         edTruth = 0
-        preFilterTruth = 16
         postFilterTruth = 0
         
         # Act
-        "Can't use calculate_inheritance_ed here since impossible progeny removal occurs in calculate_segregant_ed"
-        g1Alleles, g2Alleles, g1Filtered, g2Filtered, aED, gED, iED = calculate_segregant_ed(g1Gt, g2Gt, parentsGT=parentsGT)
+        g1Gt, g2Gt = filter_impossible_genotypes(g1Gt, g2Gt, parentsGT)
+        g1Filtered, g2Filtered, iED = calculate_inheritance_ed(g1Gt, g2Gt, parentsGT)
         
         # Assert
         self.assertEqual(iED, edTruth, f"Expected ED to be {edTruth} but got {iED}")
-        self.assertEqual(g1Alleles, preFilterTruth, f"Expected {preFilterTruth} alleles in group 1 before filtering but got {g1Alleles}")
-        self.assertEqual(g2Alleles, preFilterTruth, f"Expected {preFilterTruth} alleles in group 2 before filtering but got {g2Alleles}")
         self.assertEqual(g1Filtered, postFilterTruth, f"Expected {postFilterTruth} alleles in group 1 after filtering but got {g1Filtered}")
         self.assertEqual(g2Filtered, postFilterTruth, f"Expected {postFilterTruth} alleles in group 2 after filtering but got {g2Filtered}")
     
@@ -637,7 +638,9 @@ class TestED(unittest.TestCase):
         postFilterTruth = 0 # only group 1 should be filtered out
         
         # Act
-        g1Alleles, g2Alleles, g1Filtered, g2Filtered, aED, gED, iED = calculate_segregant_ed(g1Gt, g2Gt, parentsGT=parentsGT)
+        g1Alleles, g2Alleles, aED = calculate_allele_frequency_ed(g1Gt, g2Gt) # just to get the allele counts
+        g1Gt, g2Gt = filter_impossible_genotypes(g1Gt, g2Gt, parentsGT)
+        g1Filtered, g2Filtered, iED = calculate_inheritance_ed(g1Gt, g2Gt, parentsGT)
         
         # Assert
         self.assertEqual(iED, edTruth, f"Expected ED to be {edTruth} but got {iED}")
@@ -657,7 +660,9 @@ class TestED(unittest.TestCase):
         postFilterTruth = 0
         
         # Act
-        g1Alleles, g2Alleles, g1Filtered, g2Filtered, aED, gED, iED = calculate_segregant_ed(g1Gt, g2Gt, parentsGT=parentsGT)
+        g1Alleles, g2Alleles, aED = calculate_allele_frequency_ed(g1Gt, g2Gt) # just to get the allele counts
+        g1Gt, g2Gt = filter_impossible_genotypes(g1Gt, g2Gt, parentsGT)
+        g1Filtered, g2Filtered, iED = calculate_inheritance_ed(g1Gt, g2Gt, parentsGT)
         
         # Assert
         self.assertEqual(iED, edTruth, f"Expected ED to be {edTruth} but got {iED}")
@@ -677,7 +682,10 @@ class TestED(unittest.TestCase):
         genotypeTruth = 0.7071067811865476
         
         # Act
-        g1Alleles, g2Alleles, g1Filtered, g2Filtered, aED, gED, iED = calculate_segregant_ed(g1Gt, g2Gt, parentsGT=parentsGT)
+        g1Alleles, g2Alleles, aED = calculate_allele_frequency_ed(g1Gt, g2Gt) # just to get the allele counts
+        _, _, gED = calculate_genotype_frequency_ed(g1Gt, g2Gt)
+        g1Gt, g2Gt = filter_impossible_genotypes(g1Gt, g2Gt, parentsGT)
+        g1Filtered, g2Filtered, iED = calculate_inheritance_ed(g1Gt, g2Gt, parentsGT)
         
         # Assert
         self.assertAlmostEqual(aED, alleleTruth, places=5, msg=f"Expected allele frequency ED to be {alleleTruth} but got {aED}")
@@ -695,7 +703,10 @@ class TestED(unittest.TestCase):
         genotypeTruth = 0.7071067811865476
         
         # Act
-        g1Alleles, g2Alleles, g1Filtered, g2Filtered, aED, gED, iED = calculate_segregant_ed(g1Gt, g2Gt, parentsGT=parentsGT)
+        g1Alleles, g2Alleles, aED = calculate_allele_frequency_ed(g1Gt, g2Gt) # just to get the allele counts
+        _, _, gED = calculate_genotype_frequency_ed(g1Gt, g2Gt)
+        g1Gt, g2Gt = filter_impossible_genotypes(g1Gt, g2Gt, parentsGT)
+        g1Filtered, g2Filtered, iED = calculate_inheritance_ed(g1Gt, g2Gt, parentsGT)
         
         # Assert
         self.assertAlmostEqual(aED, alleleTruth, places=5, msg=f"Expected allele frequency ED to be {alleleTruth} but got {aED}")
@@ -713,36 +724,42 @@ class TestED(unittest.TestCase):
         genotypeTruth = 0.3535533905932738
         
         # Act
-        g1Alleles, g2Alleles, g1Filtered, g2Filtered, aED, gED, iED = calculate_segregant_ed(g1Gt, g2Gt, parentsGT=parentsGT)
+        g1Alleles, g2Alleles, aED = calculate_allele_frequency_ed(g1Gt, g2Gt) # just to get the allele counts
+        _, _, gED = calculate_genotype_frequency_ed(g1Gt, g2Gt)
+        g1Gt, g2Gt = filter_impossible_genotypes(g1Gt, g2Gt, parentsGT)
+        g1Filtered, g2Filtered, iED = calculate_inheritance_ed(g1Gt, g2Gt, parentsGT)
         
         # Assert
         self.assertAlmostEqual(aED, alleleTruth, places=5, msg=f"Expected allele frequency ED to be {alleleTruth} but got {aED}")
         self.assertAlmostEqual(gED, genotypeTruth, places=5, msg=f"Expected genotype frequency ED to be {genotypeTruth} but got {gED}")
         self.assertAlmostEqual(iED, inheritanceTruth, places=5, msg=f"Expected inheritance ED to be {inheritanceTruth} but got {iED}")
     
-    def test_calculate_segregant_ed_with_empty_group(self):
+    def test_calculate_inheritance_ed_with_empty_group(self):
         "Test for impossible progeny (alleles could only be from a clone)"
         # Arrange
         parentsGT = [ [1, 2], [0, 0] ]
         g1Gt = []
         g2Gt = [[0, 1]]
-        truth = 0
+        edTruth = 0
+        g1Truth = 0
+        g2Truth = 2
         
         # Act
-        g1Alleles, g2Alleles, g1Filtered, g2Filtered, aED, gED, iED = calculate_segregant_ed(g1Gt, g2Gt, parentsGT=parentsGT)
+        g1Gt, g2Gt = filter_impossible_genotypes(g1Gt, g2Gt, parentsGT)
+        g1Filtered, g2Filtered, iED = calculate_inheritance_ed(g1Gt, g2Gt, parentsGT)
         
         # Assert
-        self.assertEqual(iED, truth, f"Expected ED to be zero but got {iED}")
-        self.assertEqual(g1Alleles, 0, "Expected 0 alleles in group 1")
-        self.assertEqual(g2Alleles, 2, "Expected 0 alleles in group 2")
+        self.assertEqual(iED, edTruth, f"Expected ED to be zero but got {iED}")
+        self.assertEqual(g1Filtered, g1Truth, f"Expected {g1Truth} alleles in group 1 but got {g1Filtered}")
+        self.assertEqual(g2Filtered, g2Truth, f"Expected {g2Truth} alleles in group 2 but got {g2Filtered}")
     
     def test_calculate_gt_median_adjustment_1(self):
         "Test that median adjustment for CNVs works correctly (groups segregate evenly)"
         # Arrange
         g1Gt = [[0, 0], [0, 0], [0, 0], [0, 0]]
         g2Gt = [[100, 100], [100, 100], [100, 100], [100, 100]]
-        g1Truth = 0
-        g2Truth = 1
+        g1Truth = 0 # below median == 0
+        g2Truth = 2 # above median == 2
         
         # Act
         g1AdjGt, g2AdjGt = gt_median_adjustment([g1Gt, g2Gt])
@@ -756,8 +773,8 @@ class TestED(unittest.TestCase):
         # Arrange
         g1Gt = [[0, 0], [0, 0], [0, 0], [0, 0]]
         g2Gt = [[0, 0], [0, 0], [0, 0], [0, 0]]
-        g1Truth = 0
-        g2Truth = 0
+        g1Truth = 1 # equal to median == 1
+        g2Truth = 1 # equal to median == 1
         
         # Act
         g1AdjGt, g2AdjGt = gt_median_adjustment([g1Gt, g2Gt])
@@ -771,8 +788,8 @@ class TestED(unittest.TestCase):
         # Arrange
         g1Gt = [[1, 1], [1, 1], [1, 1], [1, 1]]
         g2Gt = [[1, 1], [1, 1], [1, 1], [1, 1]]
-        g1Truth = 0
-        g2Truth = 0
+        g1Truth = 1 # equal to median == 1
+        g2Truth = 1 # equal to median == 1
         
         # Act
         g1AdjGt, g2AdjGt = gt_median_adjustment([g1Gt, g2Gt])
@@ -786,8 +803,8 @@ class TestED(unittest.TestCase):
         # Arrange
         g1Gt = [[0, 0], [0, 0], [0, 0], [0, 0]]
         g2Gt = [[0, 0], [0, 0], [0, 0], [0, 1]]
-        g1Truth = 0
-        g2Truth = 0
+        g1Truth = 1 # equal to median == 1
+        g2Truth = 1 # equal to median == 1
         
         # Act
         g1AdjGt, g2AdjGt = gt_median_adjustment([g1Gt, g2Gt])
@@ -800,7 +817,7 @@ class TestED(unittest.TestCase):
         "Test that median adjustment handles dot values safely"
         # Arrange
         g1Gt = [[0, 0], ["."], ".", [1, 1]]
-        g1Truth = [[0, 0], ['.'], ['.'], [1, 1]]
+        g1Truth = [[0, 0], ['.'], ['.'], [2, 2]] # below median == 0, skip over dots, median is 0.5, so above median == 2
         
         # Act
         g1AdjGt = gt_median_adjustment([g1Gt])[0]
@@ -866,7 +883,7 @@ class TestSPLSDA(unittest.TestCase):
         # Arrange
         gtIndex = 1
         sampleFields = ["example:0|0", "example2:0/0", "example3:1|1:otherstuff"]
-        truth = ["0", "0", "1"]
+        truth = ["1", "1", "2"] # median is 0, so equals median == 1, above median == 2
         
         # Act
         recoded_cnv = recode_cnv(gtIndex, sampleFields)
@@ -879,7 +896,7 @@ class TestSPLSDA(unittest.TestCase):
         # Arrange
         gtIndex = 0
         sampleFields = ["0/0", "0/.", "./."]
-        truth = ["0", ".", "."]
+        truth = ["1", ".", "."] # median is 0, so equals median == 1
         
         # Act
         recoded_cnv = recode_cnv(gtIndex, sampleFields)
@@ -892,7 +909,7 @@ class TestSPLSDA(unittest.TestCase):
         # Arrange
         gtIndex = 0
         sampleFields = ["0/0", "1/1", "100/100", "100/100"]
-        truth = ["0", "0", "1", "1"]
+        truth = ["0", "0", "2", "2"]
         
         # Act
         recoded_cnv = recode_cnv(gtIndex, sampleFields)
@@ -905,7 +922,7 @@ class TestSPLSDA(unittest.TestCase):
         # Arrange
         gtIndex = 0
         sampleFields = ["0/0", "0/1", "1/1", "1/2", "2/2"]
-        truth = ["0", "0", "0", "1", "1"]
+        truth = ["0", "1", "1", "2", "2"]
         
         # Act
         recoded_cnv = recode_cnv(gtIndex, sampleFields)
@@ -1045,7 +1062,7 @@ class TestMain(unittest.TestCase):
         vcfFile = os.path.join(dataDir, "fulltest.variants.1.vcf")
         genomeFile = os.path.join(dataDir, "genome.fasta")
         
-        edTruth = "chr1\t10\tsnp\t42\t98\t1.0678755470980512" # 1.0967370483709717 if genotype inheritance is used
+        edTruth = "chr1\t10\tsnp\t42\t42\t98\t98\t1.0678755470980512" # 1.0967370483709717 if genotype inheritance is used
         berTruth = "chr1\t0\t0.0714285714285715\n"
         selectedTruth = "chr1\t10\t1\t1\tleft\n"
         recodeTruth = ['chrom\tpos\tbulk1_1\tbulk1_10\tbulk1_11\tbulk1_12\tbulk1_13\tbulk1_14\tbulk1_15\tbulk1_16\tbulk1_17\tbulk1_18\tbulk1_19\tbulk1_2\tbulk1_20\tbulk1_21\tbulk1_3\tbulk1_4\tbulk1_5\tbulk1_6\tbulk1_7\tbulk1_8\tbulk1_9\tbulk2_1\tbulk2_10\tbulk2_11\tbulk2_12\tbulk2_13\tbulk2_14\tbulk2_15\tbulk2_16\tbulk2_17\tbulk2_18\tbulk2_19\tbulk2_2\tbulk2_20\tbulk2_21\tbulk2_22\tbulk2_23\tbulk2_24\tbulk2_25\tbulk2_26\tbulk2_27\tbulk2_28\tbulk2_29\tbulk2_3\tbulk2_30\tbulk2_31\tbulk2_32\tbulk2_33\tbulk2_34\tbulk2_35\tbulk2_36\tbulk2_37\tbulk2_38\tbulk2_39\tbulk2_4\tbulk2_40\tbulk2_41\tbulk2_42\tbulk2_43\tbulk2_44\tbulk2_45\tbulk2_46\tbulk2_47\tbulk2_48\tbulk2_49\tbulk2_5\tbulk2_6\tbulk2_7\tbulk2_8\tbulk2_9',
@@ -1121,7 +1138,7 @@ class TestMain(unittest.TestCase):
         vcfFile = os.path.join(dataDir, "fulltest.variants.1.vcf")
         genomeFile = os.path.join(dataDir, "genome.fasta")
         
-        edTruth = "chr1\t10\tsnp\t0\t20\t0"
+        edTruth = "chr1\t10\tsnp\t0\t42\t20\t98\t0"
         berTruth = "chr1\t0\t0.0714285714285715\n"
         selectedTruth = "chr1\t10\t1\t1\tleft\n"
         recodeTruth = ['chrom\tpos\tbulk1_1\tbulk1_10\tbulk1_11\tbulk1_12\tbulk1_13\tbulk1_14\tbulk1_15\tbulk1_16\tbulk1_17\tbulk1_18\tbulk1_19\tbulk1_2\tbulk1_20\tbulk1_21\tbulk1_3\tbulk1_4\tbulk1_5\tbulk1_6\tbulk1_7\tbulk1_8\tbulk1_9\tbulk2_1\tbulk2_10\tbulk2_11\tbulk2_12\tbulk2_13\tbulk2_14\tbulk2_15\tbulk2_16\tbulk2_17\tbulk2_18\tbulk2_19\tbulk2_2\tbulk2_20\tbulk2_21\tbulk2_22\tbulk2_23\tbulk2_24\tbulk2_25\tbulk2_26\tbulk2_27\tbulk2_28\tbulk2_29\tbulk2_3\tbulk2_30\tbulk2_31\tbulk2_32\tbulk2_33\tbulk2_34\tbulk2_35\tbulk2_36\tbulk2_37\tbulk2_38\tbulk2_39\tbulk2_4\tbulk2_40\tbulk2_41\tbulk2_42\tbulk2_43\tbulk2_44\tbulk2_45\tbulk2_46\tbulk2_47\tbulk2_48\tbulk2_49\tbulk2_5\tbulk2_6\tbulk2_7\tbulk2_8\tbulk2_9',
@@ -1197,7 +1214,7 @@ class TestMain(unittest.TestCase):
         vcfFile = os.path.join(dataDir, "fulltest.variants.1.vcf")
         genomeFile = os.path.join(dataDir, "genome.fasta")
         
-        edTruth = "chr1\t10\tsnp\t42\t58\t1.4142135623730951"
+        edTruth = "chr1\t10\tsnp\t42\t42\t58\t58\t1.4142135623730951"
         berTruth = "chr1\t0\t0\n"
         selectedTruth = "chr1\t10\t1\t1\tleft\n"
         recodeTruth = ['chrom\tpos\tbulk1_1\tbulk1_10\tbulk1_11\tbulk1_12\tbulk1_13\tbulk1_14\tbulk1_15\tbulk1_16\tbulk1_17\tbulk1_18\tbulk1_19\tbulk1_2\tbulk1_20\tbulk1_21\tbulk1_3\tbulk1_4\tbulk1_5\tbulk1_6\tbulk1_7\tbulk1_8\tbulk1_9\tbulk2_1\tbulk2_10\tbulk2_11\tbulk2_12\tbulk2_13\tbulk2_14\tbulk2_15\tbulk2_16\tbulk2_17\tbulk2_18\tbulk2_19\tbulk2_2\tbulk2_20\tbulk2_21\tbulk2_22\tbulk2_23\tbulk2_24\tbulk2_25\tbulk2_26\tbulk2_27\tbulk2_28\tbulk2_29\tbulk2_3\tbulk2_4\tbulk2_5\tbulk2_6\tbulk2_7\tbulk2_8\tbulk2_9',
@@ -1273,7 +1290,7 @@ class TestMain(unittest.TestCase):
         vcfFile = os.path.join(dataDir, "fulltest.variants.1.vcf")
         genomeFile = os.path.join(dataDir, "genome.fasta")
         
-        edTruth = "chr1\t10\tsnp\t0\t0\t0"
+        edTruth = "chr1\t10\tsnp\t0\t42\t0\t58\t0"
         berTruth = "chr1\t0\t0\n"
         selectedTruth = "chr1\t10\t1\t1\tleft\n"
         recodeTruth = ['chrom\tpos\tbulk1_1\tbulk1_10\tbulk1_11\tbulk1_12\tbulk1_13\tbulk1_14\tbulk1_15\tbulk1_16\tbulk1_17\tbulk1_18\tbulk1_19\tbulk1_2\tbulk1_20\tbulk1_21\tbulk1_3\tbulk1_4\tbulk1_5\tbulk1_6\tbulk1_7\tbulk1_8\tbulk1_9\tbulk2_1\tbulk2_10\tbulk2_11\tbulk2_12\tbulk2_13\tbulk2_14\tbulk2_15\tbulk2_16\tbulk2_17\tbulk2_18\tbulk2_19\tbulk2_2\tbulk2_20\tbulk2_21\tbulk2_22\tbulk2_23\tbulk2_24\tbulk2_25\tbulk2_26\tbulk2_27\tbulk2_28\tbulk2_29\tbulk2_3\tbulk2_4\tbulk2_5\tbulk2_6\tbulk2_7\tbulk2_8\tbulk2_9',
@@ -1349,7 +1366,7 @@ class TestMain(unittest.TestCase):
         vcfFile = os.path.join(dataDir, "fulltest.variants.2.vcf")
         genomeFile = os.path.join(dataDir, "genome.fasta")
         
-        edTruth = "chr1\t10\tsnp\t84\t196\t1.0678755470980512" # twice as many alleles, same ED as diploid version
+        edTruth = "chr1\t10\tsnp\t84\t84\t196\t196\t1.0678755470980512" # twice as many alleles, same ED as diploid version
         berTruth = "chr1\t0\t0.0714285714285715\n"
         selectedTruth = "chr1\t10\t1\t1\tleft\n"
         recodeTruth = ['chrom\tpos\tbulk1_1\tbulk1_10\tbulk1_11\tbulk1_12\tbulk1_13\tbulk1_14\tbulk1_15\tbulk1_16\tbulk1_17\tbulk1_18\tbulk1_19\tbulk1_2\tbulk1_20\tbulk1_21\tbulk1_3\tbulk1_4\tbulk1_5\tbulk1_6\tbulk1_7\tbulk1_8\tbulk1_9\tbulk2_1\tbulk2_10\tbulk2_11\tbulk2_12\tbulk2_13\tbulk2_14\tbulk2_15\tbulk2_16\tbulk2_17\tbulk2_18\tbulk2_19\tbulk2_2\tbulk2_20\tbulk2_21\tbulk2_22\tbulk2_23\tbulk2_24\tbulk2_25\tbulk2_26\tbulk2_27\tbulk2_28\tbulk2_29\tbulk2_3\tbulk2_30\tbulk2_31\tbulk2_32\tbulk2_33\tbulk2_34\tbulk2_35\tbulk2_36\tbulk2_37\tbulk2_38\tbulk2_39\tbulk2_4\tbulk2_40\tbulk2_41\tbulk2_42\tbulk2_43\tbulk2_44\tbulk2_45\tbulk2_46\tbulk2_47\tbulk2_48\tbulk2_49\tbulk2_5\tbulk2_6\tbulk2_7\tbulk2_8\tbulk2_9',
@@ -1425,7 +1442,7 @@ class TestMain(unittest.TestCase):
         vcfFile = os.path.join(dataDir, "fulltest.variants.2.vcf")
         genomeFile = os.path.join(dataDir, "genome.fasta")
         
-        edTruth = "chr1\t10\tsnp\t0\t40\t0"
+        edTruth = "chr1\t10\tsnp\t0\t84\t40\t196\t0"
         berTruth = "chr1\t0\t0.0714285714285715\n"
         selectedTruth = "chr1\t10\t1\t1\tleft\n"
         recodeTruth = ['chrom\tpos\tbulk1_1\tbulk1_10\tbulk1_11\tbulk1_12\tbulk1_13\tbulk1_14\tbulk1_15\tbulk1_16\tbulk1_17\tbulk1_18\tbulk1_19\tbulk1_2\tbulk1_20\tbulk1_21\tbulk1_3\tbulk1_4\tbulk1_5\tbulk1_6\tbulk1_7\tbulk1_8\tbulk1_9\tbulk2_1\tbulk2_10\tbulk2_11\tbulk2_12\tbulk2_13\tbulk2_14\tbulk2_15\tbulk2_16\tbulk2_17\tbulk2_18\tbulk2_19\tbulk2_2\tbulk2_20\tbulk2_21\tbulk2_22\tbulk2_23\tbulk2_24\tbulk2_25\tbulk2_26\tbulk2_27\tbulk2_28\tbulk2_29\tbulk2_3\tbulk2_30\tbulk2_31\tbulk2_32\tbulk2_33\tbulk2_34\tbulk2_35\tbulk2_36\tbulk2_37\tbulk2_38\tbulk2_39\tbulk2_4\tbulk2_40\tbulk2_41\tbulk2_42\tbulk2_43\tbulk2_44\tbulk2_45\tbulk2_46\tbulk2_47\tbulk2_48\tbulk2_49\tbulk2_5\tbulk2_6\tbulk2_7\tbulk2_8\tbulk2_9',

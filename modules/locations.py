@@ -110,8 +110,14 @@ class Locations:
         return os.path.join(os.path.dirname(os.path.dirname(__file__)), "utilities", "integrative_splsda.R")
     
     # Attributes with value input
-    def variantEdPickleFile(self, value):
-        return os.path.join(self.workingDirectory, f"psQTL_call.ed.{value}.pkl")
+    def allelesEdPickleFile(self, value):
+        return os.path.join(self.workingDirectory, f"psQTL_call.alleles_ed.{value}.pkl")
+    
+    def inheritanceEdPickleFile(self, value):
+        return os.path.join(self.workingDirectory, f"psQTL_call.inheritance_ed.{value}.pkl")
+    
+    def genotypesEdPickleFile(self, value):
+        return os.path.join(self.workingDirectory, f"psQTL_call.genotypes_ed.{value}.pkl")
     
     def deletionEdPickleFile(self, value):
         return os.path.join(self.workingDirectory, f"psQTL_depth.ed.{value}.pkl")

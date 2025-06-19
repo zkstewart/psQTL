@@ -14,8 +14,13 @@ from modules.splsda import validate_r_exists, validate_r_packages_installation, 
     recode_vcf, run_windowed_splsda, run_integrative_splsda
 from _version import __version__
 
-def generate_ed_files(vcfFile, metadataDict, edOutputFiles, parentSamples=[], isCNV=False, ignoreIdentical=True):
+def generate_ed_files(vcfFile, metadataDict, edOutputFiles,
+                      parentSamples=[], isCNV=False, ignoreIdentical=True):
     '''
+    Note that parse_vcf_for_ed yields a dictionary with the following keys
+    contig, pos, variant, numAllelesG1, numAllelesG2, numFilteredG1, numFilteredG2,
+    alleleED, genotypeED, inheritanceED, ploidy, possibleAllelesG1, possibleAllelesG2
+    
     Parameters:
         vcfFile -- a string indicating the path to the VCF file to be processed
         metadataDict -- a dictionary of metadata information parsed from the metadata file
@@ -39,28 +44,33 @@ def generate_ed_files(vcfFile, metadataDict, edOutputFiles, parentSamples=[], is
             if context != None:
                 context.write("{0}\n".format("\t".join([
                     "CHROM", "POSI", "variant",
-                    "group1_alleles", "group2_alleles", 
+                    "group1_alleles", "group1_alleles_possible",
+                    "group2_alleles", "group2_alleles_possible",
                     "euclideanDist"
                 ])))
         
         # Iterate through Euclidean distance calculations for VCF file
-        for contig, pos, variant, numNaiveG1, numNaiveG2, \
-        numFilteredG1, numFilteredG2, alleleED, genotypeED, \
-        inheritanceED in parse_vcf_for_ed(vcfFile, metadataDict, isCNV,
-                                          parents=parentSamples,
-                                          ignoreIdentical=ignoreIdentical):
-            
-            # Write content line
-            for context, numAllelesG1, numAllelesG2, euclideanDist in \
-            zip(
-                contexts,
-                [numNaiveG1, numNaiveG1, numFilteredG1],
-                [numNaiveG2, numNaiveG2, numFilteredG2],
-                [alleleED, genotypeED, inheritanceED]
-            ):
-                if context != None:
-                    context.write(f"{contig}\t{pos}\t{variant}\t{numAllelesG1}\t" + \
-                                    f"{numAllelesG2}\t{euclideanDist}\n")
+        for resultsDict in parse_vcf_for_ed(vcfFile, metadataDict, isCNV,
+                                            parents=parentSamples,
+                                            ignoreIdentical=ignoreIdentical):
+            # Write allele frequency ED line
+            if allelesOut != None:
+                allelesOut.write(f"{resultsDict['contig']}\t{resultsDict['pos']}\t{resultsDict['variant']}\t" + \
+                                 f"{resultsDict['numAllelesG1']}\t{resultsDict['possibleAllelesG1']}\t" + \
+                                 f"{resultsDict['numAllelesG2']}\t{resultsDict['possibleAllelesG2']}\t" + \
+                                 f"{resultsDict['alleleED']}\n")
+            # Write genotype frequency ED line
+            if genotypesOut != None:
+                genotypesOut.write(f"{resultsDict['contig']}\t{resultsDict['pos']}\t{resultsDict['variant']}\t" + \
+                                   f"{resultsDict['numAllelesG1']}\t{resultsDict['possibleAllelesG1']}\t" + \
+                                   f"{resultsDict['numAllelesG2']}\t{resultsDict['possibleAllelesG2']}\t" + \
+                                   f"{resultsDict['genotypeED']}\n")
+            # Write inheritance ED line
+            if inheritanceOut != None:
+                inheritanceOut.write(f"{resultsDict['contig']}\t{resultsDict['pos']}\t{resultsDict['variant']}\t" + \
+                                     f"{resultsDict['numFilteredG1']}\t{resultsDict['possibleAllelesG1']}\t" + \
+                                     f"{resultsDict['numFilteredG2']}\t{resultsDict['possibleAllelesG2']}\t" + \
+                                     f"{resultsDict['inheritanceED']}\n")
 
 def main():
     usage = """%(prog)s processes VCF or VCF-like files containing variant or CNV

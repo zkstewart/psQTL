@@ -116,7 +116,7 @@ def recode_cnv(gtIndex, sampleFields):
         if "." in allele:
             encodedGT = "."
         else:
-            encodedGT = "1" if 1 in allele else "0"
+            encodedGT = "2" if 2 in allele else "1" if 1 in allele else "0"
         encodedGTs.append(encodedGT)
     return encodedGTs
 
