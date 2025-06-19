@@ -342,64 +342,6 @@ def calculate_inheritance_ed(g1Gt, g2Gt, parentsGT):
     # Return the values
     return numAllelesG1, numAllelesG2, edist
 
-def calculate_segregant_ed(g1Gt, g2Gt, isCNV=False, parentsGT=None):
-    '''
-    Handles the internal logic of calculating the Euclidean distance
-    using the three methods available: naive allele frequency, genotype frequency,
-    and inheritance. This function is intended to be used internally by the
-    parse_vcf_for_ed() function, but can be used independently if desired.
-    
-    Parameters:
-        g1Gt / g2Gt -- a list of lists containing the genotype value as integers
-                       with format like:
-                       [
-                           [0, 1],
-                           [0, 0],
-                           [1, 1],
-                           ...
-                       ]
-        isCNV -- (OPTIONAL) a boolean indicating whether the genotypes are for CNVs
-                 (True) or SNPs/indels (False); default is False
-        parentsGT -- a list of two lists containing the genotype value as integers
-                     for the parents with format like:
-                     [ [0, 1], [1, 2] ]
-                     OR None if no parents are available or specified to
-                     filter out non-inheritable genotypes
-    Returns:
-        numNaiveG1 -- the number of genotyped alleles in group 1 without filtering
-        numNaiveG2 -- the number of genotyped alleles in group 2 without filtering
-        numFilteredG1 -- the number of genotyped alleles in group 1 after filtering
-        numFilteredG2 -- the number of genotyped alleles in group 2 after filtering
-        alleleED -- a float of the the Euclidean distance between the two groups
-                    when using naive allele frequency without filtering
-        genotypeED -- a float of the the Euclidean distance between the two groups
-                      when using naive genotype frequency calculation without filtering
-        inheritanceED -- a float of the the Euclidean distance between the two groups
-                         when using inheritance calculation OR None if parentsGT is None
-    '''
-    # Adjust values if this is a CNV
-    if isCNV:
-        g1Gt, g2Gt = gt_median_adjustment([g1Gt, g2Gt])
-    
-    # Calculate allele and genotype frequency Euclidean distances between the two groups
-    numNaiveG1, numNaiveG2, alleleED = calculate_allele_frequency_ed(g1Gt, g2Gt)
-    _, _, genotypeED = calculate_genotype_frequency_ed(g1Gt, g2Gt)
-    
-    # Perform additional Euclidean distance calculation if parentsGT is provided
-    if parentsGT != None and len(parentsGT) == 2:
-        # Filter impossible progeny genotypes based on the parents' genotypes
-        possibleGTs = possible_genotypes(parentsGT[0], parentsGT[1])
-        g1Gt = [ gt for gt in g1Gt if set(gt) in possibleGTs ]
-        g2Gt = [ gt for gt in g2Gt if set(gt) in possibleGTs ]
-        
-        # Calculate inheritance Euclidean distance
-        numFilteredG1, numFilteredG2, inheritanceED = calculate_inheritance_ed(g1Gt, g2Gt, parentsGT)
-    else:
-        numFilteredG1, numFilteredG2, inheritanceED = None, None, None
-    
-    # Return the values
-    return numNaiveG1, numNaiveG2, numFilteredG1, numFilteredG2, alleleED, genotypeED, inheritanceED
-
 def filter_impossible_genotypes(g1Gt, g2Gt, parentsGT):
     '''
     Parameters:
@@ -561,17 +503,17 @@ def parse_vcf_for_ed(vcfFile, metadataDict, isCNV, parents=[],
                 
                 # Skip if one or both parents are not genotyped at this position
                 if len(parentsGT) != 2: # parentsGT can come back missing parents if they are not called
-                    break
-                
-                # Adjust values if this is a CNV
-                if isCNV:
-                    g1Gt, g2Gt = gt_median_adjustment([g1Gt, g2Gt])
-                
-                # Filter impossible progeny genotypes based on the parents' genotypes
-                g1Gt, g2Gt = filter_impossible_genotypes(g1Gt, g2Gt, parentsGT)
-                
-                # Calculate inheritance Euclidean distance
-                numFilteredG1, numFilteredG2, inheritanceED = calculate_inheritance_ed(g1Gt, g2Gt, parentsGT)
+                    pass
+                else:
+                    # Adjust values if this is a CNV
+                    if isCNV:
+                        g1Gt, g2Gt = gt_median_adjustment([g1Gt, g2Gt])
+                    
+                    # Filter impossible progeny genotypes based on the parents' genotypes
+                    g1Gt, g2Gt = filter_impossible_genotypes(g1Gt, g2Gt, parentsGT)
+                    
+                    # Calculate inheritance Euclidean distance
+                    numFilteredG1, numFilteredG2, inheritanceED = calculate_inheritance_ed(g1Gt, g2Gt, parentsGT)
             
             # Infer the ploidy of the samples
             ploidy = infer_ploidy(snpDict) # this may average across samples with different ploidies, but that's okay for this purpose
