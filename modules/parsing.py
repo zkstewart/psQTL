@@ -1,6 +1,24 @@
 import os, gzip, codecs
 from contextlib import contextmanager
 
+class WriteGzFile:
+    def __init__(self, filename):
+        self.filename = filename
+        self.file = None
+    
+    def __enter__(self):
+        if self.filename is None:
+            return None
+        else:
+            self.file = gzip.open(self.filename, "wt")
+            return self.file
+    
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if self.file:
+            self.file.close()
+        if exc_type is not None:
+            raise exc_type(exc_val).with_traceback(exc_tb)
+
 def get_codec(fileName):
     try:
         f = codecs.open(fileName, encoding='utf-8', errors='strict')

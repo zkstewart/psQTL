@@ -8,39 +8,59 @@ import os, argparse, sys, gzip
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from modules.validation import validate_proc_args, validate_c, validate_d, validate_s
-from modules.parsing import parse_metadata
+from modules.parsing import parse_metadata, WriteGzFile
 from modules.ed import parse_vcf_for_ed
 from modules.splsda import validate_r_exists, validate_r_packages_installation, \
     recode_vcf, run_windowed_splsda, run_integrative_splsda
 from _version import __version__
 
-def generate_ed_file(vcfFile, metadataDict, outputFileName, parentSamples=[], isCNV=False, ignoreIdentical=True):
+def generate_ed_files(vcfFile, metadataDict, edOutputFiles, parentSamples=[], isCNV=False, ignoreIdentical=True):
     '''
     Parameters:
         vcfFile -- a string indicating the path to the VCF file to be processed
         metadataDict -- a dictionary of metadata information parsed from the metadata file
-        outputFileName -- a string indicating the path to the output file to be written
+        edOutputFiles -- a list of strings indicating the paths to the output files
+                         with None used to indicate no ED file for that type;
+                         order as follows: allele ED, genotype ED, inheritance ED
+        parentSamples -- (OPTIONAL) a list of two strings indicating the names of the
+                         two parents used to generate the groups for use in calculating
+                         inheritance ED; OR an empty list if no parents are used
         isCNV -- (OPTIONAL) a boolean indicating whether the VCF file contains CNV data
                  (default: False, meaning the VCF file contains variant calls)
         ignoreIdentical -- (OPTIONAL) a boolean indicating whether to ignore variants
                            where both groups are identical
     '''
-    with gzip.open(outputFileName, "wt") as fileOut:
-        # Write header line
-        fileOut.write("{0}\n".format("\t".join([
-            "CHROM", "POSI", "variant",
-            "group1_alleles", "group2_alleles", 
-            "euclideanDist"
-        ])))
+    with WriteGzFile(edOutputFiles[0]) as allelesOut, WriteGzFile(edOutputFiles[1]) as genotypesOut, \
+    WriteGzFile(edOutputFiles[2]) as inheritanceOut:
+        contexts = [ allelesOut, genotypesOut, inheritanceOut ] # some contexts may be None
+        
+        # Write header lines for each output file
+        for context in contexts:
+            if context != None:
+                context.write("{0}\n".format("\t".join([
+                    "CHROM", "POSI", "variant",
+                    "group1_alleles", "group2_alleles", 
+                    "euclideanDist"
+                ])))
         
         # Iterate through Euclidean distance calculations for VCF file
-        for contig, pos, variant, numAllelesB1, numAllelesB2, \
-        euclideanDist in parse_vcf_for_ed(vcfFile, metadataDict, isCNV,
+        for contig, pos, variant, numNaiveG1, numNaiveG2, \
+        numFilteredG1, numFilteredG2, alleleED, genotypeED, \
+        inheritanceED in parse_vcf_for_ed(vcfFile, metadataDict, isCNV,
                                           parents=parentSamples,
                                           ignoreIdentical=ignoreIdentical):
+            
             # Write content line
-            fileOut.write(f"{contig}\t{pos}\t{variant}\t{numAllelesB1}\t" + \
-                            f"{numAllelesB2}\t{euclideanDist}\n")
+            for context, numAllelesG1, numAllelesG2, euclideanDist in \
+            zip(
+                contexts,
+                [numNaiveG1, numNaiveG1, numFilteredG1],
+                [numNaiveG2, numNaiveG2, numFilteredG2],
+                [alleleED, genotypeED, inheritanceED]
+            ):
+                if context != None:
+                    context.write(f"{contig}\t{pos}\t{variant}\t{numAllelesG1}\t" + \
+                                    f"{numAllelesG2}\t{euclideanDist}\n")
 
 def main():
     usage = """%(prog)s processes VCF or VCF-like files containing variant or CNV
@@ -176,24 +196,41 @@ def emain(args, metadataDict, locations):
         depth_ed(args, metadataDict, locations)
 
 def call_ed(args, metadataDict, locations):
-    if not os.path.isfile(locations.variantEdFile + ".ok"):
-        generate_ed_file(args.vcfFile, metadataDict, locations.variantEdFile,
-                         parentSamples=args.parentSamples,
-                         isCNV=False,
-                         ignoreIdentical=not args.considerIdentical) # negate the flag to ignore identical
-        open(locations.variantEdFile + ".ok", "w").close() # touch a .ok file to indicate success
+    # Identify the names for variant ED files
+    edOutputFiles = [locations.allelesEdFile, locations.genotypesEdFile,
+                     locations.inheritanceEdFile if args.parentSamples != [] else None]
+    
+    # Generate ED files for variant calls
+    if not all([ os.path.isfile(edFile + ".ok") for edFile in edOutputFiles if edFile != None ]) or \
+    not all([ os.path.isfile(edFile) for edFile in edOutputFiles if edFile != None ]):
+        generate_ed_files(args.vcfFile, metadataDict, edOutputFiles,
+                          parentSamples=args.parentSamples,
+                          isCNV=False,
+                          ignoreIdentical=not args.considerIdentical) # negate the flag to ignore identical
+        for edFile in edOutputFiles:
+            if edFile != None:
+                open(edFile + ".ok", "w").close() # touch a .ok file to indicate success
     else:
-        raise FileExistsError(f"Euclidean distance file '{locations.variantEdFile}' already has a .ok file; " +
-                              "move, rename, or delete it before re-running psQTL_proc.py!")
+        formattedFiles = " and ".join([f"'{edFile}'" for edFile in edOutputFiles if edFile is not None])
+        
+        raise FileExistsError(f"Euclidean distance files {formattedFiles} already have .ok files; " +
+                              "move, rename, or delete these before re-running psQTL_proc.py!")
     print("Variant call ED file generation complete!")
 
 def depth_ed(args, metadataDict, locations):
-    if not os.path.isfile(locations.deletionEdFile + ".ok"):
-        generate_ed_file(args.deletionFile, metadataDict, locations.deletionEdFile,
-                         parentSamples=[], # no parents used for CNVs
-                         isCNV=True,
-                         ignoreIdentical=False) # don't ignore identical
-        open(locations.deletionEdFile + ".ok", "w").close() # touch a .ok file to indicate success
+    # Format names for CNV ED files
+    edOutputFiles = [locations.deletionEdFile, None, None] # no alternatives for CNVs
+    
+    # Generate ED files for deletion variants
+    if not all([ os.path.isfile(edFile + ".ok") for edFile in edOutputFiles if edFile != None ]) or \
+    not all([ os.path.isfile(edFile) for edFile in edOutputFiles if edFile != None ]):
+        generate_ed_files(args.deletionFile, metadataDict, edOutputFiles,
+                          parentSamples=[], # no parents used for CNVs
+                          isCNV=True,
+                          ignoreIdentical=False) # don't ignore identical
+        for edFile in edOutputFiles:
+            if edFile != None:
+                open(edFile + ".ok", "w").close() # touch a .ok file to indicate success
     else:
         raise FileExistsError(f"Euclidean distance file '{locations.deletionEdFile}' already has a .ok file; " +
                               "move, rename, or delete it before re-running psQTL_proc.py!")

@@ -217,7 +217,7 @@ def main():
                 with open(pickleFile, "rb") as fileIn:
                     dataDict["call"]["ed"] = pickle.load(fileIn)
             else:
-                dataDict["call"]["ed"] = parse_ed_as_dict(locations.variantEdFile, args.metadataDict, args.missingFilter)
+                dataDict["call"]["ed"] = parse_ed_as_dict(locations.allelesEdFile, args.metadataDict, args.missingFilter)
                 with open(pickleFile, "wb") as fileOut:
                     pickle.dump(dataDict["call"]["ed"], fileOut)
                 open(pickleFile + ".ok", "w").close()

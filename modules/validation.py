@@ -129,10 +129,10 @@ def validate_post_args(args):
     # Locate and validate input files
     if "call" in args.inputType:
         if "ed" in args.measurementTypes:
-            if not os.path.isfile(locations.variantEdFile):
-                raise FileNotFoundError(f"'call' ED file '{locations.variantEdFile}' does not exist!")
-            if not os.path.isfile(locations.variantEdFile + ".ok"):
-                raise FileNotFoundError(f"'call' ED file '{locations.variantEdFile}' does not have a '.ok' flag!")
+            if not os.path.isfile(locations.allelesEdFile):
+                raise FileNotFoundError(f"'call' ED file '{locations.allelesEdFile}' does not exist!")
+            if not os.path.isfile(locations.allelesEdFile + ".ok"):
+                raise FileNotFoundError(f"'call' ED file '{locations.allelesEdFile}' does not have a '.ok' flag!")
         
         if "splsda" in args.measurementTypes:
             if not os.path.isfile(locations.variantSplsdaSelectedFile):

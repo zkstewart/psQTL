@@ -379,14 +379,14 @@ class TestED(unittest.TestCase):
         
         # Act & Assert
         notCNV_results = []
-        for contig, pos, variant, numAllelesB1, numAllelesB2, euclideanDist \
+        for contig, pos, variant, g1Alleles, g2Alleles, g1Filtered, g2Filtered, aED, gED, iED \
         in parse_vcf_for_ed(vcfFile, metadataDict, isCNV=False, ignoreIdentical=True, quiet=True):
-            notCNV_results.append(euclideanDist)
+            notCNV_results.append(aED)
         
         isCNV_results = []
-        for contig, pos, variant, numAllelesB1, numAllelesB2, euclideanDist \
+        for contig, pos, variant, g1Alleles, g2Alleles, g1Filtered, g2Filtered, aED, gED, iED \
         in parse_vcf_for_ed(vcfFile, metadataDict, isCNV=True, ignoreIdentical=True, quiet=True):
-            isCNV_results.append(euclideanDist)
+            isCNV_results.append(aED)
         
         # Assert
         for v1, v2 in zip(notCNV_results, notCNV_truth):
@@ -400,30 +400,30 @@ class TestED(unittest.TestCase):
         metadataDict = parse_metadata(metadataFile)
         vcfFile = os.path.join(dataDir, "deletions.1.vcf")
         
-        # Act #1
+       # Act & Assert
         notCNV_results_1 = []
-        for contig, pos, variant, numAllelesB1, numAllelesB2, euclideanDist \
+        for contig, pos, variant, g1Alleles, g2Alleles, g1Filtered, g2Filtered, aED, gED, iED \
         in parse_vcf_for_ed(vcfFile, metadataDict, isCNV=False, ignoreIdentical=True, quiet=True):
-            notCNV_results_1.append(euclideanDist)
+            notCNV_results_1.append(aED)
         
         isCNV_results_1 = []
-        for contig, pos, variant, numAllelesB1, numAllelesB2, euclideanDist \
+        for contig, pos, variant, g1Alleles, g2Alleles, g1Filtered, g2Filtered, aED, gED, iED \
         in parse_vcf_for_ed(vcfFile, metadataDict, isCNV=True, ignoreIdentical=True, quiet=True):
-            isCNV_results_1.append(euclideanDist)
+            isCNV_results_1.append(aED)
         
         # Arrange #2
         metadataDict["group1"] = ['S44', 'S48', 'S50', 'S54', 'S56', 'S59', 'S64', 'S69', 'S76', 'S77'] # drop S95
         
         # Act #2
         notCNV_results_2 = []
-        for contig, pos, variant, numAllelesB1, numAllelesB2, euclideanDist \
+        for contig, pos, variant, g1Alleles, g2Alleles, g1Filtered, g2Filtered, aED, gED, iED \
         in parse_vcf_for_ed(vcfFile, metadataDict, isCNV=False, ignoreIdentical=True, quiet=True):
-            notCNV_results_2.append(euclideanDist)
+            notCNV_results_2.append(aED)
         
         isCNV_results_2 = []
-        for contig, pos, variant, numAllelesB1, numAllelesB2, euclideanDist \
+        for contig, pos, variant, g1Alleles, g2Alleles, g1Filtered, g2Filtered, aED, gED, iED \
         in parse_vcf_for_ed(vcfFile, metadataDict, isCNV=True, ignoreIdentical=True, quiet=True):
-            isCNV_results_2.append(euclideanDist)
+            isCNV_results_2.append(aED)
         
         # Assert
         for v1, v2 in zip(notCNV_results_1[:-1], notCNV_results_2[:-1]): # last value will not change
@@ -451,14 +451,14 @@ class TestED(unittest.TestCase):
         
         # Act & Assert
         notCNV_results = []
-        for contig, pos, variant, numAllelesB1, numAllelesB2, euclideanDist \
+        for contig, pos, variant, g1Alleles, g2Alleles, g1Filtered, g2Filtered, aED, gED, iED \
         in parse_vcf_for_ed(vcfFile, metadataDict, isCNV=False, ignoreIdentical=True, quiet=True):
-            notCNV_results.append(euclideanDist)
+            notCNV_results.append(aED)
         
         isCNV_results = []
-        for contig, pos, variant, numAllelesB1, numAllelesB2, euclideanDist \
+        for contig, pos, variant, g1Alleles, g2Alleles, g1Filtered, g2Filtered, aED, gED, iED \
         in parse_vcf_for_ed(vcfFile, metadataDict, isCNV=True, ignoreIdentical=True, quiet=True):
-            isCNV_results.append(euclideanDist)
+            isCNV_results.append(aED)
         
         # Assert
         for v1, v2 in zip(notCNV_results, notCNV_truth):
@@ -469,357 +469,344 @@ class TestED(unittest.TestCase):
     def test_calculate_segregant_ed_1(self):
         "Test that segregation ED is different for isCNV True and False under certain conditions"
         # Arrange
-        b1Gt = [[2, 2],[0, 1],[0, 0],[1, 2],[0, 1],[0, 0],[0, 1],[0, 0],[0, 0],[1, 2],[0, 0]]
-        b2Gt = [[0, 0],[2, 2],[0, 0],[0, 0],[0, 0],[0, 0],[0, 0],[0, 0],[0, 0],[0, 0],[0, 1],
+        g1Gt = [[2, 2],[0, 1],[0, 0],[1, 2],[0, 1],[0, 0],[0, 1],[0, 0],[0, 0],[1, 2],[0, 0]]
+        g2Gt = [[0, 0],[2, 2],[0, 0],[0, 0],[0, 0],[0, 0],[0, 0],[0, 0],[0, 0],[0, 0],[0, 1],
                 [1, 2],[0, 0],[2, 2],[1, 2],[0, 0],[1, 2],[2, 2],[0, 0],[1, 2],[0, 0],[1, 2],
                 [0, 0],[0, 0],[0, 0],[0, 0],[0, 1],[1, 2],[1, 2],[2, 2],[1, 2],[1, 2],[2, 2],
                 [0, 0],[0, 0],[0, 0],[0, 0],[0, 0],[0, 0],[2, 2],[1, 2]]
         
         # Act
-        b1Alleles_1, b2Alleles_1, ed_1 = calculate_segregant_ed(b1Gt, b2Gt, isCNV=True)
-        b1Alleles_2, b2Alleles_2, ed_2 = calculate_segregant_ed(b1Gt, b2Gt, isCNV=False)
+        g1Alleles_1, g2Alleles_1, g1Filtered_1, g2Filtered_2, aED_1, gED_1, iED_1 = calculate_segregant_ed(g1Gt, g2Gt, isCNV=True)
+        g1Alleles_2, g2Alleles_2, g1Filtered_1, g2Filtered_2, aED_2, gED_2, iED_2 = calculate_segregant_ed(g1Gt, g2Gt, isCNV=False)
         
         # Assert
-        self.assertNotEqual(ed_1, ed_2, "ED should not be the same for isCNV True and False")
+        self.assertNotEqual(aED_1, aED_2, "ED should not be the same for isCNV True and False")
     
     def test_calculate_segregant_ed_2(self):
         "Test that segregation ED is the same for isCNV True and False under certain conditions"
         # Arrange
-        b1Gt = [[0, 1],[0, 1],[0, 1],[0, 1],[0, 1],[0, 1],[0, 1],[0, 1],[0, 1],[1, 1],[0, 1]]
-        b2Gt = [[0, 0],[0, 1],[0, 1],[0, 1],[0, 0],[0, 0],[0, 1],[0, 1],[0, 1],[0, 0],[0, 1],
+        g1Gt = [[0, 1],[0, 1],[0, 1],[0, 1],[0, 1],[0, 1],[0, 1],[0, 1],[0, 1],[1, 1],[0, 1]]
+        g2Gt = [[0, 0],[0, 1],[0, 1],[0, 1],[0, 0],[0, 0],[0, 1],[0, 1],[0, 1],[0, 0],[0, 1],
                 [0, 1],[0, 0],[0, 1],[0, 1],[0, 0],[0, 0],[0, 0],[0, 1],[0, 1],[0, 1],[0, 0],
                 [0, 0],[0, 0],[0, 0],[0, 0],[0, 1],[0, 0],[0, 1],[0, 0],[0, 0],[0, 0],[0, 0],
                 [0, 1],[0, 0],[0, 1],[0, 0],[0, 0],[0, 0],[0, 0],[0, 0]]
         
         # Act
-        b1Alleles_1, b2Alleles_1, ed_1 = calculate_segregant_ed(b1Gt, b2Gt, isCNV=True)
-        b1Alleles_2, b2Alleles_2, ed_2 = calculate_segregant_ed(b1Gt, b2Gt, isCNV=False)
+        g1Alleles_1, g2Alleles_1, g1Filtered_1, g2Filtered_2, aED_1, gED_1, iED_1 = calculate_segregant_ed(g1Gt, g2Gt, isCNV=True)
+        g1Alleles_2, g2Alleles_2, g1Filtered_1, g2Filtered_2, aED_2, gED_2, iED_2 = calculate_segregant_ed(g1Gt, g2Gt, isCNV=False)
         
         # Assert
-        self.assertEqual(ed_1, ed_2, "ED should be the same for isCNV True and False")
+        self.assertEqual(aED_1, aED_2, "ED should be the same for isCNV True and False")
     
     def test_genotype_versus_allele_frequency(self):
         "Test that genotype frequency differentiates heterozygotes from a mixture of different homozygotes"
         # Arrange
         parentsGT = [ [0, 1], [0, 1] ]
-        b1Gt = [[0, 1],[0, 1],[0, 1],[0, 1],[0, 1],[0, 1]]
-        b2Gt = [[0, 0],[1, 1],[0, 0],[1, 1],[0, 0],[1, 1]]
-        b1Truth = 1.224744871391589 # not maximal since it is a mixture of homozygotes
-        b2Truth = 0
+        g1Gt = [[0, 1],[0, 1],[0, 1],[0, 1],[0, 1],[0, 1]]
+        g2Gt = [[0, 0],[1, 1],[0, 0],[1, 1],[0, 0],[1, 1]]
+        gEDTruth = 1.224744871391589 # not maximal since it is a mixture of homozygotes
+        aEDTruth = 0
         
         # Act
-        b1Alleles_1, b2Alleles_1, ed_1 = calculate_genotype_frequency_ed(b1Gt, b2Gt)
-        b1Alleles_2, b2Alleles_2, ed_2 = calculate_allele_frequency_ed(b1Gt, b2Gt)
+        g1Alleles, g2Alleles, g1Filtered, g2Filtered, aED, gED, iED = calculate_segregant_ed(g1Gt, g2Gt)
         
         # Assert
-        self.assertEqual(ed_1, b1Truth, f"ED should be {b1Truth} when working with genotypes")
-        self.assertEqual(ed_2, b2Truth, "ED should be zero when working solely with alleles")
+        self.assertEqual(gED, gEDTruth, f"Expected genotypes ED to {gEDTruth} but got {gED}")
+        self.assertEqual(aED, aEDTruth, f"Expected alleles ED to be {aEDTruth} but got {aED}")
     
     def test_inheritance_versus_allele_frequency_equality_1(self):
         "Both ED methods should be equal for zero segregation"
         # Arrange
         parentsGT = [ [0, 1], [0, 1] ]
-        b1Gt = [[0, 1], [0, 1], [0, 1], [0, 1]]
-        b2Gt = [[0, 1], [0, 1], [0, 1], [0, 1]]
+        g1Gt = [[0, 1], [0, 1], [0, 1], [0, 1]]
+        g2Gt = [[0, 1], [0, 1], [0, 1], [0, 1]]
         truth = 0
         
         # Act
-        b1Alleles_1, b2Alleles_1, ed_1 = calculate_allele_frequency_ed(b1Gt, b2Gt)
-        b1Alleles_2, b2Alleles_2, ed_2 = calculate_inheritance_ed(b1Gt, b2Gt, parentsGT)
+        g1Alleles, g2Alleles, g1Filtered, g2Filtered, aED, gED, iED = calculate_segregant_ed(g1Gt, g2Gt)
         
         # Assert
-        self.assertEqual(ed_1, truth, "Segregant ED should be 0 for identical genotypes")
-        self.assertEqual(ed_2, truth, "Inheritance ED should be 0 for identical genotypes")
-        self.assertEqual(ed_1, ed_2, "Both ED methods should be equal for zero segregation")
+        self.assertEqual(aED, truth, "Allele ED should be 0 for identical genotypes")
+        self.assertEqual(gED, truth, "Inheritance ED should be 0 for identical genotypes")
+        self.assertEqual(aED, gED, "Both ED methods should be equal for zero segregation")
     
     def test_inheritance_versus_allele_frequency_equality_2(self):
         "Both ED methods should be equal for maximal segregation"
         # Arrange
         parentsGT = [ [0, 1], [0, 1] ]
-        b1Gt = [[0, 0], [0, 0], [0, 0], [0, 0]]
-        b2Gt = [[1, 1], [1, 1], [1, 1], [1, 1]]
+        g1Gt = [[0, 0], [0, 0], [0, 0], [0, 0]]
+        g2Gt = [[1, 1], [1, 1], [1, 1], [1, 1]]
         truth = MAXIMAL_SEGREGATION
         
         # Act
-        b1Alleles_1, b2Alleles_1, ed_1 = calculate_allele_frequency_ed(b1Gt, b2Gt)
-        b1Alleles_2, b2Alleles_2, ed_2 = calculate_inheritance_ed(b1Gt, b2Gt, parentsGT)
+        g1Alleles, g2Alleles, g1Filtered, g2Filtered, aED, gED, iED = calculate_segregant_ed(g1Gt, g2Gt, parentsGT=parentsGT)
         
         # Assert
-        self.assertAlmostEqual(ed_1, truth, places=5, msg="Segregant ED should be ~1.41421 for identical genotypes")
-        self.assertAlmostEqual(ed_2, truth, places=5, msg="Inheritance ED should be ~1.41421 for identical genotypes")
-        self.assertEqual(ed_1, ed_2, "Both ED methods should be equal for maximal segregation")
+        self.assertAlmostEqual(aED, truth, places=5, msg="Alleles ED should be ~1.41421 for identical genotypes")
+        self.assertAlmostEqual(iED, truth, places=5, msg="Inheritance ED should be ~1.41421 for identical genotypes")
+        self.assertEqual(aED, iED, "Both ED methods should be equal for maximal segregation")
     
     def test_calculate_inheritance_ed_dip_dip_parents(self):
         # Arrange
         parentsGT = [ [0, 1], [0, 2] ] # represents "A/T" and "A/G" parents
-        b1Gt = [[0, 2], [1, 2], [0, 2], [0, 0]] # represents "A/G", "T/G", "A/G", "A/A" genotypes in group 1
-        b2Gt = [[1, 2], [0, 1], [0, 0], [0, 0]] # represents "T/G", "A/T", "A/A", "A/A" genotypes in group 2
+        g1Gt = [[0, 2], [1, 2], [0, 2], [0, 0]] # represents "A/G", "T/G", "A/G", "A/A" genotypes in group 1
+        g2Gt = [[1, 2], [0, 1], [0, 0], [0, 0]] # represents "T/G", "A/T", "A/A", "A/A" genotypes in group 2
         # truth = 0.7905694150420949 # calculated by hand on the plane from WA to Brisbane!
         truth = 0.5590169943749475 # after adjustment of dividing sum by 2 prior to sqrt() operation
         
         # Act
-        b1Alleles, b2Alleles, ed = calculate_inheritance_ed(b1Gt, b2Gt, parentsGT)
+        g1Alleles, g2Alleles, g1Filtered, g2Filtered, aED, gED, iED = calculate_segregant_ed(g1Gt, g2Gt, parentsGT=parentsGT)
         
         # Assert
-        self.assertAlmostEqual(ed, truth, places=5, 
-                             msg=f"Expected ED to be approximately {truth} but got {ed}")
-        self.assertEqual(b1Alleles, 8, "Expected 8 alleles in group 1")
-        self.assertEqual(b2Alleles, 8, "Expected 8 alleles in group 2")
+        self.assertAlmostEqual(iED, truth, places=5, 
+                             msg=f"Expected ED to be approximately {truth} but got {iED}")
+        self.assertEqual(g1Alleles, 8, "Expected 8 alleles in group 1")
+        self.assertEqual(g2Alleles, 8, "Expected 8 alleles in group 2")
     
     def test_calculate_inheritance_ed_tet_tet_parents_1(self):
         "Non-segregation should still give ED==0 with tetraploid parents and samples"
         # Arrange
         parentsGT = [ [0, 0, 1, 1], [0, 0, 2, 2] ]
-        b1Gt = [[0, 0, 1, 2], [0, 0, 1, 2], [0, 0, 1, 2], [0, 0, 1, 2]]
-        b2Gt = [[0, 0, 1, 2], [0, 0, 1, 2], [0, 0, 1, 2], [0, 0, 1, 2]]
+        g1Gt = [[0, 0, 1, 2], [0, 0, 1, 2], [0, 0, 1, 2], [0, 0, 1, 2]]
+        g2Gt = [[0, 0, 1, 2], [0, 0, 1, 2], [0, 0, 1, 2], [0, 0, 1, 2]]
         truth = 0
         
         # Act
-        b1Alleles, b2Alleles, ed = calculate_inheritance_ed(b1Gt, b2Gt, parentsGT)
+        g1Alleles, g2Alleles, g1Filtered, g2Filtered, aED, gED, iED = calculate_segregant_ed(g1Gt, g2Gt, parentsGT=parentsGT)
         
         # Assert
-        self.assertEqual(ed, truth, f"Expected ED to be zero but got {ed}")
+        self.assertEqual(iED, truth, f"Expected ED to be zero but got {iED}")
     
     def test_calculate_inheritance_ed_tet_tet_parents_2(self):
         "Maximal-segregation should still give ED==1.41421 with tetraploid parents and samples"
         # Arrange
         parentsGT = [ [0, 1, 2, 3], [0, 1, 4, 5] ]
-        b1Gt = [[0, 1, 2, 4], [0, 1, 2, 4], [0, 1, 2, 4], [0, 1, 2, 4]]
-        b2Gt = [[0, 1, 3, 5], [0, 1, 3, 5], [0, 1, 3, 5], [0, 1, 3, 5]]
+        g1Gt = [[0, 1, 2, 4], [0, 1, 2, 4], [0, 1, 2, 4], [0, 1, 2, 4]]
+        g2Gt = [[0, 1, 3, 5], [0, 1, 3, 5], [0, 1, 3, 5], [0, 1, 3, 5]]
         truth = MAXIMAL_SEGREGATION
         
         # Act
-        b1Alleles, b2Alleles, ed = calculate_inheritance_ed(b1Gt, b2Gt, parentsGT)
+        g1Alleles, g2Alleles, g1Filtered, g2Filtered, aED, gED, iED = calculate_segregant_ed(g1Gt, g2Gt, parentsGT=parentsGT)
         
         # Assert
-        self.assertEqual(ed, truth, f"Expected ED to be zero but got {ed}")
+        self.assertEqual(iED, truth, f"Expected ED to be zero but got {iED}")
     
     def test_calculate_inheritance_ed_tet_tet_parents_3(self):
         "Half-shuffled samples from the above test should give ED==0 with tetraploid parents and samples"
         # Arrange
         parentsGT = [ [0, 1, 2, 3], [0, 1, 4, 5] ]
-        b1Gt = [[0, 1, 2, 4], [0, 1, 2, 4], [0, 1, 3, 5], [0, 1, 3, 5]]
-        b2Gt = [[0, 1, 3, 5], [0, 1, 3, 5], [0, 1, 2, 4], [0, 1, 2, 4]]
+        g1Gt = [[0, 1, 2, 4], [0, 1, 2, 4], [0, 1, 3, 5], [0, 1, 3, 5]]
+        g2Gt = [[0, 1, 3, 5], [0, 1, 3, 5], [0, 1, 2, 4], [0, 1, 2, 4]]
         truth = 0
         
         # Act
-        b1Alleles, b2Alleles, ed = calculate_inheritance_ed(b1Gt, b2Gt, parentsGT)
+        g1Alleles, g2Alleles, g1Filtered, g2Filtered, aED, gED, iED = calculate_segregant_ed(g1Gt, g2Gt, parentsGT=parentsGT)
         
         # Assert
-        self.assertEqual(ed, truth, f"Expected ED to be zero but got {ed}")
+        self.assertEqual(iED, truth, f"Expected ED to be zero but got {iED}")
     
     def test_calculate_inheritance_ed_with_impossible_progeny_1(self):
         "Test for impossible progeny (alleles do not exist in parents)"
         # Arrange
         parentsGT = [ [0, 0, 1, 1], [0, 0, 2, 2] ]
-        b1Gt = [[0, 1, 2, 4], [0, 1, 2, 4], [0, 1, 3, 5], [0, 1, 3, 5]]
-        b2Gt = [[0, 1, 3, 5], [0, 1, 3, 5], [0, 1, 2, 4], [0, 1, 2, 4]]
-        truth = 0
+        g1Gt = [[0, 1, 2, 4], [0, 1, 2, 4], [0, 1, 3, 5], [0, 1, 3, 5]]
+        g2Gt = [[0, 1, 3, 5], [0, 1, 3, 5], [0, 1, 2, 4], [0, 1, 2, 4]]
+        edTruth = 0
+        preFilterTruth = 16
+        postFilterTruth = 0
         
         # Act
         "Can't use calculate_inheritance_ed here since impossible progeny removal occurs in calculate_segregant_ed"
-        b1Alleles, b2Alleles, ed = calculate_segregant_ed(b1Gt, b2Gt, isCNV=False, parentsGT=parentsGT)
+        g1Alleles, g2Alleles, g1Filtered, g2Filtered, aED, gED, iED = calculate_segregant_ed(g1Gt, g2Gt, parentsGT=parentsGT)
         
         # Assert
-        self.assertEqual(ed, truth, f"Expected ED to be zero but got {ed}")
-        self.assertEqual(b1Alleles, 0, "Expected 0 alleles in group 1")
-        self.assertEqual(b2Alleles, 0, "Expected 0 alleles in group 2")
+        self.assertEqual(iED, edTruth, f"Expected ED to be {edTruth} but got {iED}")
+        self.assertEqual(g1Alleles, preFilterTruth, f"Expected {preFilterTruth} alleles in group 1 before filtering but got {g1Alleles}")
+        self.assertEqual(g2Alleles, preFilterTruth, f"Expected {preFilterTruth} alleles in group 2 before filtering but got {g2Alleles}")
+        self.assertEqual(g1Filtered, postFilterTruth, f"Expected {postFilterTruth} alleles in group 1 after filtering but got {g1Filtered}")
+        self.assertEqual(g2Filtered, postFilterTruth, f"Expected {postFilterTruth} alleles in group 2 after filtering but got {g2Filtered}")
     
     def test_calculate_inheritance_ed_with_impossible_progeny_2(self):
         "Test for impossible progeny (allele combination cannot be inherited from parents)"
         # Arrange
         parentsGT = [ [1, 1], [0, 1] ]
-        b1Gt = [[0, 0],[0, 0],[0, 0],[0, 0]]
-        b2Gt = [[1, 1],[0, 1],[1, 1],[0, 1]]
-        truth = 0
+        g1Gt = [[0, 0],[0, 0],[0, 0],[0, 0]]
+        g2Gt = [[1, 1],[0, 1],[1, 1],[0, 1]]
+        edTruth = 0
+        preFilterTruth = 8
+        postFilterTruth = 0 # only group 1 should be filtered out
         
         # Act
-        b1Alleles, b2Alleles, ed = calculate_segregant_ed(b1Gt, b2Gt, isCNV=False, parentsGT=parentsGT)
+        g1Alleles, g2Alleles, g1Filtered, g2Filtered, aED, gED, iED = calculate_segregant_ed(g1Gt, g2Gt, parentsGT=parentsGT)
         
         # Assert
-        self.assertEqual(ed, truth, f"Expected ED to be zero but got {ed}")
-        self.assertEqual(b1Alleles, 0, "Expected 0 alleles in group 1")
-        self.assertEqual(b2Alleles, 8, "Expected 0 alleles in group 2")
+        self.assertEqual(iED, edTruth, f"Expected ED to be {edTruth} but got {iED}")
+        self.assertEqual(g1Alleles, preFilterTruth, f"Expected {preFilterTruth} alleles in group 1 before filtering but got {g1Alleles}")
+        self.assertEqual(g2Alleles, preFilterTruth, f"Expected {preFilterTruth} alleles in group 2 before filtering but got {g2Alleles}")
+        self.assertEqual(g1Filtered, postFilterTruth, f"Expected {postFilterTruth} alleles in group 1 after filtering but got {g1Filtered}")
+        self.assertEqual(g2Filtered, preFilterTruth, f"Expected {preFilterTruth} alleles in group 2 after filtering but got {g2Filtered}")
     
     def test_calculate_inheritance_ed_with_impossible_progeny_3(self):
         "Test for impossible progeny (alleles could only be from a clone)"
         # Arrange
         parentsGT = [ [2, 1], [0, 0] ]
-        b1Gt = [[2, 1]]
-        b2Gt = [[0, 0]]
-        truth = 0
+        g1Gt = [[2, 1]]
+        g2Gt = [[0, 0]]
+        edTruth = 0
+        preFilterTruth = 2
+        postFilterTruth = 0
         
         # Act
-        b1Alleles, b2Alleles, ed = calculate_segregant_ed(b1Gt, b2Gt, isCNV=False, parentsGT=parentsGT)
+        g1Alleles, g2Alleles, g1Filtered, g2Filtered, aED, gED, iED = calculate_segregant_ed(g1Gt, g2Gt, parentsGT=parentsGT)
         
         # Assert
-        self.assertEqual(ed, truth, f"Expected ED to be zero but got {ed}")
-        self.assertEqual(b1Alleles, 0, "Expected 0 alleles in group 1")
-        self.assertEqual(b2Alleles, 0, "Expected 0 alleles in group 2")
+        self.assertEqual(iED, edTruth, f"Expected ED to be {edTruth} but got {iED}")
+        self.assertEqual(g1Alleles, preFilterTruth, f"Expected {preFilterTruth} alleles in group 1 before filtering but got {g1Alleles}")
+        self.assertEqual(g2Alleles, preFilterTruth, f"Expected {preFilterTruth} alleles in group 2 before filtering but got {g2Alleles}")
+        self.assertEqual(g1Filtered, postFilterTruth, f"Expected {postFilterTruth} alleles in group 1 after filtering but got {g1Filtered}")
+        self.assertEqual(g2Filtered, postFilterTruth, f"Expected {postFilterTruth} alleles in group 2 after filtering but got {g2Filtered}")
     
     def test_calculate_ed_for_results_stability_1(self):
         "Tests done with the program in a state where the results are trustworthy; future changes should not affect the results"
         # Arrange
         parentsGT = [ [0, 1], [1, 1] ]
-        b1Gt = [[0, 1], [0, 1], [0, 1], [0, 1]]
-        b2Gt = [[1, 1], [0, 1], [0, 1], [1, 1]]
+        g1Gt = [[0, 1], [0, 1], [0, 1], [0, 1]]
+        g2Gt = [[1, 1], [0, 1], [0, 1], [1, 1]]
         inheritanceTruth = 0.42898458920779164
         alleleTruth = 0.3535533905932738
         genotypeTruth = 0.7071067811865476
         
         # Act
-        b1Alleles_1, b2Alleles_1, ed_1 = calculate_inheritance_ed(b1Gt, b2Gt, parentsGT)
-        b1Alleles_2, b2Alleles_2, ed_2 = calculate_allele_frequency_ed(b1Gt, b2Gt)
-        b1Alleles_3, b2Alleles_3, ed_3 = calculate_genotype_frequency_ed(b1Gt, b2Gt)
+        g1Alleles, g2Alleles, g1Filtered, g2Filtered, aED, gED, iED = calculate_segregant_ed(g1Gt, g2Gt, parentsGT=parentsGT)
         
         # Assert
-        self.assertAlmostEqual(ed_1, inheritanceTruth, places=5, msg=f"Expected inheritance ED to be {inheritanceTruth} but got {ed_1}")
-        self.assertAlmostEqual(ed_2, alleleTruth, places=5, msg=f"Expected allele frequency ED to be {alleleTruth} but got {ed_2}")
-        self.assertAlmostEqual(ed_3, genotypeTruth, places=5, msg=f"Expected genotype frequency ED to be {genotypeTruth} but got {ed_3}")
+        self.assertAlmostEqual(aED, alleleTruth, places=5, msg=f"Expected allele frequency ED to be {alleleTruth} but got {aED}")
+        self.assertAlmostEqual(gED, genotypeTruth, places=5, msg=f"Expected genotype frequency ED to be {genotypeTruth} but got {gED}")
+        self.assertAlmostEqual(iED, inheritanceTruth, places=5, msg=f"Expected inheritance ED to be {inheritanceTruth} but got {iED}")
     
     def test_calculate_ed_for_results_stability_2(self):
         "Tests done with the program in a state where the results are trustworthy; future changes should not affect the results"
         # Arrange
         parentsGT = [ [0, 0], [1, 1] ]
-        b1Gt = [[0, 1], [0, 1], [0, 1], [0, 1]]
-        b2Gt = [[1, 1], [0, 1], [0, 1], [1, 1]]
-        inheritanceTruth = 0.25
+        g1Gt = [[0, 1], [0, 1], [0, 1], [0, 1]]
+        g2Gt = [[1, 1], [0, 1], [0, 1], [1, 1]]
+        inheritanceTruth = 0.0 # 0.25 without parental filtering
         alleleTruth = 0.3535533905932738
         genotypeTruth = 0.7071067811865476
         
         # Act
-        b1Alleles_1, b2Alleles_1, ed_1 = calculate_inheritance_ed(b1Gt, b2Gt, parentsGT)
-        b1Alleles_2, b2Alleles_2, ed_2 = calculate_allele_frequency_ed(b1Gt, b2Gt)
-        b1Alleles_3, b2Alleles_3, ed_3 = calculate_genotype_frequency_ed(b1Gt, b2Gt)
+        g1Alleles, g2Alleles, g1Filtered, g2Filtered, aED, gED, iED = calculate_segregant_ed(g1Gt, g2Gt, parentsGT=parentsGT)
         
         # Assert
-        self.assertAlmostEqual(ed_1, inheritanceTruth, places=5, msg=f"Expected inheritance ED to be {inheritanceTruth} but got {ed_1}")
-        self.assertAlmostEqual(ed_2, alleleTruth, places=5, msg=f"Expected allele frequency ED to be {alleleTruth} but got {ed_2}")
-        self.assertAlmostEqual(ed_3, genotypeTruth, places=5, msg=f"Expected genotype frequency ED to be {genotypeTruth} but got {ed_3}")
+        self.assertAlmostEqual(aED, alleleTruth, places=5, msg=f"Expected allele frequency ED to be {alleleTruth} but got {aED}")
+        self.assertAlmostEqual(gED, genotypeTruth, places=5, msg=f"Expected genotype frequency ED to be {genotypeTruth} but got {gED}")
+        self.assertAlmostEqual(iED, inheritanceTruth, places=5, msg=f"Expected inheritance ED to be {inheritanceTruth} but got {iED}")
     
     def test_calculate_ed_for_results_stability_3(self):
         "Tests done with the program in a state where the results are trustworthy; future changes should not affect the results"
         # Arrange
         parentsGT = [ [0, 0], [0, 1] ]
-        b1Gt = [[0, 0], [0, 1], [0, 0], [0, 1]]
-        b2Gt = [[1, 1], [0, 1], [0, 1], [0, 0]]
+        g1Gt = [[0, 0], [0, 1], [0, 0], [0, 1]]
+        g2Gt = [[1, 1], [0, 1], [0, 1], [0, 0]]
         inheritanceTruth = 0.14299486306926387
         alleleTruth = 0.3535533905932738
         genotypeTruth = 0.3535533905932738
         
         # Act
-        b1Alleles_1, b2Alleles_1, ed_1 = calculate_segregant_ed(b1Gt, b2Gt, isCNV=False, parentsGT=parentsGT) # cant use calculate_inheritance_ed since impossible progeny exist
-        b1Alleles_2, b2Alleles_2, ed_2 = calculate_allele_frequency_ed(b1Gt, b2Gt) 
-        b1Alleles_3, b2Alleles_3, ed_3 = calculate_genotype_frequency_ed(b1Gt, b2Gt)
+        g1Alleles, g2Alleles, g1Filtered, g2Filtered, aED, gED, iED = calculate_segregant_ed(g1Gt, g2Gt, parentsGT=parentsGT)
         
         # Assert
-        self.assertAlmostEqual(ed_1, inheritanceTruth, places=5, msg=f"Expected inheritance ED to be {inheritanceTruth} but got {ed_1}")
-        self.assertAlmostEqual(ed_2, alleleTruth, places=5, msg=f"Expected allele frequency ED to be {alleleTruth} but got {ed_2}")
-        self.assertAlmostEqual(ed_3, genotypeTruth, places=5, msg=f"Expected genotype frequency ED to be {genotypeTruth} but got {ed_3}")
-    
-    def test_calculate_inheritance_ed_with_empty_group(self):
-        "Test for impossible progeny (alleles could only be from a clone)"
-        # Arrange
-        parentsGT = [ [1, 2], [0, 0] ]
-        b1Gt = []
-        b2Gt = [[0, 1]]
-        truth = 0
-        
-        # Act
-        b1Alleles, b2Alleles, ed = calculate_segregant_ed(b1Gt, b2Gt, isCNV=False, parentsGT=parentsGT) # calculate_inheritance_ed
-        
-        # Assert
-        self.assertEqual(ed, truth, f"Expected ED to be zero but got {ed}")
-        self.assertEqual(b1Alleles, 0, "Expected 0 alleles in group 1")
-        self.assertEqual(b2Alleles, 2, "Expected 0 alleles in group 2")
+        self.assertAlmostEqual(aED, alleleTruth, places=5, msg=f"Expected allele frequency ED to be {alleleTruth} but got {aED}")
+        self.assertAlmostEqual(gED, genotypeTruth, places=5, msg=f"Expected genotype frequency ED to be {genotypeTruth} but got {gED}")
+        self.assertAlmostEqual(iED, inheritanceTruth, places=5, msg=f"Expected inheritance ED to be {inheritanceTruth} but got {iED}")
     
     def test_calculate_segregant_ed_with_empty_group(self):
         "Test for impossible progeny (alleles could only be from a clone)"
         # Arrange
         parentsGT = [ [1, 2], [0, 0] ]
-        b1Gt = []
-        b2Gt = [[0, 1]]
+        g1Gt = []
+        g2Gt = [[0, 1]]
         truth = 0
         
         # Act
-        b1Alleles, b2Alleles, ed = calculate_segregant_ed(b1Gt, b2Gt, isCNV=False, parentsGT=parentsGT)
+        g1Alleles, g2Alleles, g1Filtered, g2Filtered, aED, gED, iED = calculate_segregant_ed(g1Gt, g2Gt, parentsGT=parentsGT)
         
         # Assert
-        self.assertEqual(ed, truth, f"Expected ED to be zero but got {ed}")
-        self.assertEqual(b1Alleles, 0, "Expected 0 alleles in group 1")
-        self.assertEqual(b2Alleles, 2, "Expected 0 alleles in group 2")
+        self.assertEqual(iED, truth, f"Expected ED to be zero but got {iED}")
+        self.assertEqual(g1Alleles, 0, "Expected 0 alleles in group 1")
+        self.assertEqual(g2Alleles, 2, "Expected 0 alleles in group 2")
     
     def test_calculate_gt_median_adjustment_1(self):
         "Test that median adjustment for CNVs works correctly (groups segregate evenly)"
         # Arrange
-        b1Gt = [[0, 0], [0, 0], [0, 0], [0, 0]]
-        b2Gt = [[100, 100], [100, 100], [100, 100], [100, 100]]
-        b1Truth = 0
-        b2Truth = 1
+        g1Gt = [[0, 0], [0, 0], [0, 0], [0, 0]]
+        g2Gt = [[100, 100], [100, 100], [100, 100], [100, 100]]
+        g1Truth = 0
+        g2Truth = 1
         
         # Act
-        b1AdjGt, b2AdjGt = gt_median_adjustment([b1Gt, b2Gt])
+        g1AdjGt, g2AdjGt = gt_median_adjustment([g1Gt, g2Gt])
         
         # Assert
-        self.assertTrue(all([ allele == b1Truth for gt in b1AdjGt for allele in gt ]), f"Expected adjusted group 1 to be {b1Truth}")
-        self.assertTrue(all([ allele == b2Truth for gt in b2AdjGt for allele in gt ]), f"Expected adjusted group 2 to be {b2Truth}")
+        self.assertTrue(all([ allele == g1Truth for gt in g1AdjGt for allele in gt ]), f"Expected adjusted group 1 to be {g1Truth}")
+        self.assertTrue(all([ allele == g2Truth for gt in g2AdjGt for allele in gt ]), f"Expected adjusted group 2 to be {g2Truth}")
     
     def test_calculate_gt_median_adjustment_2(self):
         "Test that median adjustment for CNVs works correctly (all alleles are zero)"
         # Arrange
-        b1Gt = [[0, 0], [0, 0], [0, 0], [0, 0]]
-        b2Gt = [[0, 0], [0, 0], [0, 0], [0, 0]]
-        b1Truth = 0
-        b2Truth = 0
+        g1Gt = [[0, 0], [0, 0], [0, 0], [0, 0]]
+        g2Gt = [[0, 0], [0, 0], [0, 0], [0, 0]]
+        g1Truth = 0
+        g2Truth = 0
         
         # Act
-        b1AdjGt, b2AdjGt = gt_median_adjustment([b1Gt, b2Gt])
+        g1AdjGt, g2AdjGt = gt_median_adjustment([g1Gt, g2Gt])
         
         # Assert
-        self.assertTrue(all([ allele == b1Truth for gt in b1AdjGt for allele in gt ]), f"Expected adjusted group 1 to be {b1Truth}")
-        self.assertTrue(all([ allele == b2Truth for gt in b2AdjGt for allele in gt ]), f"Expected adjusted group 2 to be {b2Truth}")
+        self.assertTrue(all([ allele == g1Truth for gt in g1AdjGt for allele in gt ]), f"Expected adjusted group 1 to be {g1Truth}")
+        self.assertTrue(all([ allele == g2Truth for gt in g2AdjGt for allele in gt ]), f"Expected adjusted group 2 to be {g2Truth}")
     
     def test_calculate_gt_median_adjustment_3(self):
         "Test that median adjustment for CNVs works correctly (all alleles are one)"
         # Arrange
-        b1Gt = [[1, 1], [1, 1], [1, 1], [1, 1]]
-        b2Gt = [[1, 1], [1, 1], [1, 1], [1, 1]]
-        b1Truth = 0
-        b2Truth = 0
+        g1Gt = [[1, 1], [1, 1], [1, 1], [1, 1]]
+        g2Gt = [[1, 1], [1, 1], [1, 1], [1, 1]]
+        g1Truth = 0
+        g2Truth = 0
         
         # Act
-        b1AdjGt, b2AdjGt = gt_median_adjustment([b1Gt, b2Gt])
+        g1AdjGt, g2AdjGt = gt_median_adjustment([g1Gt, g2Gt])
         
         # Assert
-        self.assertTrue(all([ allele == b1Truth for gt in b1AdjGt for allele in gt ]), f"Expected adjusted group 1 to be {b1Truth}")
-        self.assertTrue(all([ allele == b2Truth for gt in b2AdjGt for allele in gt ]), f"Expected adjusted group 2 to be {b2Truth}")
+        self.assertTrue(all([ allele == g1Truth for gt in g1AdjGt for allele in gt ]), f"Expected adjusted group 1 to be {g1Truth}")
+        self.assertTrue(all([ allele == g2Truth for gt in g2AdjGt for allele in gt ]), f"Expected adjusted group 2 to be {g2Truth}")
     
     def test_calculate_gt_median_adjustment_4(self):
         "Test that median adjustment for CNVs works correctly (one genotype is different)"
         # Arrange
-        b1Gt = [[0, 0], [0, 0], [0, 0], [0, 0]]
-        b2Gt = [[0, 0], [0, 0], [0, 0], [0, 1]]
-        b1Truth = 0
-        b2Truth = 0
+        g1Gt = [[0, 0], [0, 0], [0, 0], [0, 0]]
+        g2Gt = [[0, 0], [0, 0], [0, 0], [0, 1]]
+        g1Truth = 0
+        g2Truth = 0
         
         # Act
-        b1AdjGt, b2AdjGt = gt_median_adjustment([b1Gt, b2Gt])
+        g1AdjGt, g2AdjGt = gt_median_adjustment([g1Gt, g2Gt])
         
         # Assert
-        self.assertTrue(all([ allele == b1Truth for gt in b1AdjGt for allele in gt ]), f"Expected adjusted group 1 to be {b1Truth}")
-        self.assertFalse(all([ allele == b2Truth for gt in b2AdjGt for allele in gt ]), f"Expected adjusted group 2 to NOT be all {b2Truth}")
+        self.assertTrue(all([ allele == g1Truth for gt in g1AdjGt for allele in gt ]), f"Expected adjusted group 1 to be {g1Truth}")
+        self.assertFalse(all([ allele == g2Truth for gt in g2AdjGt for allele in gt ]), f"Expected adjusted group 2 to NOT be all {g2Truth}")
     
     def test_calculate_gt_median_adjustment_with_dots(self):
         "Test that median adjustment handles dot values safely"
         # Arrange
-        b1Gt = [[0, 0], ["."], ".", [1, 1]]
-        b1Truth = [[0, 0], ['.'], ['.'], [1, 1]]
+        g1Gt = [[0, 0], ["."], ".", [1, 1]]
+        g1Truth = [[0, 0], ['.'], ['.'], [1, 1]]
         
         # Act
-        b1AdjGt = gt_median_adjustment([b1Gt])[0]
+        g1AdjGt = gt_median_adjustment([g1Gt])[0]
         
         # Assert
-        self.assertEqual(b1AdjGt, b1Truth, f"Expected adjusted group 1 to be {b1Truth}")
+        self.assertEqual(g1AdjGt, g1Truth, f"Expected adjusted group 1 to be {g1Truth}")
 
 class TestSPLSDA(unittest.TestCase):
     def test_recode_variant_with_pipes(self):
@@ -1091,7 +1078,7 @@ class TestMain(unittest.TestCase):
         #self.assertTrue(returncode == 0, f"Expected returncode 0 but got: {returncode}")
         self.assertTrue(stderr == "", f"Expected no stderr output but got: {stderr}")
         
-        edFile = os.path.join(workDir, "psQTL_call.ed.tsv.gz")
+        edFile = os.path.join(workDir, "psQTL_call.alleles_ed.tsv.gz")
         edContents = []
         with read_gz_file(edFile) as fileIn:
             for line in fileIn:
@@ -1167,7 +1154,7 @@ class TestMain(unittest.TestCase):
         #self.assertTrue(returncode == 0, f"Expected returncode 0 but got: {returncode}")
         self.assertTrue(stderr == "", f"Expected no stderr output but got: {stderr}")
         
-        edFile = os.path.join(workDir, "psQTL_call.ed.tsv.gz")
+        edFile = os.path.join(workDir, "psQTL_call.inheritance_ed.tsv.gz")
         edContents = []
         with read_gz_file(edFile) as fileIn:
             for line in fileIn:
@@ -1243,7 +1230,7 @@ class TestMain(unittest.TestCase):
         #self.assertTrue(returncode == 0, f"Expected returncode 0 but got: {returncode}")
         self.assertTrue(stderr == "", f"Expected no stderr output but got: {stderr}")
         
-        edFile = os.path.join(workDir, "psQTL_call.ed.tsv.gz")
+        edFile = os.path.join(workDir, "psQTL_call.alleles_ed.tsv.gz")
         edContents = []
         with read_gz_file(edFile) as fileIn:
             for line in fileIn:
@@ -1319,7 +1306,7 @@ class TestMain(unittest.TestCase):
         #self.assertTrue(returncode == 0, f"Expected returncode 0 but got: {returncode}")
         self.assertTrue(stderr == "", f"Expected no stderr output but got: {stderr}")
         
-        edFile = os.path.join(workDir, "psQTL_call.ed.tsv.gz")
+        edFile = os.path.join(workDir, "psQTL_call.inheritance_ed.tsv.gz")
         edContents = []
         with read_gz_file(edFile) as fileIn:
             for line in fileIn:
@@ -1395,7 +1382,7 @@ class TestMain(unittest.TestCase):
         self.assertTrue(returncode == 0, f"Expected returncode 0 but got: {returncode}")
         self.assertTrue(stderr == "", f"Expected no stderr output but got: {stderr}")
         
-        edFile = os.path.join(workDir, "psQTL_call.ed.tsv.gz")
+        edFile = os.path.join(workDir, "psQTL_call.alleles_ed.tsv.gz")
         edContents = []
         with read_gz_file(edFile) as fileIn:
             for line in fileIn:
@@ -1471,7 +1458,7 @@ class TestMain(unittest.TestCase):
         #self.assertTrue(returncode == 0, f"Expected returncode 0 but got: {returncode}")
         self.assertTrue(stderr == "", f"Expected no stderr output but got: {stderr}")
         
-        edFile = os.path.join(workDir, "psQTL_call.ed.tsv.gz")
+        edFile = os.path.join(workDir, "psQTL_call.inheritance_ed.tsv.gz")
         edContents = []
         with read_gz_file(edFile) as fileIn:
             for line in fileIn:

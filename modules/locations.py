@@ -50,8 +50,16 @@ class Locations:
         return os.path.join(self.callDir, "psQTL_call.filtered.vcf.gz")
     
     @property
-    def variantEdFile(self):
-        return os.path.join(self.workingDirectory, "psQTL_call.ed.tsv.gz")
+    def allelesEdFile(self):
+        return os.path.join(self.workingDirectory, "psQTL_call.alleles_ed.tsv.gz")
+    
+    @property
+    def inheritanceEdFile(self):
+        return os.path.join(self.workingDirectory, "psQTL_call.inheritance_ed.tsv.gz")
+    
+    @property
+    def genotypesEdFile(self):
+        return os.path.join(self.workingDirectory, "psQTL_call.genotypes_ed.tsv.gz")
     
     @property
     def variantRecodedFile(self):
@@ -100,10 +108,10 @@ class Locations:
     @property
     def integrativeSplsdaRscript(self):
         return os.path.join(os.path.dirname(os.path.dirname(__file__)), "utilities", "integrative_splsda.R")
-
+    
     # Attributes with value input
     def variantEdPickleFile(self, value):
         return os.path.join(self.workingDirectory, f"psQTL_call.ed.{value}.pkl")
-
+    
     def deletionEdPickleFile(self, value):
         return os.path.join(self.workingDirectory, f"psQTL_depth.ed.{value}.pkl")
