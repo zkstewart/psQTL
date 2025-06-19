@@ -71,6 +71,13 @@ def main():
                    help="""Specify the location to write the output file; for 'plot', this must
                    end with '.pdf', '.png', or '.svg'; for 'report', this must end with
                    '.tsv' or '.csv'""")
+    p.add_argument("--ed", dest="edType",
+                   required=False,
+                   choices=["alleles", "inheritance", "genotypes"],
+                   help="""Optionally, specify the type of 'call' Euclidean distance
+                   measurement to use; 'inheritance' is only available if psQTL_proc.py
+                   was previously run with the --parents argument""",
+                   default="alleles")
     p.add_argument("--power", dest="power",
                    required=False,
                    type=int,
@@ -186,7 +193,7 @@ def main():
                          default=50000)
     
     args = subParentParser.parse_args()
-    locations = validate_post_args(args) # sets args.metadataDict; args.gff3Obj if relevant
+    locations = validate_post_args(args) # always sets args.metadataDict; sets args.edFile &| args.pickleFile &| args.gff3Obj if relevant
     
     # Perform mode-specific validation
     "Validate upfront before we get into time-consuming parsing to frontload the error checking"
@@ -212,12 +219,12 @@ def main():
         dataDict["call"] = {}
         # Parse 'call' Euclidean distance data
         if "ed" in args.measurementTypes:
-            pickleFile = locations.variantEdPickleFile(args.missingFilter)
+            pickleFile = args.pickleFile(args.missingFilter)
             if os.path.isfile(pickleFile) and os.path.isfile(pickleFile + ".ok"):
                 with open(pickleFile, "rb") as fileIn:
                     dataDict["call"]["ed"] = pickle.load(fileIn)
             else:
-                dataDict["call"]["ed"] = parse_ed_as_dict(locations.allelesEdFile, args.metadataDict, args.missingFilter)
+                dataDict["call"]["ed"] = parse_ed_as_dict(args.edFile, args.metadataDict, args.missingFilter)
                 with open(pickleFile, "wb") as fileOut:
                     pickle.dump(dataDict["call"]["ed"], fileOut)
                 open(pickleFile + ".ok", "w").close()

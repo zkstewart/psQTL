@@ -38,6 +38,7 @@ python /mnt/c/git/psQTL/psQTL_post.py plot -d /location/of/your/working/director
     -f /location/of/genome.fasta \
     -i call depth \
     -m ed splsda \
+    --ed alleles \ # or inheritance or genotypes
     -o /location/to/write/output.pdf \ # or .png or .svg file
     -p line scatter coverage genes \
     --annotation location/of/genome.gff3

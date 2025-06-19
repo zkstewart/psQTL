@@ -126,13 +126,27 @@ def validate_post_args(args):
     else:
         args.metadataDict = parse_metadata(args.metadataFile)
     
+    # Validate ED input type
+    if "call" in args.inputType:
+        if args.edType == "alleles":
+            args.edFile = locations.allelesEdFile
+            args.pickleFile = locations.allelesEdPickleFile # store the function
+        elif args.edType == "inheritance":
+            args.edFile = locations.inheritanceEdFile
+            args.pickleFile = locations.inheritanceEdPickleFile
+        elif args.edType == "genotypes":
+            args.edFile = locations.genotypesEdFile
+            args.pickleFile = locations.genotypesEdPickleFile
+        else:
+            raise ValueError(f"Invalid --ed '{args.edType}'! Must be one of 'alleles', 'inheritance', or 'genotypes'.")
+    
     # Locate and validate input files
     if "call" in args.inputType:
         if "ed" in args.measurementTypes:
-            if not os.path.isfile(locations.allelesEdFile):
-                raise FileNotFoundError(f"'call' ED file '{locations.allelesEdFile}' does not exist!")
-            if not os.path.isfile(locations.allelesEdFile + ".ok"):
-                raise FileNotFoundError(f"'call' ED file '{locations.allelesEdFile}' does not have a '.ok' flag!")
+            if not os.path.isfile(args.edFile):
+                raise FileNotFoundError(f"'call' ED file '{args.edFile}' does not exist!")
+            if not os.path.isfile(args.edFile + ".ok"):
+                raise FileNotFoundError(f"'call' ED file '{args.edFile}' does not have a '.ok' flag!")
         
         if "splsda" in args.measurementTypes:
             if not os.path.isfile(locations.variantSplsdaSelectedFile):
