@@ -85,12 +85,12 @@ def validate_d(args):
     '''
     Params cache should have been merged into args before calling this function.
     '''
-    if args.deletionFile == None:
-        raise FileNotFoundError("Working directory has not been initialised with a deletion file!")
+    if args.depthFile == None:
+        raise FileNotFoundError("Working directory has not been initialised with a depth file!")
     else:
-        args.deletionFile = os.path.abspath(args.deletionFile)
-        if not os.path.isfile(args.deletionFile):
-            raise FileNotFoundError(f"Deletion file '{args.deletionFile}' was identified in " +
+        args.depthFile = os.path.abspath(args.depthFile)
+        if not os.path.isfile(args.depthFile):
+            raise FileNotFoundError(f"Depth file '{args.depthFile}' was identified in " +
                                     "the parameters cache, but it doesn't exist or is not a file!")
 
 def validate_s(args):
@@ -126,15 +126,51 @@ def validate_post_args(args):
     else:
         args.metadataDict = parse_metadata(args.metadataFile)
     
+    # Format inputType and measurementType for compatibility between plot and report modes
+    "Report mode only accepts a modified measurementType value, so we need to reformat it accordingly."
+    if args.mode == "report":
+        if args.measurementType == "ed-call":
+            args.inputType = ["call"]
+            args.measurementType = ["ed"]
+        elif args.measurementType == "ed-depth":
+            args.inputType = ["depth"]
+            args.measurementType = ["ed"]
+        elif args.measurementType == "splsda":
+            args.inputType = []
+            # Add 'call' input if the output files exist
+            if os.path.isfile(locations.variantSplsdaSelectedFile) and os.path.isfile(locations.variantSplsdaSelectedFile + ".ok"):
+                args.inputType.append("call")
+            # Add 'depth' input if the output files exist
+            if os.path.isfile(locations.depthSplsdaSelectedFile) and os.path.isfile(locations.depthSplsdaSelectedFile + ".ok"):
+                args.inputType.append("depth")
+            # If neither input type is available, raise an error
+            if args.inputType == []:
+                raise FileNotFoundError("No sPLS-DA selection files found for 'call' or 'depth'!")
+            args.measurementType = ["splsda"]
+    
+    # Validate ED input type
+    if "call" in args.inputType:
+        if args.edType == "alleles":
+            args.edFile = locations.allelesEdFile
+            args.pickleFile = locations.allelesEdPickleFile # store the function
+        elif args.edType == "inheritance":
+            args.edFile = locations.inheritanceEdFile
+            args.pickleFile = locations.inheritanceEdPickleFile
+        elif args.edType == "genotypes":
+            args.edFile = locations.genotypesEdFile
+            args.pickleFile = locations.genotypesEdPickleFile
+        else:
+            raise ValueError(f"Invalid --ed '{args.edType}'! Must be one of 'alleles', 'inheritance', or 'genotypes'.")
+    
     # Locate and validate input files
     if "call" in args.inputType:
-        if "ed" in args.measurementTypes:
-            if not os.path.isfile(locations.variantEdFile):
-                raise FileNotFoundError(f"'call' ED file '{locations.variantEdFile}' does not exist!")
-            if not os.path.isfile(locations.variantEdFile + ".ok"):
-                raise FileNotFoundError(f"'call' ED file '{locations.variantEdFile}' does not have a '.ok' flag!")
+        if "ed" in args.measurementType:
+            if not os.path.isfile(args.edFile):
+                raise FileNotFoundError(f"'call' ED file '{args.edFile}' does not exist!")
+            if not os.path.isfile(args.edFile + ".ok"):
+                raise FileNotFoundError(f"'call' ED file '{args.edFile}' does not have a '.ok' flag!")
         
-        if "splsda" in args.measurementTypes:
+        if "splsda" in args.measurementType:
             if not os.path.isfile(locations.variantSplsdaSelectedFile):
                 raise FileNotFoundError(f"sPLS-DA file for 'call' selected features '{locations.variantSplsdaSelectedFile}' does not exist!")
             if not os.path.isfile(locations.variantSplsdaSelectedFile + ".ok"):
@@ -145,24 +181,24 @@ def validate_post_args(args):
             if not os.path.isfile(locations.variantSplsdaBerFile + ".ok"):
                 raise FileNotFoundError(f"sPLS-DA file for 'call' Balanced Error Rate '{locations.variantSplsdaBerFile}' does not have a '.ok' flag!")
     if "depth" in args.inputType:
-        if "ed" in args.measurementTypes:
-            if not os.path.isfile(locations.deletionEdFile):
-                raise FileNotFoundError(f"'depth' ED file '{locations.deletionEdFile}' does not exist!")
-            if not os.path.isfile(locations.deletionEdFile + ".ok"):
-                raise FileNotFoundError(f"'depth' ED file '{locations.deletionEdFile}' does not have a '.ok' flag!")
+        if "ed" in args.measurementType:
+            if not os.path.isfile(locations.depthEdFile):
+                raise FileNotFoundError(f"'depth' ED file '{locations.depthEdFile}' does not exist!")
+            if not os.path.isfile(locations.depthEdFile + ".ok"):
+                raise FileNotFoundError(f"'depth' ED file '{locations.depthEdFile}' does not have a '.ok' flag!")
         
-        if "splsda" in args.measurementTypes:
-            if not os.path.isfile(locations.deletionSplsdaSelectedFile):
-                raise FileNotFoundError(f"sPLS-DA file for 'depth' selected features '{locations.deletionSplsdaSelectedFile}' does not exist!")
-            if not os.path.isfile(locations.deletionSplsdaSelectedFile + ".ok"):
-                raise FileNotFoundError(f"sPLS-DA file for 'depth' selected features '{locations.deletionSplsdaSelectedFile}' does not have a '.ok' flag!")
+        if "splsda" in args.measurementType:
+            if not os.path.isfile(locations.depthSplsdaSelectedFile):
+                raise FileNotFoundError(f"sPLS-DA file for 'depth' selected features '{locations.depthSplsdaSelectedFile}' does not exist!")
+            if not os.path.isfile(locations.depthSplsdaSelectedFile + ".ok"):
+                raise FileNotFoundError(f"sPLS-DA file for 'depth' selected features '{locations.depthSplsdaSelectedFile}' does not have a '.ok' flag!")
             
-            if not os.path.isfile(locations.deletionSplsdaBerFile):
-                raise FileNotFoundError(f"sPLS-DA file for 'depth' Balanced Error Rate '{locations.deletionSplsdaBerFile}' does not exist!")
-            if not os.path.isfile(locations.deletionSplsdaBerFile + ".ok"):
-                raise FileNotFoundError(f"sPLS-DA file for 'depth' Balanced Error Rate '{locations.deletionSplsdaBerFile}' does not have a '.ok' flag!")
+            if not os.path.isfile(locations.depthSplsdaBerFile):
+                raise FileNotFoundError(f"sPLS-DA file for 'depth' Balanced Error Rate '{locations.depthSplsdaBerFile}' does not exist!")
+            if not os.path.isfile(locations.depthSplsdaBerFile + ".ok"):
+                raise FileNotFoundError(f"sPLS-DA file for 'depth' Balanced Error Rate '{locations.depthSplsdaBerFile}' does not have a '.ok' flag!")
     if "call" in args.inputType and "depth" in args.inputType:
-        if "splsda" in args.measurementTypes:
+        if "splsda" in args.measurementType:
             if not os.path.isfile(locations.integrativeSplsdaSelectedFile):
                 print("# Note: '-i call depth' and '-m splsda' was set, but no integrated sPLS-DA result was found; if you have not run " +
                       "'psQTL_proc.py splsda -i call depth' yet, you may want to do that first. Otherwise, if running that command provided " +
@@ -184,6 +220,17 @@ def validate_post_args(args):
             raise FileNotFoundError(f"-a/--annotation file '{args.annotationGFF3}' is not a file!")
         else:
             args.gff3Obj = GFF3Graph(args.annotationGFF3) # parsing now to raise errors early
+            
+            # Validate that GFF3 is not empty
+            if args.gff3Obj.features == {}:
+                raise ValueError(f"-a/--annotation file '{args.annotationGFF3}' is empty?")
+            
+            # Validate that GFF3 contains genes and mRNAs
+            if not "gene" in args.gff3Obj.ftypes or not "mRNA" in args.gff3Obj.ftypes:
+                raise ValueError(f"-a/--annotation file '{args.annotationGFF3}' does not contain 'gene' and/or 'mRNA' features; " +
+                                 "psQTL requires these features to be present to make use of a GFF3 annotation file.")
+            
+            # Create NCLS index and perform QC
             args.gff3Obj.create_ncls_index("gene")
             args.gff3Obj.qc(typesToCheck=["gene", "mRNA"]) # prints out warnings if any issues found
     

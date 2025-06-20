@@ -18,11 +18,12 @@ from modules.ed import parse_ed_as_dict, convert_dict_to_windowed_ncls
 from modules.splsda import parse_selected_to_windowed_ncls, parse_ber_to_windowed_ncls, \
                            parse_integrated_to_windowed_ncls
 from modules.plot import HorizontalPlot, CircosPlot
-from modules.reporting import report_genes, report_depth
+from modules.reporting import report_genes_call, report_genes_depth, \
+                              report_genes_splsda, report_markers
 from _version import __version__
 
 def derive_window_size(args, edDict):
-    windowSize = None
+    windowSize = args.windowSize
     for key, posEDpairs in edDict.items():
         if len(posEDpairs[0]) > 1:
             windowSize = posEDpairs[0][1] - posEDpairs[0][0]
@@ -35,13 +36,19 @@ def raise_to_power(edDict, power):
             for i in range(len(posEDpairs[1])):
                 posEDpairs[1][i] = posEDpairs[1][i] ** power
 
+def validate_window_size(windowSize):
+    if windowSize == None:
+        raise ValueError("Window size was not cached from previous psQTL_prep.py analysis, nor could it " +
+                            "be derived from the provided data files; please provide the window size to " + 
+                            "the --windowSize argument as part of 'psQTL_prep.py initialise'")
+
 def main():
     usage = """%(prog)s processes the output of psQTL_proc.py to either 1) plot segregation
     statistics or 2) report on gene proximity to potential QTLs. The segregation statistics
-    can be plotted in as a combination of line plots, scatter plots, alignment coverage plots,
+    can be plotted as a combination of line plots, scatter plots, alignment coverage plots,
     and/or gene locations. The gene proximity report will identify genes that are proximal to or
-    contained within potential QTLs (in the case of deletions). The input directory is expected
-    to have been 'initialise'd by psQTL_prep.py and 'process'ed by psQTL_proc.py.
+    contained within potential QTL regions. The input directory is expected to have been
+    'initialise'd by psQTL_prep.py and 'process'ed by psQTL_proc.py.
     """
     # Establish main parser
     p = argparse.ArgumentParser()
@@ -53,24 +60,18 @@ def main():
     p.add_argument("-f", dest="genomeFasta",
                    required=True,
                    help="Specify the location of the genome FASTA file")
-    p.add_argument("-i", dest="inputType",
-                   required=True,
-                   nargs="+",
-                   choices=["call", "depth"],
-                   help="""Specify one or both of 'call' and 'depth' to indicate which
-                   types of results to process.""")
-    p.add_argument("-m", dest="measurementTypes",
-                   required=True,
-                   nargs="+",
-                   choices=["ed", "splsda"],
-                   help="""Specify whether you are analysing 'ed' (Euclidean distance)
-                   and/or 'splsda' (Sparse Partial Least Squares Discriminant Analysis)
-                   measurements""")
     p.add_argument("-o", dest="outputFileName",
                    required=True,
                    help="""Specify the location to write the output file; for 'plot', this must
                    end with '.pdf', '.png', or '.svg'; for 'report', this must end with
                    '.tsv' or '.csv'""")
+    p.add_argument("--ed", dest="edType",
+                   required=False,
+                   choices=["alleles", "inheritance", "genotypes"],
+                   help="""Optionally, specify the type of 'call' Euclidean distance
+                   measurement to use; 'inheritance' is only available if psQTL_proc.py
+                   was previously run with the --parents argument""",
+                   default="alleles")
     p.add_argument("--power", dest="power",
                    required=False,
                    type=int,
@@ -121,6 +122,19 @@ def main():
     
     # Plot-subparser arguments
     ## Required arguments
+    pparser.add_argument("-i", dest="inputType",
+                         required=True,
+                         nargs="+",
+                         choices=["call", "depth"],
+                         help="""Specify one or both of 'call' and 'depth' to indicate which
+                         types of results to process.""")
+    pparser.add_argument("-m", dest="measurementType",
+                         required=True,
+                         nargs="+",
+                         choices=["ed", "splsda"],
+                         help="""Specify whether you are analysing 'ed' (Euclidean distance)
+                         and/or 'splsda' (Sparse Partial Least Squares Discriminant Analysis)
+                         measurements""")
     pparser.add_argument("-p", dest="plotTypes",
                          required=True,
                          nargs="+",
@@ -174,9 +188,23 @@ def main():
                          default=10)
     
     # Report-subparser arguments
+    ## Required arguments
+    rparser.add_argument("-m", dest="measurementType",
+                         required=True,
+                         choices=["ed-call", "ed-depth", "splsda"],
+                         help="""Specify whether you are analysing 'ed-call' (Euclidean distance
+                         of 'call' variants), 'ed-depth' (Euclidean distance of 'depth'
+                         CNVs), or 'splsda' (Sparse Partial Least Squares Discriminant Analysis)
+                         measurements""")
+    rparser.add_argument("-t", dest="reportType",
+                         required=True,
+                         choices=["genes", "markers"],
+                         help="""Specify whether your output should be focused on 'genes'
+                         or 'markers'""")
     rparser.add_argument("-a", dest="annotationGFF3",
                          required=True,
                          help="Specify the location of the genome annotation GFF3 file")
+    ## Data arguments
     rparser.add_argument("--radius", dest="radiusSize",
                          type=int,
                          required=False,
@@ -186,7 +214,7 @@ def main():
                          default=50000)
     
     args = subParentParser.parse_args()
-    locations = validate_post_args(args) # sets args.metadataDict; args.gff3Obj if relevant
+    locations = validate_post_args(args) # always sets args.metadataDict; sets args.edFile &| args.pickleFile &| args.gff3Obj if relevant
     
     # Perform mode-specific validation
     "Validate upfront before we get into time-consuming parsing to frontload the error checking"
@@ -211,13 +239,13 @@ def main():
     if "call" in args.inputType:
         dataDict["call"] = {}
         # Parse 'call' Euclidean distance data
-        if "ed" in args.measurementTypes:
-            pickleFile = locations.variantEdPickleFile(args.missingFilter)
+        if "ed" in args.measurementType:
+            pickleFile = args.pickleFile(args.missingFilter)
             if os.path.isfile(pickleFile) and os.path.isfile(pickleFile + ".ok"):
                 with open(pickleFile, "rb") as fileIn:
                     dataDict["call"]["ed"] = pickle.load(fileIn)
             else:
-                dataDict["call"]["ed"] = parse_ed_as_dict(locations.variantEdFile, args.metadataDict, args.missingFilter)
+                dataDict["call"]["ed"] = parse_ed_as_dict(args.edFile, missingFilter=args.missingFilter)
                 with open(pickleFile, "wb") as fileOut:
                     pickle.dump(dataDict["call"]["ed"], fileOut)
                 open(pickleFile + ".ok", "w").close()
@@ -231,22 +259,22 @@ def main():
             dataDict["call"]["ed"] = convert_dict_to_windowed_ncls(dataDict["call"]["ed"], 0) # windowSize = 0
         
         # Parse 'call' sPLS-DA data
-        if "splsda" in args.measurementTypes:
+        if "splsda" in args.measurementType:
             # Parse the Sparse Partial Least Squares Discriminant Analysis data
             dataDict["call"]["selected"] = parse_selected_to_windowed_ncls(locations.variantSplsdaSelectedFile)
-            dataDict["call"]["ber"], dataDict["call"]["ber_windowSize"] = parse_ber_to_windowed_ncls(locations.variantSplsdaBerFile)
+            dataDict["call"]["ber"] = parse_ber_to_windowed_ncls(locations.variantSplsdaBerFile)
     
     # Parse 'depth' data if necessary
     if "depth" in args.inputType:
         dataDict["depth"] = {}
         # Parse 'depth' Euclidean distance data
-        if "ed" in args.measurementTypes:
-            pickleFile = locations.deletionEdPickleFile(args.missingFilter)
+        if "ed" in args.measurementType:
+            pickleFile = locations.depthEdPickleFile(args.missingFilter)
             if os.path.isfile(pickleFile) and os.path.isfile(pickleFile + ".ok"):
                 with open(pickleFile, "rb") as fileIn:
                     dataDict["depth"]["ed"] = pickle.load(fileIn)
             else:
-                dataDict["depth"]["ed"] = parse_ed_as_dict(locations.deletionEdFile, args.metadataDict, args.missingFilter)
+                dataDict["depth"]["ed"] = parse_ed_as_dict(locations.depthEdFile, missingFilter=args.missingFilter)
                 with open(pickleFile, "wb") as fileOut:
                     pickle.dump(dataDict["depth"]["ed"], fileOut)
                 open(pickleFile + ".ok", "w").close()
@@ -258,18 +286,22 @@ def main():
             raise_to_power(dataDict["depth"]["ed"], args.power)
             
             # Convert dictionary to Euclidean distance NCLS data structure
+            validate_window_size(args.windowSize) # validate before we parse to WindowedNCLS
             dataDict["depth"]["ed"] = convert_dict_to_windowed_ncls(dataDict["depth"]["ed"], args.windowSize)
         
         # Parse 'depth' sPLS-DA data
-        if "splsda" in args.measurementTypes:
-            dataDict["depth"]["selected"] = parse_selected_to_windowed_ncls(locations.deletionSplsdaSelectedFile)
-            dataDict["depth"]["ber"], dataDict["depth"]["ber_windowSize"] = parse_ber_to_windowed_ncls(locations.deletionSplsdaBerFile)
+        if "splsda" in args.measurementType:
+            validate_window_size(args.windowSize) # validate before we parse to WindowedNCLS
+            dataDict["depth"]["selected"] = parse_selected_to_windowed_ncls(locations.depthSplsdaSelectedFile,
+                                                                            windowSize=args.windowSize)
+            dataDict["depth"]["ber"] = parse_ber_to_windowed_ncls(locations.depthSplsdaBerFile)
     
     # Parse integrated sPLS-DA results if they exist
-    if "call" in args.inputType and "depth" in args.inputType and "splsda" in args.measurementTypes:
+    if "call" in args.inputType and "depth" in args.inputType and "splsda" in args.measurementType:
         if os.path.isfile(locations.integrativeSplsdaSelectedFile):
+            validate_window_size(args.windowSize) # validate before we parse depth features to WindowedNCLS
             dataDict["call"]["integrated"], dataDict["depth"]["integrated"] = parse_integrated_to_windowed_ncls(
-                locations.integrativeSplsdaSelectedFile)
+                locations.integrativeSplsdaSelectedFile, args.windowSize)
     
     # Parse depth data if necessary
     if args.mode == "plot" and "coverage" in args.plotTypes and "depth" in args.inputType:
@@ -347,11 +379,58 @@ def pmain(args, locations, dataDict):
     print("Plotting complete!")
 
 def rmain(args, locations, dataDict):
-    raise NotImplementedError("Reporting functionality requires updates to work again; thanks for your patience!")
-    # if args.inputType == "depth":
-    #     report_depth(edNCLS, args.gff3Obj, args.regions, args.outputFileName, args.radiusSize)
-    # else:
-    #     report_genes(edNCLS, args.gff3Obj, args.regions, args.outputFileName, args.radiusSize)
+    if args.reportType == "genes":
+        if "call" in args.inputType:
+            if "ed" in args.measurementType:
+                report_genes_call(dataDict["call"]["ed"], args.gff3Obj, args.regions,
+                                  args.outputFileName,
+                                  radiusSize=args.radiusSize)
+        if "depth" in args.inputType:
+            if "ed" in args.measurementType:
+                report_genes_depth(dataDict["depth"]["ed"], args.gff3Obj, args.regions,
+                                   args.outputFileName,
+                                   radiusSize=args.radiusSize)
+        if "splsda" in args.measurementType:
+            # Store data in a dictionary for reporting
+            windowedNCLSDict = {}
+            if "call" in dataDict and "selected" in dataDict["call"]:
+                windowedNCLSDict["call"] = dataDict["call"]["selected"]
+            if "depth" in dataDict and "selected" in dataDict["depth"]:
+                windowedNCLSDict["depth"] = dataDict["depth"]["selected"]
+            if "call" in dataDict and "integrated" in dataDict["call"]:
+                windowedNCLSDict["integrated_call"] = dataDict["call"]["integrated"]
+                windowedNCLSDict["integrated_depth"] = dataDict["depth"]["integrated"]
+            
+            # Report genes using sPLS-DA results
+            report_genes_splsda(windowedNCLSDict, args.gff3Obj, args.regions,
+                                args.outputFileName,
+                                radiusSize=args.radiusSize)
+    elif args.reportType == "markers":
+        if "call" in args.inputType:
+            if "ed" in args.measurementType:
+                report_markers(dataDict["call"]["ed"], args.gff3Obj, args.regions,
+                               args.outputFileName,
+                               radiusSize=args.radiusSize)
+        if "depth" in args.inputType:
+            if "ed" in args.measurementType:
+                report_markers(dataDict["depth"]["ed"], args.gff3Obj, args.regions,
+                               args.windowSize, args.outputFileName,
+                               radiusSize=args.radiusSize)
+        if "splsda" in args.measurementType:
+            # Store data in a dictionary for reporting
+            windowedNCLSDict = {}
+            if "call" in dataDict and "selected" in dataDict["call"]:
+                windowedNCLSDict["call"] = dataDict["call"]["selected"]
+            if "depth" in dataDict and "selected" in dataDict["depth"]:
+                windowedNCLSDict["depth"] = dataDict["depth"]["selected"]
+            if "call" in dataDict and "integrated" in dataDict["call"]:
+                windowedNCLSDict["integrated_call"] = dataDict["call"]["integrated"]
+                windowedNCLSDict["integrated_depth"] = dataDict["depth"]["integrated"]
+            
+            # Report markers using sPLS-DA results
+            report_markers(windowedNCLSDict, args.gff3Obj, args.regions,
+                           args.outputFileName,
+                           radiusSize=args.radiusSize)
     
     print("Reporting complete!")
 

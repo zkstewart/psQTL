@@ -159,7 +159,7 @@ metadata.table$V1 <- unlist(lapply(metadata.table$V1, fix_numeric_first_char))
 df <- read.table(gzfile(args$v), header=TRUE, sep="\t", na.strings=".")
 maf.cutoff <- ceiling((ncol(df) - 2) * args$MAF)
 
-df <- df[rowSums(df[,! colnames(df) %in% c("chrom", "pos")], na.rm=TRUE)>0,]
+df <- df[rowSums(df[,! colnames(df) %in% c("chrom", "pos")], na.rm=TRUE)>=maf.cutoff,]
 rownames(df) <- make.names(paste0(df$chrom, "_", df$pos), unique=TRUE)
 
 # Drop any metadata samples not present in VCF

@@ -723,15 +723,16 @@ class HorizontalPlot(Plot):
                 self.plot_linescatter(self.callED if "scatter" in plotTypes else None,
                                       self.callED if "line" in plotTypes else None,
                                       LINESCATTER_COLOURS[0],
-                                      lineLabel=f"WMA $ED^{self.power}$",
+                                      applyWMA=True if self.wmaSize > 1 else False,
+                                      lineLabel=f"WMA $ED^{self.power}$" if self.wmaSize > 1 else f"$ED^{self.power}$",
                                       scatterLabel=f"SNP $ED^{self.power}$")
                 self.rowLabels.append(f"SNP $ED^{self.power}$")
             if self.callSPLSDA != None:
                 self.plot_linescatter(self.callSPLSDA[0],
                                       self.callSPLSDA[1],
                                       LINESCATTER_COLOURS[1],
-                                      applyWMA=False, # no WMA for BA values
-                                      lineLabel=f"$BA$",
+                                      applyWMA=True if self.wmaSize > 1 else False,
+                                      lineLabel=f"WMA $BA$" if self.wmaSize > 1 else "$BA$",
                                       scatterLabel=f"Selected SNP",
                                       scatterShape="D", scatterFollowsLine=True, # Y values different to ED or BA
                                       lineZorder=0, scatterZorder=1, # make selected SNPs more visible
@@ -742,15 +743,15 @@ class HorizontalPlot(Plot):
                 self.plot_linescatter(self.depthED if "scatter" in plotTypes else None,
                                       self.depthED if "line" in plotTypes else None,
                                       LINESCATTER_COLOURS[0],
-                                      lineLabel=f"WMA $ED^{self.power}$",
+                                      lineLabel=f"WMA $ED^{self.power}$" if self.wmaSize > 1 else f"$ED^{self.power}$",
                                       scatterLabel=f"CNV $ED^{self.power}$")
                 self.rowLabels.append(f"CNV $ED^{self.power}$")
             if self.depthSPLSDA != None:
                 self.plot_linescatter(self.depthSPLSDA[0],
                                       self.depthSPLSDA[1],
                                       LINESCATTER_COLOURS[1],
-                                      applyWMA=False, # no WMA for BA values
-                                      lineLabel=f"$BA$",
+                                      applyWMA=True if self.wmaSize > 1 else False,
+                                      lineLabel=f"WMA $BA$" if self.wmaSize > 1 else "$BA$",
                                       scatterLabel=f"Selected CNV",
                                       scatterShape="D", scatterFollowsLine=True,
                                       lineZorder=0, scatterZorder=1, # make selected CNVs more visible
@@ -1454,15 +1455,16 @@ class CircosPlot(Plot):
                 self.plot_linescatter(self.callED if "scatter" in plotTypes else None,
                                       self.callED if "line" in plotTypes else None,
                                       LINESCATTER_COLOURS[0],
-                                      lineLabel=f"WMA $ED^{self.power}$",
+                                      applyWMA=True if self.wmaSize > 1 else False,
+                                      lineLabel=f"WMA $ED^{self.power}$" if self.wmaSize > 1 else f"$ED^{self.power}$",
                                       scatterLabel=f"SNP/CNV $ED^{self.power}$")
                 self.rowLabels.append(f"SNP $ED^{self.power}$")
             if self.callSPLSDA != None:
                 self.plot_linescatter(self.callSPLSDA[0],
                                       self.callSPLSDA[1],
                                       LINESCATTER_COLOURS[1],
-                                      applyWMA=False, # no WMA for BA values
-                                      lineLabel=f"$BA$",
+                                      applyWMA=True if self.wmaSize > 1 else False,
+                                      lineLabel=f"WMA $BA$" if self.wmaSize > 1 else f"$BA$",
                                       scatterLabel=f"Selected SNP/CNV",
                                       scatterShape="D", scatterFollowsLine=True, # Y values different to ED or BA
                                       lineZorder=0, scatterZorder=1, # make selected SNPs more visible
@@ -1473,15 +1475,16 @@ class CircosPlot(Plot):
                 self.plot_linescatter(self.depthED if "scatter" in plotTypes else None,
                                       self.depthED if "line" in plotTypes else None,
                                       LINESCATTER_COLOURS[0],
-                                      lineLabel=f"WMA $ED^{self.power}$",
+                                      applyWMA=True if self.wmaSize > 1 else False,
+                                      lineLabel=f"WMA $ED^{self.power}$" if self.wmaSize > 1 else f"$ED^{self.power}$",
                                       scatterLabel=f"SNP/CNV $ED^{self.power}$")
                 self.rowLabels.append(f"CNV $ED^{self.power}$")
             if self.depthSPLSDA != None:
                 self.plot_linescatter(self.depthSPLSDA[0],
                                       self.depthSPLSDA[1],
                                       LINESCATTER_COLOURS[1],
-                                      applyWMA=False, # no WMA for BA values
-                                      lineLabel=f"$BA$",
+                                      applyWMA=True if self.wmaSize > 1 else False,
+                                      lineLabel=f"WMA $BA$" if self.wmaSize > 1 else f"$BA$",
                                       scatterLabel=f"Selected SNP/CNV",
                                       scatterShape="D", scatterFollowsLine=True,
                                       lineZorder=0, scatterZorder=1, # make selected CNVs more visible

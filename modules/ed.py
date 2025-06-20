@@ -1,5 +1,6 @@
 import numpy as np
 from math import sqrt, ceil
+from statistics import mean
 from collections import Counter
 from itertools import combinations
 
@@ -11,6 +12,13 @@ def gt_median_adjustment(genotypeLists):
     Receives a list of genotype lists, obtains the median of all alleles found in the lists,
     and adjusts the genotypes to be relative to the median. This is specifically intended for
     use on CNV genotypes, which are often highly variable and range from 0 up to very high values.
+    
+    Adjusted values range from 0 to 2, where:
+        0 = allele is below the median
+        1 = allele is equal to the median
+        2 = allele is above the median
+    This adjustment allows for easier comparison of CNV genotypes across samples while
+    mitigating the effects of variability in CNV depth.
     
     Parameters:
         genotypeLists -- a list of one or more lists containing genotype values as integers
@@ -47,7 +55,7 @@ def gt_median_adjustment(genotypeLists):
                 gtList.append(".")
             else:
                 for allele in gt:
-                    adjustedAllele = 0 if allele <= medianAllele else 1
+                    adjustedAllele = 0 if allele < medianAllele else 1 if allele == medianAllele else 2
                     gtList.append(adjustedAllele)
             adjustedSublist.append(gtList)
         adjustedGenotypes.append(adjustedSublist)
@@ -76,48 +84,6 @@ def possible_genotypes(gt1, gt2):
             possibleGTs.append(frozenset(g1 + g2))
     
     return set(possibleGTs)
-
-def calculate_segregant_ed(g1Gt, g2Gt, isCNV=False, parentsGT=None):
-    '''
-    Parameters:
-        g1Gt / g2Gt -- a list of lists containing the genotype value as integers
-                       with format like:
-                       [
-                           [0, 1],
-                           [0, 0],
-                           [1, 1],
-                           ...
-                       ]
-        isCNV -- (OPTIONAL) a boolean indicating whether the genotypes are for CNVs
-                 (True) or SNPs/indels (False); default is False
-        parentsGT -- a list of two lists containing the genotype value as integers
-                     for the parents with format like:
-                     [ [0, 1], [1, 2] ]
-                     OR None if no parents are available or specified to
-                     filter out non-inheritable genotypes
-    Returns:
-        numAllelesG1 -- the number of genotyped alleles in group 1
-        numAllelesG2 -- the number of genotyped alleles in group 2
-        edist -- a float of the the Euclidean distance between the two groups
-    '''
-    # Adjust values if this is a CNV
-    if isCNV:
-        g1Gt, g2Gt = gt_median_adjustment([g1Gt, g2Gt])
-    
-    # Filter impossible progeny genotypes based on the parents' genotypes
-    if parentsGT != None and len(parentsGT) == 2:
-        possibleGTs = possible_genotypes(parentsGT[0], parentsGT[1])
-        g1Gt = [ gt for gt in g1Gt if set(gt) in possibleGTs ]
-        g2Gt = [ gt for gt in g2Gt if set(gt) in possibleGTs ]
-    
-    # Calculate Euclidean distance between the two groups
-    if parentsGT != None and len(parentsGT) == 2:
-        numAllelesG1, numAllelesG2, edist = calculate_inheritance_ed(g1Gt, g2Gt, parentsGT)
-    else:
-        numAllelesG1, numAllelesG2, edist = calculate_allele_frequency_ed(g1Gt, g2Gt)
-    
-    # Return the values
-    return numAllelesG1, numAllelesG2, edist
 
 def calculate_allele_frequency_ed(g1Gt, g2Gt):
     '''
@@ -261,18 +227,23 @@ def calculate_inheritance_ed(g1Gt, g2Gt, parentsGT):
         numAllelesG2 -- the number of genotyped alleles in group 2
         edist -- a float of the the Euclidean distance between the two groups
     '''
+    # Validate the parentsGT input
+    if len(parentsGT) != 2:
+        raise ValueError("parentsGT must be a list of two lists containing the genotype values for the parents")
+    PARENT_FULLY_ASSIGNED = { f"p{i+1}" : int(len(gt) / 2) for i, gt in enumerate(parentsGT) }
+    NUM_PARENT_ALLELES = sum(PARENT_FULLY_ASSIGNED.values())
+    
     # Raise error for unmanageable ploidy values
     for i, gt in enumerate(parentsGT):
         if len(gt) % 2 != 0:
             raise ValueError(f"Odd number of alleles found in parent {i+1}'s genotype; " +
                              "cannot calculate inheritance Euclidean distance with odd ploidy")
-    PARENT_FULLY_ASSIGNED = { f"p{i+1}" : int(len(gt) / 2) for i, gt in enumerate(parentsGT) }
-    
-    if (len(g1Gt) > 0 and len(g1Gt[0]) != sum(PARENT_FULLY_ASSIGNED.values())) or \
-       (len(g2Gt) > 0 and len(g2Gt[0]) != sum(PARENT_FULLY_ASSIGNED.values())):
-        raise ValueError("Progeny samples must have a number of alleles equal to the summed value of " +
-                         f"half of each parent's chromosomes ({sum(PARENT_FULLY_ASSIGNED.values())}); " +
-                         "cannot calculate inheritance Euclidean distance with mismatched ploidy")
+    for groupGt in [g1Gt, g2Gt]:
+        for gt in groupGt:
+            if len(gt) != NUM_PARENT_ALLELES:
+                raise ValueError("Progeny samples must have a number of alleles equal to the summed value of " +
+                                 f"half of each parent's chromosomes ({NUM_PARENT_ALLELES}); " +
+                                 "cannot calculate inheritance Euclidean distance with mismatched ploidy")
     
     # Assign alleles to parent haplotypes
     groupSums = []
@@ -352,8 +323,8 @@ def calculate_inheritance_ed(g1Gt, g2Gt, parentsGT):
     
     # Get the number of samples and alleles in each group
     numSamplesG1, numSamplesG2 = len(g1Gt), len(g2Gt)
-    numAllelesG1 = numSamplesG1 * len(g1Gt[0]) if numSamplesG1 > 0 else 0 # num samples * ploidy of the samples
-    numAllelesG2 = numSamplesG2 * len(g2Gt[0]) if numSamplesG2 > 0 else 0 # conforms to the calculate_segregant_ed() return values
+    numAllelesG1 = sum([ len(gt) for gt in g1Gt ])
+    numAllelesG2 = sum([ len(gt) for gt in g2Gt ])
     
     # Calculate the Euclidean distance between the parental inherited alleles if possible
     """Note that values are divied by the number of samples, not the number of alleles;
@@ -371,7 +342,31 @@ def calculate_inheritance_ed(g1Gt, g2Gt, parentsGT):
     # Return the values
     return numAllelesG1, numAllelesG2, edist
 
-def parse_vcf_for_ed(vcfFile, metadataDict, isCNV, parents=[], ignoreIdentical=True, quiet=False):
+def filter_impossible_genotypes(g1Gt, g2Gt, parentsGT):
+    '''
+    Parameters:
+        g1Gt / g2Gt -- a list of lists containing the genotype value as integers
+                       with format like:
+                          [
+                            [0, 1],
+                            [0, 0],
+                            [1, 1],
+                            ...
+                          ]
+        parentsGT -- a list of two lists containing the genotype value as integers
+                     for the parents with format like:
+                        [ [0, 1], [1, 2] ]
+    Returns:
+        g1Gt / g2Gt -- a modified version of the original g1 lists with
+                       impossible genotypes filtered out
+    '''
+    possibleGTs = possible_genotypes(parentsGT[0], parentsGT[1])
+    g1Gt = [ gt for gt in g1Gt if set(gt) in possibleGTs ]
+    g2Gt = [ gt for gt in g2Gt if set(gt) in possibleGTs ]
+    return g1Gt, g2Gt
+
+def parse_vcf_for_ed(vcfFile, metadataDict, isCNV, parents=[],
+                     ignoreIdentical=True, quiet=False):
     '''
     Parameters:
         vcfFile -- a string pointing to the VCF or VCF-like file to parse
@@ -392,12 +387,26 @@ def parse_vcf_for_ed(vcfFile, metadataDict, isCNV, parents=[], ignoreIdentical=T
         quiet -- (OPTIONAL) a boolean indicating whether to suppress output messages;
                  default is False, which means that output messages will be printed
     Yields:
-        contig -- the contig name for the variant
-        pos -- the position of the variant
-        variant -- the type of variant (snp or indel)
-        numAllelesG1 -- the number of genotyped alleles in group 1
-        numAllelesG2 -- the number of genotyped alleles in group 2
-        euclideanDist -- the Euclidean distance between the two groups
+        resultsDict -- a dictionary with the following keys:
+            contig -- the contig name for the variant
+            pos -- the position of the variant
+            variant -- the type of variant (snp or indel)
+            numAllelesG1 -- the number of genotyped alleles in group 1
+            numAllelesG2 -- the number of genotyped alleles in group 2
+            numFilteredG1 -- the number of genotyped alleles in group 1 after filtering;
+                             None if parents are not provided or specified
+            numFilteredG2 -- the number of genotyped alleles in group 2 after filtering;
+                             None if parents are not provided or specified
+            alleleED -- a float of the the Euclidean distance between the two groups
+                        when using the naive allele frequency
+            genotypeED -- a float of the the Euclidean distance between the two groups
+                          when using the naive genotype frequency calculation
+            inheritanceED -- a float of the the Euclidean distance between the two groups
+                             when using the inheritance calculation;
+                             None if parents are not provided or specified
+            ploidy -- the ploidy of the samples in the VCF file at this position
+            possibleAllelesG1 -- the number of alleles if all group 1 samples were present
+            possibleAllelesG2 -- the number of alleles if all group 2 samples were present
     '''
     # Validations
     if parents == None: # just in case
@@ -454,7 +463,7 @@ def parse_vcf_for_ed(vcfFile, metadataDict, isCNV, parents=[], ignoreIdentical=T
             # Figure out what type of variant this is
             if any([ x == "." for x in ref_alt ]):
                 variant = "indel"
-            elif all([ x == "N" for x in ref_alt ]): # for parsing deletion VCF-like files
+            elif all([ x == "N" for x in ref_alt ]): # for parsing depth VCF-like files
                 variant = "cnv"
             elif any([ len(ref_alt[0]) != len(ref_alt[x]) for x in range(1, len(ref_alt))]):
                 variant = "indel"
@@ -462,36 +471,116 @@ def parse_vcf_for_ed(vcfFile, metadataDict, isCNV, parents=[], ignoreIdentical=T
                 variant = "snp"
             
             # Split sample genotypes into group1 and group2
-            group1 = [ snpDict[sample] for sample in metadataDict["group1"] if sample in snpDict and not sample in parents ] # subsets based on metadatDict
-            group2 = [ snpDict[sample] for sample in metadataDict["group2"] if sample in snpDict and not sample in parents ]
-            parentsGT = [ snpDict[parent] for parent in parents if parent in snpDict ] # if parents == [] this will always be empty
+            g1Gt, g2Gt, parentsGT = separate_genotypes_by_group(snpDict, metadataDict, parents=[]) # don't use parents yet
             
-            # Calculate Euclidean distance
-            numAllelesG1, numAllelesG2, euclideanDist = calculate_segregant_ed(group1, group2,
-                                                                               isCNV=isCNV, parentsGT=parentsGT)
+            # Skip if no genotypes are found in either group
+            "This is a completely useless variant, so we skip it"
+            if len(g1Gt) == 0 and len(g2Gt) == 0: # since we pass here, inferred ploidy is never == None
+                continue
+            
+            # Adjust values if this is a CNV
+            if isCNV:
+                g1Gt, g2Gt = gt_median_adjustment([g1Gt, g2Gt])
+            
+            # Calculate naive Euclidean distances
+            "These two ED measures do not utilise parent genotypes and are hence considered to be naive"
+            numAllelesG1, numAllelesG2, alleleED = calculate_allele_frequency_ed(g1Gt, g2Gt)
+            _, _, genotypeED = calculate_genotype_frequency_ed(g1Gt, g2Gt) # don't need the allele count again
             
             # Skip if both groups are identical
-            if ignoreIdentical and euclideanDist == 0:
-                group1Dedup = set(( tuple(x) for x in group1 ))
-                group2Dedup = set(( tuple(x) for x in group2 ))
+            if ignoreIdentical and alleleED == 0:
+                g1Dedup = set(( tuple(x) for x in g1Gt ))
+                g2Dedup = set(( tuple(x) for x in g2Gt ))
                 "if both have set len==1, are the same, and have 0 Euclidean distance, they are identical non-reference alleles"
-                if len(group1Dedup) == 1 and group1Dedup == group2Dedup:
+                if len(g1Dedup) == 1 and g1Dedup == g2Dedup:
                     continue
             
+            # Calculate inheritance Euclidean distance if parents are provided
+            numFilteredG1, numFilteredG2, inheritanceED = None, None, None # these will be set later if inheritance ED is calculated
+            if parents != [] and len(parents) == 2:
+                # Re-obtain our group genotypes, this time using the parents
+                g1Gt, g2Gt, parentsGT = separate_genotypes_by_group(snpDict, metadataDict, parents=parents)
+                
+                # Skip if one or both parents are not genotyped at this position
+                if len(parentsGT) != 2: # parentsGT can come back missing parents if they are not called
+                    pass
+                else:
+                    # Adjust values if this is a CNV
+                    if isCNV:
+                        g1Gt, g2Gt = gt_median_adjustment([g1Gt, g2Gt])
+                    
+                    # Filter impossible progeny genotypes based on the parents' genotypes
+                    g1Gt, g2Gt = filter_impossible_genotypes(g1Gt, g2Gt, parentsGT)
+                    
+                    # Calculate inheritance Euclidean distance
+                    numFilteredG1, numFilteredG2, inheritanceED = calculate_inheritance_ed(g1Gt, g2Gt, parentsGT)
+            
+            # Infer the ploidy of the samples
+            ploidy = infer_ploidy(snpDict) # this may average across samples with different ploidies, but that's okay for this purpose
+            possibleAllelesG1 = int(len(metadataDict["group1"]) * ploidy)
+            possibleAllelesG2 = int(len(metadataDict["group2"]) * ploidy)
+            
             # Yield results
-            yield contig, pos, variant, numAllelesG1, numAllelesG2, euclideanDist
+            yield {
+                "contig": contig, "pos": pos, "variant": variant,
+                "numAllelesG1": numAllelesG1, "numAllelesG2": numAllelesG2,
+                "numFilteredG1": numFilteredG1, "numFilteredG2": numFilteredG2,
+                "alleleED": alleleED, "genotypeED": genotypeED, "inheritanceED": inheritanceED,
+                "ploidy": ploidy, "possibleAllelesG1": possibleAllelesG1, "possibleAllelesG2": possibleAllelesG2
+            }
 
-def parse_ed_as_dict(edFile, metadataDict, missingFilter=0.5):
+def separate_genotypes_by_group(snpDict, metadataDict, parents=[]):
     '''
     Parameters:
-        edFile -- a string indicating the path to an ED file
+        snpDict -- a dictionary with structure like:
+                   {
+                       "sample1": [0, 1],
+                       "sample2": [0, 0],
+                       ...
+                   }
         metadataDict -- a dictionary with structure like:
                         {
                             "group1": set([ "sample1", "sample2", ... ]),
                             "group2": set([ "sample3", "sample4", ... ])
-                        } OR None if no filtering is desired
-        missingFilter -- OPTIONAL; a float indicating the maximum allowed missing data
-                         calculated for each group
+                        }
+        parents -- (OPTIONAL) a list of two sample IDs indicating parent samples
+                   OR an empty list if no parents are available or specified;
+                   default is an empty list
+    Returns:
+        g1Gt -- a list of lists containing the genotype values for group 1
+        g2Gt -- a list of lists containing the genotype values for group 2
+        parentsGT -- a list of lists containing the genotype values for the parents
+    '''
+    g1Gt = [ snpDict[sample] for sample in metadataDict["group1"] if sample in snpDict and not sample in parents ]
+    g2Gt = [ snpDict[sample] for sample in metadataDict["group2"] if sample in snpDict and not sample in parents ]
+    parentsGT = [ snpDict[parent] for parent in parents if parent in snpDict ] # if parents == [] this will always be empty
+    return g1Gt, g2Gt, parentsGT
+
+def infer_ploidy(snpDict):
+    '''
+    Parameters:
+        snpDict -- a dictionary with structure like:
+                   {
+                       "sample1": [0, 1],
+                       "sample2": [0, 0],
+                       ...
+                   }
+    Returns:
+        inferredPloidy -- a float indicating the inferred ploidy of the samples
+    '''
+    try:
+        return mean([ len(gt) for gt in snpDict.values() ])
+    except:
+        return None
+
+def parse_ed_as_dict(edFile, missingFilter=0.5):
+    '''
+    Parameters:
+        edFile -- a string indicating the path to an ED file
+        missingFilter -- (OPTIONAL) a float indicating the maximum percentage of
+                         samples that exist in a group which can be missing
+                         without filtration occurring; 0 is perfectly strict
+                         and 1 is perfectly lenient; default is 1 (100% missing data allowed)
     Returns:
         edDict -- a dictionary with structure like:
                   {
@@ -500,25 +589,8 @@ def parse_ed_as_dict(edFile, metadataDict, missingFilter=0.5):
                       ...
                   }
     '''
-    HEADER = ["CHROM", "POSI", "variant", "group1_alleles", "group2_alleles", "euclideanDist"]
-    COMPATIBILITY_HEADER = ["CHROM", "POSI", "variant", "bulk1_alleles", "bulk2_alleles", "euclideanDist"] # for older psQTL versions
-    
-    # Make sure the metadata is valid if missingFilter is > 0
-    if missingFilter > 0:
-        if metadataDict == None:
-            raise ValueError("Cannot filter for missing data without metadata")
-        if not all([ x in metadataDict for x in ["group1", "group2"] ]):
-            raise ValueError("Metadata dictionary must contain keys 'group1' and 'group2'")
-    
-    # Calculate how many alleles in each group
-    if metadataDict != None:
-        GROUP1_ALLELES = len(metadataDict["group1"]) * 2
-        GROUP2_ALLELES = len(metadataDict["group2"]) * 2
-        
-        # Alert user to number of samples needed to pass filtration in each group
-        print(f"# Filtering for missing data: up to {missingFilter*100}% missing data allowed in each group")
-        print(f"# For group 1: {GROUP1_ALLELES} alleles are possible; {ceil(GROUP1_ALLELES * missingFilter)} needed to pass")
-        print(f"# For group 2: {GROUP2_ALLELES} alleles are possible; {ceil(GROUP2_ALLELES * missingFilter)} needed to pass")
+    HEADER = ["CHROM", "POSI", "variant", "group1_alleles", "group1_alleles_possible",
+              "group2_alleles", "group2_alleles_possible", "euclideanDist"]
     
     # Parse the ED file
     edDict = {}
@@ -528,13 +600,14 @@ def parse_ed_as_dict(edFile, metadataDict, missingFilter=0.5):
         for line in fileIn:
             sl = line.rstrip("\r\n").split("\t")
             if firstLine:
-                if (not sl == HEADER) and not (sl == COMPATIBILITY_HEADER):
+                if not sl == HEADER:
                     raise ValueError(f"ED file is improperly formatted; header line '{sl}' " + 
                                      f"does not match expected header '{HEADER}'")
                 firstLine = False
             else:
                 # Parse relevant details and validate format
-                chrom, posi, variant, group1_alleles, group2_alleles, euclideanDistance = sl
+                chrom, posi, variant, group1_alleles, group1_alleles_possible, \
+                    group2_alleles, group2_alleles_possible, euclideanDistance = sl
                 try:
                     posi = int(posi)
                 except:
@@ -549,11 +622,20 @@ def parse_ed_as_dict(edFile, metadataDict, missingFilter=0.5):
                 except:
                     raise ValueError(f"Group allele counts '{group1_alleles}' or '{group2_alleles}' are not integers; " + 
                                      f"offending line is '{line}'")
+                try:
+                    group1_alleles_possible = int(group1_alleles_possible)
+                    group2_alleles_possible = int(group2_alleles_possible)
+                except:
+                    raise ValueError(f"Possible group allele counts '{group1_alleles_possible}' or '{group2_alleles_possible}' " + 
+                                     f"are not integers; offending line is '{line}'")
                 
-                # Skip if missing data exceeds threshold
-                if metadataDict != None:
-                    if (group1_alleles / GROUP1_ALLELES) < missingFilter or (group2_alleles / GROUP2_ALLELES) < missingFilter:
-                        continue
+                # Calculate the percentage of missing data in each group
+                missingG1 = (group1_alleles_possible - group1_alleles) / group1_alleles_possible if group1_alleles_possible > 0 else 0
+                missingG2 = (group2_alleles_possible - group2_alleles) / group2_alleles_possible if group2_alleles_possible > 0 else 0
+                
+                # Skip if either group has too much missing data
+                if missingG1 > missingFilter or missingG2 > missingFilter:
+                    continue
                 
                 # Store in dictionary
                 edDict.setdefault(chrom, [[], []])
@@ -573,7 +655,7 @@ def convert_dict_to_windowed_ncls(statDict, windowSize=0):
         windowSize -- OPTIONAL; an integer indicating the size of the window that was used
                       when generating the depth file that led to the statistics file. Default is 0
                       (no window size) which is intended for use with variant calls, whereas
-                      depth deletions should use an actual window size.
+                      depth CNVs should use an actual window size.
     Returns:
         windowedNCLS -- a WindowedNCLS object containing statistical values indexed by chromosome
                         and position

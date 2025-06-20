@@ -34,8 +34,8 @@ class Locations:
         return ".depth.tsv"
     
     @property
-    def finalDeletionFile(self):
-        return os.path.join(self.depthDir, "psQTL_deletions.vcf.gz") # Make sure this is gzipped
+    def finalDepthFile(self):
+        return os.path.join(self.depthDir, "psQTL_depth.vcf.gz")
     
     @property
     def bamListFile(self):
@@ -43,50 +43,58 @@ class Locations:
     
     @property
     def vcfFile(self):
-        return os.path.join(self.callDir, "psQTL_variants.vcf.gz")
+        return os.path.join(self.callDir, "psQTL_call.vcf.gz")
     
     @property
     def filteredVcfFile(self):
-        return os.path.join(self.callDir, "psQTL_variants.filtered.vcf.gz")
+        return os.path.join(self.callDir, "psQTL_call.filtered.vcf.gz")
     
     @property
-    def variantEdFile(self):
-        return os.path.join(self.workingDirectory, "psQTL_variants.ed.tsv.gz")
+    def allelesEdFile(self):
+        return os.path.join(self.workingDirectory, "psQTL_call.alleles_ed.tsv.gz")
+    
+    @property
+    def inheritanceEdFile(self):
+        return os.path.join(self.workingDirectory, "psQTL_call.inheritance_ed.tsv.gz")
+    
+    @property
+    def genotypesEdFile(self):
+        return os.path.join(self.workingDirectory, "psQTL_call.genotypes_ed.tsv.gz")
     
     @property
     def variantRecodedFile(self):
-        return os.path.join(self.splsdaDir, "psQTL_variants.recode.tsv.gz")
+        return os.path.join(self.splsdaDir, "psQTL_call.recode.tsv.gz")
     
     @property
     def variantSplsdaSelectedFile(self):
-        return os.path.join(self.splsdaDir, "psQTL_variants.selected.tsv")
+        return os.path.join(self.splsdaDir, "psQTL_call.selected.tsv")
     
     @property
     def variantSplsdaBerFile(self):
-        return os.path.join(self.splsdaDir, "psQTL_variants.BER.tsv")
+        return os.path.join(self.splsdaDir, "psQTL_call.BER.tsv")
     
     @property
     def variantSplsdaRdataFile(self):
-        return os.path.join(self.splsdaDir, "psQTL_variants.Rdata")
+        return os.path.join(self.splsdaDir, "psQTL_call.Rdata")
     
     @property
-    def deletionEdFile(self):
+    def depthEdFile(self):
         return os.path.join(self.workingDirectory, "psQTL_depth.ed.tsv.gz")
     
     @property
-    def deletionRecodedFile(self):
+    def depthRecodedFile(self):
         return os.path.join(self.splsdaDir, "psQTL_depth.recode.tsv.gz")
     
     @property
-    def deletionSplsdaSelectedFile(self):
+    def depthSplsdaSelectedFile(self):
         return os.path.join(self.splsdaDir, "psQTL_depth.selected.tsv")
     
     @property
-    def deletionSplsdaBerFile(self):
+    def depthSplsdaBerFile(self):
         return os.path.join(self.splsdaDir, "psQTL_depth.BER.tsv")
     
     @property
-    def deletionSplsdaRdataFile(self):
+    def depthSplsdaRdataFile(self):
         return os.path.join(self.splsdaDir, "psQTL_depth.Rdata")
     
     @property
@@ -100,10 +108,16 @@ class Locations:
     @property
     def integrativeSplsdaRscript(self):
         return os.path.join(os.path.dirname(os.path.dirname(__file__)), "utilities", "integrative_splsda.R")
-
+    
     # Attributes with value input
-    def variantEdPickleFile(self, value):
-        return os.path.join(self.workingDirectory, f"psQTL_variants.ed.{value}.pkl")
-
-    def deletionEdPickleFile(self, value):
+    def allelesEdPickleFile(self, value):
+        return os.path.join(self.workingDirectory, f"psQTL_call.alleles_ed.{value}.pkl")
+    
+    def inheritanceEdPickleFile(self, value):
+        return os.path.join(self.workingDirectory, f"psQTL_call.inheritance_ed.{value}.pkl")
+    
+    def genotypesEdPickleFile(self, value):
+        return os.path.join(self.workingDirectory, f"psQTL_call.genotypes_ed.{value}.pkl")
+    
+    def depthEdPickleFile(self, value):
         return os.path.join(self.workingDirectory, f"psQTL_depth.ed.{value}.pkl")

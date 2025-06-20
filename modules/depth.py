@@ -29,11 +29,11 @@ def get_median_value(values):
             medianValue = np.median(nonZeroValues)
     return medianValue
 
-def predict_deletions(binDict, ploidy=2):
+def convert_depth_to_alleles(binDict, ploidy=2):
     '''
-    Receives a histogram dictionary and predicts regions of homozygous deletion,
-    homozygous presence, and hemizygous regions on the basis of depth coverage.
-    Uses a simple heuristic approach.
+    Receives a histogram dictionary and normalises depth values with respect
+    to the median. Then multiples the normalised depth values by the
+    ploidy number to estimate the number of allele copies present.
     
     Parameters:
         binDict -- a dictionary with structure like:
@@ -74,9 +74,7 @@ def split_copynum_by_ploidy(n, k):
 
 def convert_alleles_to_gt(alleles, ploidy=2):
     '''
-    Converts the allele predictions to a genotype array, where 0 indicates
-    homozygous deletion, 1 indicates heterozygous deletion, and 2 indicates
-    homozygous presence.
+    Converts allele copy number predictions to VCF-encoded genotypes.
     
     Parameters:
         alleles -- a numpy array where the integer value indicates the number of
@@ -98,9 +96,9 @@ def convert_alleles_to_gt(alleles, ploidy=2):
     
     return genotypes
 
-def call_deletions_from_depth(samplePairs, outputFileName, windowSize, ploidy=2):
+def call_cnvs_from_depth(samplePairs, outputFileName, windowSize, ploidy=2):
     '''
-    Calls homozygous and hemizygous deletions from binned depth files and writes
+    Calls allele copy numbers (and hence CNVs) based on binned depth files and writes
     the results to a VCF-like file.
     
     Parameters:
@@ -123,10 +121,10 @@ def call_deletions_from_depth(samplePairs, outputFileName, windowSize, ploidy=2)
         # Parse the binned depth file
         histoDict = parse_binned_tsv(binFile)
         
-        # Predict deletions
+        # Predict allele copy numbers and encode as genotypes
         genotypesDict[sampleName] = {}
         for contigID, binDict in histoDict.items():
-            alleles = predict_deletions(binDict, ploidy=ploidy)
+            alleles = convert_depth_to_alleles(binDict, ploidy=ploidy)
             genotypes = convert_alleles_to_gt(alleles, ploidy=ploidy)
             genotypesDict[sampleName][contigID] = genotypes
         samples.append(sampleName)
