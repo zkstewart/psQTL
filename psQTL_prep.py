@@ -9,13 +9,13 @@ from Bio import SeqIO
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from modules.validation import validate_prep_args, validate_uncached
-from modules.parameters import ParameterCache, VcfCache, DeletionCache, MetadataCache
+from modules.parameters import ParameterCache, VcfCache, DepthCache, MetadataCache
 from modules.samtools_handling import validate_samtools_exists, run_samtools_depth, run_samtools_faidx, \
                                       bin_samtools_depth
 from modules.bcftools_handling import validate_bcftools_exists, validate_vt_exists, \
                                       run_bcftools_call, run_bcftools_index, run_normalisation, \
                                       run_bcftools_concat, run_bcftools_filter
-from modules.depth import call_deletions_from_depth
+from modules.depth import call_cnvs_from_depth
 from _version import __version__
 
 def main():
@@ -85,10 +85,10 @@ def main():
                          required=False,
                          help="""Optionally, specify a filtered VCF file containg per-sample variant
                          calls that you have already produced""")
-    iparser.add_argument("--deletion", dest="deletionFile",
+    iparser.add_argument("--dvcf", dest="depthFile",
                          required=False,
-                         help="""Optionally, specify a deletion VCF-like file containing per-sample
-                         deletion calls that you have already produced""")
+                         help="""Optionally, specify a depth VCF-like file containing per-sample
+                         allele copy numbers that you have already produced""")
     iparser.add_argument("--bam", dest="bamFiles",
                          required=False,
                          nargs="+",
@@ -103,7 +103,7 @@ def main():
                          type=int,
                          required=False,
                          help="""Optionally, specify the window size that reads will be
-                         binned into for deletion calling (recommended: 1000)""")
+                         binned into for CNV calling (recommended: 1000)""")
     iparser.add_argument("--qual", dest="qualFilter",
                          type=float,
                          required=False,
@@ -124,7 +124,7 @@ def main():
                          type=int,
                          required=False,
                          help="""Optionally, specify the window size that reads will be
-                         binned into for deletion calling (recommended: 1000)""")
+                         binned into for CNV calling (recommended: 1000)""")
     dparser.add_argument("--bam", dest="bamFiles",
                          required=False,
                          nargs="+",
@@ -275,18 +275,18 @@ def dmain(args, locations):
         # Store file paied with sample prefix
         samplePairs.append([bamPrefix, binFile])
     
-    # Collate binned files into a VCF-like format of deletion calls
-    if (not os.path.isfile(locations.finalDeletionFile)) or (not os.path.isfile(locations.finalDeletionFile + ".ok")):
-        print("# Generating deletion file...")
-        call_deletions_from_depth(samplePairs, locations.finalDeletionFile, args.windowSize, args.ploidyNum)
-        open(locations.finalDeletionFile + ".ok", "w").close() # touch a .ok file to indicate success
+    # Collate binned files into a VCF-like format of allele copy number calls
+    if (not os.path.isfile(locations.finalDepthFile)) or (not os.path.isfile(locations.finalDepthFile + ".ok")):
+        print("# Generating depth file...")
+        call_cnvs_from_depth(samplePairs, locations.finalDepthFile, args.windowSize, args.ploidyNum)
+        open(locations.finalDepthFile + ".ok", "w").close() # touch a .ok file to indicate success
     else:
-        print(f"# Deletion file '{locations.finalDeletionFile}' exists; skipping ...")
+        print(f"# Depth file '{locations.finalDepthFile}' exists; skipping ...")
     
-    # Update param cache with (potentially) newly produced deletion file
+    # Update param cache with (potentially) newly produced depth file
     paramsCache = ParameterCache(locations.workingDirectory)
     paramsCache.load() # reload in case we're running call simultaneously
-    paramsCache.deletionFile = locations.finalDeletionFile
+    paramsCache.depthFile = locations.finalDepthFile
     paramsCache.windowSize = args.windowSize
     
     print("Depth file generation complete!")
@@ -450,27 +450,27 @@ def vmain(args, locations):
         print("Filtered VCF file: None")
     print() # blank line for spacing
     
-    # Present deletion cache
-    print("# Deletion VCF-like details:")
-    if args.deletionFile is not None:
-        deletionCache = DeletionCache(locations.workingDirectory)
-        deletionCache.establish()
-        if deletionCache.deletionFile == None:
-            print("## Deletion cache not found; re-initialising...")
-            deletionCache.deletionFile = args.deletionFile
+    # Present depth cache
+    print("# Depth VCF-like details:")
+    if args.depthFile is not None:
+        depthCache = DepthCache(locations.workingDirectory)
+        depthCache.establish()
+        if depthCache.depthFile == None:
+            print("## Depth cache not found; re-initialising...")
+            depthCache.depthFile = args.depthFile
         
-        print(f"Deletion file: {args.deletionFile}")
+        print(f"Depth file: {args.depthFile}")
         if paramsCache.windowSize == None:
             print(f"Window size: unknown")
         else:
             print(f"Window size: {paramsCache.windowSize} bp")
-        print(f"Total num. bins: {deletionCache.bins}")
-        print(f"Num. bins with CNV: {deletionCache.deletionBins}")
-        print(f"Samples (n={len(deletionCache.samples)}): {deletionCache.samples}")
-        print(f"Contigs (n={len(deletionCache.contigs)}): {deletionCache.contigs}")
-        
+        print(f"Total num. bins: {depthCache.bins}")
+        print(f"Num. bins with CNV: {depthCache.cnvBins}")
+        print(f"Samples (n={len(depthCache.samples)}): {depthCache.samples}")
+        print(f"Contigs (n={len(depthCache.contigs)}): {depthCache.contigs}")
+    
     else:
-        print("Deletion file: None")
+        print("Depth file: None")
     print() # blank line for spacing
     
     # Identify potential conflicts or issues
@@ -497,21 +497,21 @@ def vmain(args, locations):
     
     if keepFindingIssues:
         try:
-            deletionSamples = set(deletionCache.samples)
-            if metaSamples != deletionSamples:
-                issues.append(f"Metadata samples (n={len(metaSamples)}) do not match deletion samples (n={len(deletionCache.samples)})")
-            if vcfSamples != deletionSamples:
-                issues.append(f"VCF samples (n={len(vcfSamples)}) do not match deletion samples (n={len(deletionSamples)})")
+            depthSamples = set(depthCache.samples)
+            if metaSamples != depthSamples:
+                issues.append(f"Metadata samples (n={len(metaSamples)}) do not match depth samples (n={len(depthCache.samples)})")
+            if vcfSamples != depthSamples:
+                issues.append(f"VCF samples (n={len(vcfSamples)}) do not match depth samples (n={len(depthSamples)})")
         except:
-            issues.append("Deletion file may need to be set or generated before further analysis can proceed")
+            issues.append("Depth file may need to be set or generated before further analysis can proceed")
             keepFindingIssues = False
     
     ## Contig issues
     if keepFindingIssues:
         vcfContigs = set(vcfCache.filteredContigs) if vcfCache.filteredContigs != None else set(vcfCache.contigs)
-        deletionContigs = set(deletionCache.contigs)
-        if vcfContigs != deletionContigs:
-            issues.append(f"VCF contigs (n={len(vcfContigs)}) do not match deletion contigs (n={len(deletionContigs)})")
+        depthContigs = set(depthCache.contigs)
+        if vcfContigs != depthContigs:
+            issues.append(f"VCF contigs (n={len(vcfContigs)}) do not match depth contigs (n={len(depthContigs)})")
     
     # Present potential issues
     print("# Potential issues:")

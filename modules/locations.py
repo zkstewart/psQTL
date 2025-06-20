@@ -34,7 +34,7 @@ class Locations:
         return ".depth.tsv"
     
     @property
-    def finalDeletionFile(self):
+    def finalDepthFile(self):
         return os.path.join(self.depthDir, "psQTL_depth.vcf.gz")
     
     @property
@@ -78,23 +78,23 @@ class Locations:
         return os.path.join(self.splsdaDir, "psQTL_call.Rdata")
     
     @property
-    def deletionEdFile(self):
+    def depthEdFile(self):
         return os.path.join(self.workingDirectory, "psQTL_depth.ed.tsv.gz")
     
     @property
-    def deletionRecodedFile(self):
+    def depthRecodedFile(self):
         return os.path.join(self.splsdaDir, "psQTL_depth.recode.tsv.gz")
     
     @property
-    def deletionSplsdaSelectedFile(self):
+    def depthSplsdaSelectedFile(self):
         return os.path.join(self.splsdaDir, "psQTL_depth.selected.tsv")
     
     @property
-    def deletionSplsdaBerFile(self):
+    def depthSplsdaBerFile(self):
         return os.path.join(self.splsdaDir, "psQTL_depth.BER.tsv")
     
     @property
-    def deletionSplsdaRdataFile(self):
+    def depthSplsdaRdataFile(self):
         return os.path.join(self.splsdaDir, "psQTL_depth.Rdata")
     
     @property
@@ -119,5 +119,5 @@ class Locations:
     def genotypesEdPickleFile(self, value):
         return os.path.join(self.workingDirectory, f"psQTL_call.genotypes_ed.{value}.pkl")
     
-    def deletionEdPickleFile(self, value):
+    def depthEdPickleFile(self, value):
         return os.path.join(self.workingDirectory, f"psQTL_depth.ed.{value}.pkl")

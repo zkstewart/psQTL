@@ -10,7 +10,7 @@ from modules.parsing import parse_metadata, vcf_header_to_metadata_validation, p
 from modules.ncls import WindowedNCLS
 from modules.ed import parse_vcf_for_ed, gt_median_adjustment, filter_impossible_genotypes, \
     calculate_allele_frequency_ed, calculate_genotype_frequency_ed, calculate_inheritance_ed
-from modules.depth import get_median_value, predict_deletions, call_deletions_from_depth
+from modules.depth import get_median_value, convert_depth_to_alleles, call_cnvs_from_depth
 from modules.samtools_handling import depth_to_histoDict
 from modules.splsda import recode_variant, recode_cnv, recode_vcf
 from modules.gff3 import GFF3Graph
@@ -184,7 +184,7 @@ class TestDepth(unittest.TestCase):
         # Assert
         self.assertEqual(medianValue, 5.0, "Median should fall back to only non-zero value if all others are 0")
     
-    def test_predict_deletions(self):
+    def test_convert_depth_to_alleles(self):
         "Test that median-normalisation works correctly for deletions"
         # Arrange
         binnedTsvFile = os.path.join(dataDir, "depth.binned.1.tsv")
@@ -192,7 +192,7 @@ class TestDepth(unittest.TestCase):
         truth = np.array([0., 0., 0., 0., 1., 1., 2., 2., 2., 2., 2., 2., 3., 3., 4., 4., 4., 4.])
         
         # Act
-        alleles = predict_deletions(histoDict["C.glau_01"])
+        alleles = convert_depth_to_alleles(histoDict["C.glau_01"])
         
         # Assert
         self.assertEqual(len(alleles), 18, "Should have 18 alleles")
@@ -262,8 +262,8 @@ class TestDepth(unittest.TestCase):
         self.assertEqual(len(histoDict["C.glau_01"]), 1, f"Should have 1 bin for 'C.glau_01' in {depthFile}")
         self.assertTrue(all(histoDict['C.glau_01'] == truth), f"Expected '{truth}' but got '{histoDict['C.glau_01']}'")
     
-    def test_call_deletions_from_depth(self):
-        "Test that call_deletions_from_depth() works correctly with a binned depth file"
+    def test_call_cnvs_from_depth(self):
+        "Test that call_cnvs_from_depth() works correctly with a binned depth file"
         # Arrange
         depthFile = os.path.join(dataDir, "depth.binned.1.tsv")
         samplePairs = [["test", depthFile]]
@@ -272,7 +272,7 @@ class TestDepth(unittest.TestCase):
         ploidy = 2
         
         workDir = os.path.join(dataDir, "tmp")
-        outputFileName = os.path.join(workDir, "test_call_deletions_from_depth.tsv.gz")
+        outputFileName = os.path.join(workDir, "test_call_cnvs_from_depth.tsv.gz")
         
         num00 = 4
         num01 = 2
@@ -287,7 +287,7 @@ class TestDepth(unittest.TestCase):
             os.makedirs(workDir)
         
         # Act
-        call_deletions_from_depth(samplePairs, outputFileName, windowSize, ploidy=ploidy)
+        call_cnvs_from_depth(samplePairs, outputFileName, windowSize, ploidy=ploidy)
         
         # Assert
         deletionContents = []
@@ -309,8 +309,8 @@ class TestDepth(unittest.TestCase):
         self.assertEqual(numGenotypes["1/2"], num12, f"Expected {num12} '1/2' genotypes but got {numGenotypes['1/2']}")
         self.assertEqual(numGenotypes["2/2"], num22, f"Expected {num22} '2/2' genotypes but got {numGenotypes['2/2']}")
     
-    def test_call_deletions_from_depth_triploid(self):
-        "Test that call_deletions_from_depth() works correctly with a binned depth file"
+    def test_call_cnvs_from_depth_triploid(self):
+        "Test that call_cnvs_from_depth() works correctly with a binned depth file"
         # Arrange
         depthFile = os.path.join(dataDir, "depth.binned.1.tsv")
         samplePairs = [["test", depthFile]]
@@ -319,7 +319,7 @@ class TestDepth(unittest.TestCase):
         ploidy = 3
         
         workDir = os.path.join(dataDir, "tmp")
-        outputFileName = os.path.join(workDir, "test_call_deletions_from_depth.tsv.gz")
+        outputFileName = os.path.join(workDir, "test_call_cnvs_from_depth.tsv.gz")
         
         num000 = 2
         num001 = 2
@@ -335,7 +335,7 @@ class TestDepth(unittest.TestCase):
             os.makedirs(workDir)
         
         # Act
-        call_deletions_from_depth(samplePairs, outputFileName, windowSize, ploidy=ploidy)
+        call_cnvs_from_depth(samplePairs, outputFileName, windowSize, ploidy=ploidy)
         
         # Assert
         deletionContents = []
@@ -1061,6 +1061,7 @@ class TestMain(unittest.TestCase):
         fulltestMetadata = os.path.join(dataDir, "fulltest.metadata.1.tsv")
         vcfFile = os.path.join(dataDir, "fulltest.variants.1.vcf")
         genomeFile = os.path.join(dataDir, "genome.fasta")
+        gff3File = os.path.join(dataDir, "fulltest.1.gff3")
         
         edTruth = "chr1\t10\tsnp\t42\t42\t98\t98\t1.0678755470980512" # 1.0967370483709717 if genotype inheritance is used
         berTruth = "chr1\t0\t0.0714285714285715\n"
@@ -1082,7 +1083,6 @@ class TestMain(unittest.TestCase):
             "--fvcf", vcfFile
         ]
         returncode, stdout, stderr = run_subprocess(cmd)
-        #self.assertTrue(returncode == 0, f"Expected returncode 0 but got: {returncode}")
         self.assertTrue(stderr == "", f"Expected no stderr output but got: {stderr}")
         
         # Act&Assert: run psQTL_proc.py ed
@@ -1092,7 +1092,6 @@ class TestMain(unittest.TestCase):
             "-i", "call"
         ]
         returncode, stdout, stderr = run_subprocess(cmd)
-        #self.assertTrue(returncode == 0, f"Expected returncode 0 but got: {returncode}")
         self.assertTrue(stderr == "", f"Expected no stderr output but got: {stderr}")
         
         edFile = os.path.join(workDir, "psQTL_call.alleles_ed.tsv.gz")
@@ -1109,7 +1108,6 @@ class TestMain(unittest.TestCase):
             "-i", "call"
         ]
         returncode, stdout, stderr = run_subprocess(cmd)
-        #self.assertTrue(returncode == 0, f"Expected returncode 0 but got: {returncode}")
         self.assertTrue(stderr == "", f"Expected no stderr output but got: {stderr}")
         
         # Assert: check that the output files are correctly generated
@@ -1509,7 +1507,344 @@ class TestMain(unittest.TestCase):
             for line in fileIn:
                 recodeContents.append(line.strip())
         self.assertTrue(recodeContents == recodeTruth, f"Expected recode file to be '{recodeTruth}' but got: {recodeContents}")
-
+    
+    def test_reporting_normal(self):
+        "Run a full psQTL analysis pipeline with a test set of variants and metadata, then check the reports generated"
+        # Arrange: set variables
+        workDir = os.path.join(dataDir, "tmp")
+        fulltestMetadata = os.path.join(dataDir, "fulltest.metadata.1.tsv")
+        vcfFile = os.path.join(dataDir, "fulltest.variants.1.vcf")
+        genomeFile = os.path.join(dataDir, "genome.fasta")
+        gff3File = os.path.join(dataDir, "fulltest.1.gff3")
+        
+        allelesReportFile = os.path.join(workDir, "alleles_report.tsv")
+        genotypesReportFile = os.path.join(workDir, "genotypes_report.tsv")
+        splsdaReportFile = os.path.join(workDir, "splsda_report.tsv")
+        alleleMarkersReportFile = os.path.join(workDir, "alleles_report.markers.tsv")
+        genotypesMarkersReportFile = os.path.join(workDir, "genotypes_report.markers.tsv")
+        splsdaMarkersReportFile = os.path.join(workDir, "splsda_report.markers.tsv")
+        reportRadius = 10
+        
+        allelesReportTruth = ['gene_id\tcontig\tstrand\tgene_start\tgene_end\tN1\tmax_ED_within_radius\tnum_exon\texon_mean\tnum_intron\tintron_mean\tnum_adjacent\tadjacent_mean',
+                              'gene1.1\tchr1\t+\t1\t3\t1\t1.3004\t0\t-1.0000\t0\t-1.0000\t1\t1.3004',
+                              'gene2.1\tchr1\t+\t3\t7\t1\t1.3004\t0\t-1.0000\t0\t-1.0000\t1\t1.3004',
+                              'gene3.1\tchr1\t+\t8\t11\t1\t1.3004\t1\t1.3004\t0\t-1.0000\t0\t-1.0000']
+        genotypesReportTruth = ['gene_id\tcontig\tstrand\tgene_start\tgene_end\tN1\tmax_ED_within_radius\tnum_exon\texon_mean\tnum_intron\tintron_mean\tnum_adjacent\tadjacent_mean',
+                                'gene1.1\tchr1\t+\t1\t3\t1\t1.4468\t0\t-1.0000\t0\t-1.0000\t1\t1.4468',
+                                'gene2.1\tchr1\t+\t3\t7\t1\t1.4468\t0\t-1.0000\t0\t-1.0000\t1\t1.4468',
+                                'gene3.1\tchr1\t+\t8\t11\t1\t1.4468\t1\t1.4468\t0\t-1.0000\t0\t-1.0000']
+        splsdaReportTruth = ['gene_id\tcontig\tstrand\tgene_start\tgene_end\tnum_adjacent_call_selected\tnum_overlapping_call_selected\tnum_adjacent_depth_selected\tnum_overlapping_depth_selected\tnum_adjacent_integrated_selected\tnum_overlapping_integrated_selected',
+                             'gene1.1\tchr1\t+\t1\t3\t1\t0\t0\t0\t0\t0',
+                             'gene2.1\tchr1\t+\t3\t7\t1\t0\t0\t0\t0\t0',
+                             'gene3.1\tchr1\t+\t8\t11\t0\t1\t0\t0\t0\t0']
+        allelesMarkersReportTruth = ['contig\tposition\tstatistic\tnearest_gene',
+                                     'chr1\t10\t1.3004\tgene3.1']
+        genotypesMarkersReportTruth = ['contig\tposition\tstatistic\tnearest_gene',
+                                       'chr1\t10\t1.4468\tgene3.1']
+        splsdaMarkersReportTruth = ['contig\tposition\tstatistic\tnearest_gene',
+                                    'chr1\t10\tcall\tgene3.1']
+        
+        # Arrange: cleanup any previous work directory
+        if os.path.exists(workDir):
+            shutil.rmtree(workDir)
+        if not os.path.exists(workDir):
+            os.makedirs(workDir)
+        
+        # Arrange: run full pipeline to generate the necessary files
+        cmd = [
+            "python", os.path.join(baseDir, "psQTL_prep.py"), "initialise",
+            "-d", workDir,
+            "--meta", fulltestMetadata,
+            "--fvcf", vcfFile
+        ]
+        returncode, stdout, stderr = run_subprocess(cmd)
+        self.assertTrue(stderr == "", f"Expected no stderr output but got: {stderr}")
+        
+        cmd = [
+            "python", os.path.join(baseDir, "psQTL_proc.py"), "ed",
+            "-d", workDir,
+            "-i", "call"
+        ]
+        returncode, stdout, stderr = run_subprocess(cmd)
+        self.assertTrue(stderr == "", f"Expected no stderr output but got: {stderr}")
+        
+        cmd = [
+            "python", os.path.join(baseDir, "psQTL_proc.py"), "splsda",
+            "-d", workDir,
+            "-i", "call"
+        ]
+        returncode, stdout, stderr = run_subprocess(cmd)
+        self.assertTrue(stderr == "", f"Expected no stderr output but got: {stderr}")
+        
+        # Act&Assert: run psQTL_post.py report (alleles ED)
+        cmd = [
+            "python", os.path.join(baseDir, "psQTL_post.py"), "report",
+            "-d", workDir, "-f", genomeFile, "-a", gff3File,
+            "-m", "ed-call", "-t", "genes", "--ed", "alleles",
+            "--radius", str(reportRadius),
+            "-o", allelesReportFile
+        ]
+        returncode, stdout, stderr = run_subprocess(cmd)
+        self.assertTrue(stderr == "", f"Expected no stderr output but got: {stderr}")
+        
+        # Assert: check that the alleles report file is generated correctly
+        reportContents = []
+        with read_gz_file(allelesReportFile) as fileIn:
+            for line in fileIn:
+                reportContents.append(line.strip())
+        self.assertTrue(reportContents == allelesReportTruth, f"Expected alleles report file to contain '{allelesReportTruth}' but got: {reportContents}")
+        
+        # Act&Assert: run psQTL_post.py report (genotypes ED)
+        cmd = [
+            "python", os.path.join(baseDir, "psQTL_post.py"), "report",
+            "-d", workDir, "-f", genomeFile, "-a", gff3File,
+            "-m", "ed-call", "-t", "genes", "--ed", "genotypes",
+            "--radius", str(reportRadius),
+            "-o", genotypesReportFile
+        ]
+        returncode, stdout, stderr = run_subprocess(cmd)
+        self.assertTrue(stderr == "", f"Expected no stderr output but got: {stderr}")
+        
+        # Assert: check that the alleles report file is generated correctly
+        reportContents = []
+        with read_gz_file(genotypesReportFile) as fileIn:
+            for line in fileIn:
+                reportContents.append(line.strip())
+        self.assertTrue(reportContents == genotypesReportTruth, f"Expected genotypes report file to contain '{genotypesReportTruth}' but got: {reportContents}")
+        
+        # Act&Assert: run psQTL_post.py report (sPLS-DA)
+        cmd = [
+            "python", os.path.join(baseDir, "psQTL_post.py"), "report",
+            "-d", workDir, "-f", genomeFile, "-a", gff3File,
+            "-m", "splsda", "-t", "genes",
+            "--radius", str(reportRadius),
+            "-o", splsdaReportFile
+        ]
+        returncode, stdout, stderr = run_subprocess(cmd)
+        self.assertTrue(stderr == "", f"Expected no stderr output but got: {stderr}")
+        
+        # Assert: check that the alleles report file is generated correctly
+        reportContents = []
+        with read_gz_file(splsdaReportFile) as fileIn:
+            for line in fileIn:
+                reportContents.append(line.strip())
+        self.assertTrue(reportContents == splsdaReportTruth, f"Expected sPLS-DA report file to contain '{splsdaReportTruth}' but got: {reportContents}")
+        
+        # Act&Assert: run psQTL_post.py report (allele markers)
+        cmd = [
+            "python", os.path.join(baseDir, "psQTL_post.py"), "report",
+            "-d", workDir, "-f", genomeFile, "-a", gff3File,
+            "-m", "ed-call", "-t", "markers",
+            "--radius", str(reportRadius),
+            "-o", alleleMarkersReportFile
+        ]
+        returncode, stdout, stderr = run_subprocess(cmd)
+        self.assertTrue(stderr == "", f"Expected no stderr output but got: {stderr}")
+        
+        # Assert: check that the alleles report file is generated correctly
+        reportContents = []
+        with read_gz_file(alleleMarkersReportFile) as fileIn:
+            for line in fileIn:
+                reportContents.append(line.strip())
+        self.assertTrue(reportContents == allelesMarkersReportTruth, f"Expected allele markers report file to contain '{allelesMarkersReportTruth}' but got: {reportContents}")
+        
+        # Act&Assert: run psQTL_post.py report (genotype markers)
+        cmd = [
+            "python", os.path.join(baseDir, "psQTL_post.py"), "report",
+            "-d", workDir, "-f", genomeFile, "-a", gff3File,
+            "-m", "ed-call", "-t", "markers", "--ed", "genotypes",
+            "--radius", str(reportRadius),
+            "-o", genotypesMarkersReportFile
+        ]
+        returncode, stdout, stderr = run_subprocess(cmd)
+        self.assertTrue(stderr == "", f"Expected no stderr output but got: {stderr}")
+        
+        # Assert: check that the alleles report file is generated correctly
+        reportContents = []
+        with read_gz_file(genotypesMarkersReportFile) as fileIn:
+            for line in fileIn:
+                reportContents.append(line.strip())
+        self.assertTrue(reportContents == genotypesMarkersReportTruth, f"Expected genotypes markers report file to contain '{genotypesMarkersReportTruth}' but got: {reportContents}")
+        
+        # Act&Assert: run psQTL_post.py report (sPLS-DA markers)
+        cmd = [
+            "python", os.path.join(baseDir, "psQTL_post.py"), "report",
+            "-d", workDir, "-f", genomeFile, "-a", gff3File,
+            "-m", "splsda", "-t", "markers",
+            "--radius", str(reportRadius),
+            "-o", splsdaMarkersReportFile
+        ]
+        returncode, stdout, stderr = run_subprocess(cmd)
+        self.assertTrue(stderr == "", f"Expected no stderr output but got: {stderr}")
+        
+        # Assert: check that the  report file is generated correctly
+        reportContents = []
+        with read_gz_file(splsdaMarkersReportFile) as fileIn:
+            for line in fileIn:
+                reportContents.append(line.strip())
+        self.assertTrue(reportContents == splsdaMarkersReportTruth, f"Expected sPLS-DA markers report file to contain '{splsdaMarkersReportTruth}' but got: {reportContents}")
+    
+    def test_reporting_edge_cases(self):
+        "Attempt to run psQTL_post.py report with potential edge cases"
+        # Arrange: set variables
+        workDir = os.path.join(dataDir, "tmp")
+        fulltestMetadata = os.path.join(dataDir, "fulltest.metadata.1.tsv")
+        vcfFile = os.path.join(dataDir, "fulltest.variants.1.vcf")
+        genomeFile = os.path.join(dataDir, "genome.fasta")
+        reportFile = os.path.join(workDir, "report.tsv")
+        noneWithinGff3 = os.path.join(dataDir, "fulltest.2.gff3")
+        smallRadius = 1
+        reportRadius = 10
+        
+        smallRadiusMarkerTruth = ['contig\tposition\tstatistic\tnearest_gene', 'chr1\t10\t1.3004\t.']
+        smallRadiusSplsdaTruth = ['contig\tposition\tstatistic\tnearest_gene', 'chr1\t10\tcall\t.']
+        
+        # Arrange: cleanup any previous work directory
+        if os.path.exists(workDir):
+            shutil.rmtree(workDir)
+        if not os.path.exists(workDir):
+            os.makedirs(workDir)
+        
+        # Arrange: run full pipeline to generate the necessary files
+        cmd = [
+            "python", os.path.join(baseDir, "psQTL_prep.py"), "initialise",
+            "-d", workDir,
+            "--meta", fulltestMetadata,
+            "--fvcf", vcfFile
+        ]
+        returncode, stdout, stderr = run_subprocess(cmd)
+        self.assertTrue(stderr == "", f"Expected no stderr output but got: {stderr}")
+        
+        cmd = [
+            "python", os.path.join(baseDir, "psQTL_proc.py"), "ed",
+            "-d", workDir,
+            "-i", "call"
+        ]
+        returncode, stdout, stderr = run_subprocess(cmd)
+        self.assertTrue(stderr == "", f"Expected no stderr output but got: {stderr}")
+        
+        cmd = [
+            "python", os.path.join(baseDir, "psQTL_proc.py"), "splsda",
+            "-d", workDir,
+            "-i", "call"
+        ]
+        returncode, stdout, stderr = run_subprocess(cmd)
+        self.assertTrue(stderr == "", f"Expected no stderr output but got: {stderr}")
+        
+        # Act&Assert: run psQTL_post.py report (alleles ED) with no overlaps
+        cmd = [
+            "python", os.path.join(baseDir, "psQTL_post.py"), "report",
+            "-d", workDir, "-f", genomeFile, "-a", noneWithinGff3,
+            "-m", "ed-call", "-t", "genes", "--ed", "alleles",
+            "--radius", str(reportRadius),
+            "-o", reportFile
+        ]
+        returncode, stdout, stderr = run_subprocess(cmd)
+        self.assertTrue(stderr == "", f"Expected no stderr output but got: {stderr}")
+        
+        # Assert: check that the report file is generated correctly (only adjacent features found)
+        reportContents = []
+        with read_gz_file(reportFile) as fileIn:
+            for line in fileIn:
+                reportContents.append(line.strip())
+        self.assertTrue(reportContents[1].endswith("1\t1.3004"), f"Expected no overlaps report file to end with '1\t1.3004' but got: {reportContents[1]}")
+        self.assertTrue(reportContents[2].endswith("1\t1.3004"), f"Expected no overlaps report file to end with '1\t1.3004' but got: {reportContents[2]}")
+        
+        # Act&Assert: run psQTL_post.py report (alleles ED) with a small radius
+        os.remove(reportFile) # remove the previous report file
+        cmd = [
+            "python", os.path.join(baseDir, "psQTL_post.py"), "report",
+            "-d", workDir, "-f", genomeFile, "-a", noneWithinGff3,
+            "-m", "ed-call", "-t", "genes", "--ed", "alleles",
+            "--radius", str(smallRadius),
+            "-o", reportFile
+        ]
+        returncode, stdout, stderr = run_subprocess(cmd)
+        
+        # Assert: check that the report file is generated correctly (radius too small)
+        reportContents = []
+        with read_gz_file(reportFile) as fileIn:
+            for line in fileIn:
+                reportContents.append(line.strip())
+        self.assertTrue(len(reportContents) == 1, f"Expected report file with small radius to just be a header line but got: {reportContents}")
+        
+        # Act&Assert: run psQTL_post.py report (sPLS-DA) with no overlaps
+        os.remove(reportFile)
+        cmd = [
+            "python", os.path.join(baseDir, "psQTL_post.py"), "report",
+            "-d", workDir, "-f", genomeFile, "-a", noneWithinGff3,
+            "-m", "splsda", "-t", "genes",
+            "--radius", str(reportRadius),
+            "-o", reportFile
+        ]
+        returncode, stdout, stderr = run_subprocess(cmd)
+        self.assertTrue(stderr == "", f"Expected no stderr output but got: {stderr}")
+        
+        # Assert: check that the report file is generated correctly (only adjacent features found)
+        reportContents = []
+        with read_gz_file(reportFile) as fileIn:
+            for line in fileIn:
+                reportContents.append(line.strip())
+        self.assertTrue("\t1\t0\t0\t0\t0\t0" in reportContents[1], f"Expected no overlaps report file to contain '\t1\t0\t0\t0\t0\t0' but got: {reportContents[1]}")
+        self.assertTrue("\t1\t0\t0\t0\t0\t0" in reportContents[2], f"Expected no overlaps report file to contain '\t1\t0\t0\t0\t0\t0' but got: {reportContents[2]}")
+        
+        # Act&Assert: run psQTL_post.py report (sPLS-DA) with a small radius
+        os.remove(reportFile)
+        cmd = [
+            "python", os.path.join(baseDir, "psQTL_post.py"), "report",
+            "-d", workDir, "-f", genomeFile, "-a", noneWithinGff3,
+            "-m", "splsda", "-t", "genes",
+            "--radius", str(smallRadius),
+            "-o", reportFile
+        ]
+        returncode, stdout, stderr = run_subprocess(cmd)
+        self.assertTrue(stderr == "", f"Expected no stderr output but got: {stderr}")
+        
+        # Assert: check that the report file is generated correctly (radius too small)
+        reportContents = []
+        with read_gz_file(reportFile) as fileIn:
+            for line in fileIn:
+                reportContents.append(line.strip())
+        self.assertTrue(len(reportContents) == 1, f"Expected report file with small radius to just be a header line but got: {reportContents}")
+        
+        # Act&Assert: run psQTL_post.py report (allele markers) with a small radius
+        os.remove(reportFile)
+        cmd = [
+            "python", os.path.join(baseDir, "psQTL_post.py"), "report",
+            "-d", workDir, "-f", genomeFile, "-a", noneWithinGff3,
+            "-m", "ed-call", "-t", "markers",
+            "--radius", str(smallRadius),
+            "-o", reportFile
+        ]
+        returncode, stdout, stderr = run_subprocess(cmd)
+        self.assertTrue(stderr == "", f"Expected no stderr output but got: {stderr}")
+        
+        # Assert: check that the report file is generated correctly (radius too small)
+        reportContents = []
+        with read_gz_file(reportFile) as fileIn:
+            for line in fileIn:
+                reportContents.append(line.strip())
+        self.assertTrue(reportContents == smallRadiusMarkerTruth, f"Expected markers report file to contain '{smallRadiusMarkerTruth}' but got: {reportContents}")
+        
+        # Act&Assert: run psQTL_post.py report (sPLS-DA markers) with a small radius
+        os.remove(reportFile)
+        cmd = [
+            "python", os.path.join(baseDir, "psQTL_post.py"), "report",
+            "-d", workDir, "-f", genomeFile, "-a", noneWithinGff3,
+            "-m", "splsda", "-t", "markers",
+            "--radius", str(smallRadius),
+            "-o", reportFile
+        ]
+        returncode, stdout, stderr = run_subprocess(cmd)
+        self.assertTrue(stderr == "", f"Expected no stderr output but got: {stderr}")
+        
+        # Assert: check that the report file is generated correctly (radius too small)
+        reportContents = []
+        with read_gz_file(reportFile) as fileIn:
+            for line in fileIn:
+                reportContents.append(line.strip())
+        self.assertTrue(reportContents == smallRadiusSplsdaTruth, f"Expected markers report file to contain '{smallRadiusSplsdaTruth}' but got: {reportContents}")
+        
 class TestGFF3(unittest.TestCase):
     def test_normal_gff3_handling_1(self):
         "Test parsing GFF3 which is fully specified but has some minor formatting issues"

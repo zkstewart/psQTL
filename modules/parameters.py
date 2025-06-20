@@ -11,7 +11,7 @@ class ParameterCache:
         self._metadataFile = None
         self._vcfFile = None
         self._filteredVcfFile = None
-        self._deletionFile = None
+        self._depthFile = None
         self._bamSuffix = None
         self._bamFiles = None
         self._windowSize = None
@@ -54,7 +54,7 @@ class ParameterCache:
         self.metadataFile = args.metadataFile if hasattr(args, "metadataFile") else None
         self.vcfFile = args.vcfFile if hasattr(args, "vcfFile") else None
         self.filteredVcfFile = args.filteredVcfFile if hasattr(args, "filteredVcfFile") else None
-        self.deletionFile = args.deletionFile if hasattr(args, "deletionFile") else None
+        self.depthFile = args.depthFile if hasattr(args, "depthFile") else None
         self.bamSuffix = args.bamSuffix if hasattr(args, "bamSuffix") else None
         self.bamFiles = args.bamFiles if hasattr(args, "bamFiles") else None
         self.windowSize = args.windowSize if hasattr(args, "windowSize") else None
@@ -70,7 +70,7 @@ class ParameterCache:
                     raise ValueError(f"Parameter cache file '{self.cacheFile}' is not a valid JSON file; see " +
                                      f"error message: {e}")
             # Validate data integrity
-            if not all([key in data for key in ["metadataFile", "vcfFile", "filteredVcfFile", "deletionFile",
+            if not all([key in data for key in ["metadataFile", "vcfFile", "filteredVcfFile", "depthFile",
                                                 "bamSuffix", "bamFiles", "windowSize", "qualFilter"]]):
                 raise ValueError(f"Parameter cache file '{self.cacheFile}' is missing values; have you been manually editing it?")
             # Load data while circumventing the setters
@@ -78,7 +78,7 @@ class ParameterCache:
             self._metadataFile = data["metadataFile"]
             self._vcfFile = data["vcfFile"]
             self._filteredVcfFile = data["filteredVcfFile"]
-            self._deletionFile = data["deletionFile"]
+            self._depthFile = data["depthFile"]
             self._bamSuffix = data["bamSuffix"]
             self._bamFiles = data["bamFiles"]
             self._windowSize = data["windowSize"]
@@ -88,7 +88,7 @@ class ParameterCache:
             self.metadataFile = data["metadataFile"]
             self.vcfFile = data["vcfFile"]
             self.filteredVcfFile = data["filteredVcfFile"]
-            self.deletionFile = data["deletionFile"]
+            self.depthFile = data["depthFile"]
             self.bamSuffix = data["bamSuffix"]
             self.bamFiles = data["bamFiles"]
             self.windowSize = data["windowSize"]
@@ -101,7 +101,7 @@ class ParameterCache:
             "metadataFile": self.metadataFile,
             "vcfFile": self.vcfFile,
             "filteredVcfFile": self.filteredVcfFile,
-            "deletionFile": self.deletionFile,
+            "depthFile": self.depthFile,
             "bamSuffix": self.bamSuffix,
             "bamFiles": self.bamFiles,
             "windowSize": self.windowSize,
@@ -199,29 +199,29 @@ class ParameterCache:
         print(updateMsg)
     
     @property
-    def deletionFile(self):
-        return self._deletionFile
+    def depthFile(self):
+        return self._depthFile
     
-    @deletionFile.setter
-    def deletionFile(self, value):
+    @depthFile.setter
+    def depthFile(self, value):
         # Ignore unchanged values
-        if value == self.deletionFile:
+        if value == self.depthFile:
             return
         # Validate file existence
         if value != None:
             if not os.path.isfile(value):
-                raise FileNotFoundError(f"Deletion file '{value}' is not a file.")
+                raise FileNotFoundError(f"Depth file '{value}' is not a file.")
             value = os.path.abspath(value) # store absolute path
             # Ignore again if value is unchanged after getting absolute path
-            if value == self.deletionFile:
+            if value == self.depthFile:
                 return
         # Store updated value
-        updateMsg = f"# Parameter cache: 'deletionFile' changed from '{self._deletionFile}' to '{value}'"
-        self._deletionFile = value
-        # Propagate change to deletion cache
-        deletionCache = DeletionCache(self.workingDirectory)
-        deletionCache.establish()
-        deletionCache.deletionFile = value
+        updateMsg = f"# Parameter cache: 'depthFile' changed from '{self._depthFile}' to '{value}'"
+        self._depthFile = value
+        # Propagate change to depth cache
+        depthCache = DepthCache(self.workingDirectory)
+        depthCache.establish()
+        depthCache.depthFile = value
         # Save after VCF cache is updated
         self.save() # try to keep the files in sync by allowing errors to be raised there first
         print(updateMsg)
@@ -529,15 +529,15 @@ class VcfCache:
     def filteredContigs(self):
         return self._filteredContigs
 
-class DeletionCache:
+class DepthCache:
     def __init__(self, workingDirectory):
         if not os.path.isdir(workingDirectory):
             raise FileNotFoundError(f"Directory '{workingDirectory}' is not a directory.")
         self.workingDirectory = os.path.abspath(workingDirectory)
         
-        self._deletionFile = None
+        self._depthFile = None
         self._bins = None
-        self._deletionBins = None
+        self._cnvBins = None
         self._samples = None
         self._contigs = None
     
@@ -551,9 +551,9 @@ class DeletionCache:
         if os.path.exists(self.cacheFile):
             raise FileExistsError(f"Directory '{self.workingDirectory}' has already been initialised.")
         
-        self.deletionFile = None
+        self.depthFile = None
         self._bins = None # no setter for this and below
-        self._deletionBins = None
+        self._cnvBins = None
         self._samples = None
         self._contigs = None
         self.save()
@@ -564,71 +564,71 @@ class DeletionCache:
                 try:
                     data = json.load(fileIn)
                 except json.JSONDecodeError as e:
-                    raise ValueError(f"Deletion cache file '{self.cacheFile}' is not a valid JSON file; see " +
+                    raise ValueError(f"Depth cache file '{self.cacheFile}' is not a valid JSON file; see " +
                                      f"error message: {e}")
             # Validate data integrity
-            if not all([key in data for key in ["deletionFile", "bins", "deletionBins", "samples", "contigs"]]):
-                raise ValueError(f"Deletion cache file '{self.cacheFile}' is missing values; have you been manually editing it?")
+            if not all([key in data for key in ["depthFile", "bins", "cnvBins", "samples", "contigs"]]):
+                raise ValueError(f"Depth cache file '{self.cacheFile}' is missing values; have you been manually editing it?")
             # Load data while circumventing the setters
             "Circumvent the setters to avoid re-parsing the VCF-like file"
-            self._deletionFile = data["deletionFile"]
+            self._depthFile = data["depthFile"]
             self._bins = data["bins"]
-            self._deletionBins = data["deletionBins"]
+            self._cnvBins = data["cnvBins"]
             self._samples = data["samples"]
             self._contigs = data["contigs"]
         else:
-            raise FileNotFoundError(f"Working directory '{self.workingDirectory}' has not had its deletion cache initialised.")
+            raise FileNotFoundError(f"Working directory '{self.workingDirectory}' has not had its depth cache initialised.")
     
     def save(self):
         data = {
-            "deletionFile": self.deletionFile,
+            "depthFile": self.depthFile,
             "bins": self.bins,
-            "deletionBins": self.deletionBins,
+            "cnvBins": self.cnvBins,
             "samples": self.samples,
             "contigs": self.contigs
         }
         with open(self.cacheFile, "w") as fileOut:
             json.dump(data, fileOut)
     
-    def _parse_deletion_vcf(self):
-        if self.deletionFile == None or not os.path.isfile(self.deletionFile):
-            raise FileNotFoundError(f"Deletion file '{self.deletionFile}' is not a file.")
-        self._bins, self._deletionBins, self._samples, self._contigs = parse_vcf_stats(self.deletionFile, refAllele="1")
+    def _parse_depth_vcf(self):
+        if self.depthFile == None or not os.path.isfile(self.depthFile):
+            raise FileNotFoundError(f"Depth file '{self.depthFile}' is not a file.")
+        self._bins, self._cnvBins, self._samples, self._contigs = parse_vcf_stats(self.depthFile, refAllele="1")
     
     @property
     def cacheFile(self):
-        return os.path.join(self.workingDirectory, "deletion.json")
+        return os.path.join(self.workingDirectory, "depth.json")
     
     @property
-    def deletionFile(self):
-        return self._deletionFile
+    def depthFile(self):
+        return self._depthFile
     
-    @deletionFile.setter
-    def deletionFile(self, value):
+    @depthFile.setter
+    def depthFile(self, value):
         # Ignore unchanged values
-        if value == self.deletionFile:
+        if value == self.depthFile:
             return
         # Handle None values
         if value == None:
-            print(f"# Deletion cache: 'deletionFile' being blanked to '{value}'")
-            self._deletionFile = None
+            print(f"# Depth cache: 'depthFile' being blanked to '{value}'")
+            self._depthFile = None
             self._bins = None
-            self._deletionBins = None
+            self._cnvBins = None
             self._samples = None
             self._contigs = None
             self.save()
             return
         # Validate file existence
         if not os.path.isfile(value):
-            raise FileNotFoundError(f"Deletion file '{value}' is not a file.")
+            raise FileNotFoundError(f"Depth file '{value}' is not a file.")
         value = os.path.abspath(value) # store absolute path
         # Ignore again if value is unchanged after getting absolute path
-        if value == self.deletionFile:
+        if value == self.depthFile:
             return
         # Store and parse
-        updateMsg = f"# Deletion cache: 'deletionFile' changed from '{self._deletionFile}' to '{value}'"
-        self._deletionFile = value
-        self._parse_deletion_vcf()
+        updateMsg = f"# Depth cache: 'depthFile' changed from '{self._depthFile}' to '{value}'"
+        self._depthFile = value
+        self._parse_depth_vcf()
         self.save() # save after all changes are made
         print(updateMsg)
     
@@ -637,8 +637,8 @@ class DeletionCache:
         return self._bins
     
     @property
-    def deletionBins(self):
-        return self._deletionBins
+    def cnvBins(self):
+        return self._cnvBins
     
     @property
     def samples(self):

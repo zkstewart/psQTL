@@ -463,7 +463,7 @@ def parse_vcf_for_ed(vcfFile, metadataDict, isCNV, parents=[],
             # Figure out what type of variant this is
             if any([ x == "." for x in ref_alt ]):
                 variant = "indel"
-            elif all([ x == "N" for x in ref_alt ]): # for parsing deletion VCF-like files
+            elif all([ x == "N" for x in ref_alt ]): # for parsing depth VCF-like files
                 variant = "cnv"
             elif any([ len(ref_alt[0]) != len(ref_alt[x]) for x in range(1, len(ref_alt))]):
                 variant = "indel"
@@ -655,7 +655,7 @@ def convert_dict_to_windowed_ncls(statDict, windowSize=0):
         windowSize -- OPTIONAL; an integer indicating the size of the window that was used
                       when generating the depth file that led to the statistics file. Default is 0
                       (no window size) which is intended for use with variant calls, whereas
-                      depth deletions should use an actual window size.
+                      depth CNVs should use an actual window size.
     Returns:
         windowedNCLS -- a WindowedNCLS object containing statistical values indexed by chromosome
                         and position

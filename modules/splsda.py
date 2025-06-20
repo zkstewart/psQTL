@@ -261,10 +261,12 @@ def run_integrative_splsda(callRdataFile, depthRdataFile, outputVariants,
                          f"'{callRdataFile}' and '{depthRdataFile}'; have a look at the stderr to " + 
                          f"make sense of this:\n'{errorMsg}'"))
 
-def parse_selected_to_windowed_ncls(selectedFileName):
+def parse_selected_to_windowed_ncls(selectedFileName, windowSize=0):
     '''
     Parameters:
         selectedFileName -- a file name indicating the location of the selected variants file
+        windowSize -- (OPTIONAL) an integer indicating the size of the windows that CNVs were predicted with;
+                      if 0, the file is not windowed (as seen in call variants); default is 0
     Returns:
         windowedNCLS -- a WindowedNCLS object containing statistical values indexed by chromosome
                         and position
@@ -306,7 +308,7 @@ def parse_selected_to_windowed_ncls(selectedFileName):
             statDict[chrom][1].append(statProduct)
     
     # Convert the dictionary to a WindowedNCLS object
-    windowedNCLS = WindowedNCLS(windowSize=0)
+    windowedNCLS = WindowedNCLS(windowSize=windowSize)
     for chrom, value in statDict.items():
         positions = np.array(value[0])
         statsValues = np.array(value[1])
@@ -314,10 +316,11 @@ def parse_selected_to_windowed_ncls(selectedFileName):
     
     return windowedNCLS
 
-def parse_integrated_to_windowed_ncls(selectedFileName):
+def parse_integrated_to_windowed_ncls(selectedFileName, windowSize):
     '''
     Parameters:
         selectedFileName -- a file name indicating the location of the selected variants file
+        windowSize -- an integer indicating the size of the windows that CNVs were predicted with
     Returns:
         nclsList -- a list of two WindowedNCLS objects:
             callWindowedNCLS -- a WindowedNCLS object containing statistical values indexed by chromosome
@@ -366,8 +369,14 @@ def parse_integrated_to_windowed_ncls(selectedFileName):
     # Convert the dictionary to a WindowedNCLS object
     nclsList = []
     for featuretype in ["call", "depth"]: # ensure ordering; we always have at least one of each type
+        # Create a WindowedNCLS object for the feature type
+        if featuretype == "call":
+            windowedNCLS = WindowedNCLS(windowSize=0) # call variants are not windowed
+        else:
+            windowedNCLS = WindowedNCLS(windowSize=windowSize)
+        
+        # Populate the WindowedNCLS object with the parsed data
         statDict = featureDict[featuretype]
-        windowedNCLS = WindowedNCLS(windowSize=0)
         for chrom, value in statDict.items():
             positions = np.array(value[0])
             statsValues = np.array(value[1])
@@ -415,7 +424,7 @@ def parse_ber_to_windowed_ncls(berFileName, balancedAccuracy=True):
             if balancedAccuracy:
                 ber = 1 - (ber*2)
             
-            # Figure out the window size (if not set yet)
+            # Derive our window size (if not set yet)
             if windowSize == None:
                 if prevPos == None:
                     prevPos = pos
@@ -427,6 +436,10 @@ def parse_ber_to_windowed_ncls(berFileName, balancedAccuracy=True):
                 statDict[chrom] = [[], []]
             statDict[chrom][0].append(pos)
             statDict[chrom][1].append(ber)
+        
+        # If windowSize could not be derived from the file, set to 1 (this happens if only 1 BER value is present)
+        if windowSize == None:
+            windowSize = 1
     
     # Convert the dictionary to a WindowedNCLS object
     windowedNCLS = WindowedNCLS(windowSize=windowSize)
@@ -435,4 +448,4 @@ def parse_ber_to_windowed_ncls(berFileName, balancedAccuracy=True):
         statsValues = np.array(value[1])
         windowedNCLS.add(chrom, positions, statsValues)
     
-    return windowedNCLS, windowSize
+    return windowedNCLS

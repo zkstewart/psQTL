@@ -178,6 +178,12 @@ def main():
     args = subParentParser.parse_args()
     locations = validate_proc_args(args)
     
+    # Validate based on input types
+    if "call" in args.inputType:
+        validate_c(args)
+    if "depth" in args.inputType:
+        validate_d(args)
+    
     # Parse metadata file
     metadataDict = parse_metadata(args.metadataFile)
     
@@ -193,12 +199,6 @@ def main():
     print("Program completed successfully!")
 
 def emain(args, metadataDict, locations):
-    # Validate input types before proceeding
-    if "call" in args.inputType:
-        validate_c(args)
-    if "depth" in args.inputType:
-        validate_d(args)
-    
     # Run the main function for each input type
     if "call" in args.inputType:
         call_ed(args, metadataDict, locations)
@@ -229,12 +229,12 @@ def call_ed(args, metadataDict, locations):
 
 def depth_ed(args, metadataDict, locations):
     # Format names for CNV ED files
-    edOutputFiles = [locations.deletionEdFile, None, None] # no alternatives for CNVs
+    edOutputFiles = [locations.depthEdFile, None, None] # no alternatives for CNVs
     
-    # Generate ED files for deletion variants
+    # Generate ED files for CNV variants
     if not all([ os.path.isfile(edFile + ".ok") for edFile in edOutputFiles if edFile != None ]) or \
     not all([ os.path.isfile(edFile) for edFile in edOutputFiles if edFile != None ]):
-        generate_ed_files(args.deletionFile, metadataDict, edOutputFiles,
+        generate_ed_files(args.depthFile, metadataDict, edOutputFiles,
                           parentSamples=[], # no parents used for CNVs
                           isCNV=True,
                           ignoreIdentical=False) # don't ignore identical
@@ -242,19 +242,13 @@ def depth_ed(args, metadataDict, locations):
             if edFile != None:
                 open(edFile + ".ok", "w").close() # touch a .ok file to indicate success
     else:
-        raise FileExistsError(f"Euclidean distance file '{locations.deletionEdFile}' already has a .ok file; " +
+        raise FileExistsError(f"Euclidean distance file '{locations.depthEdFile}' already has a .ok file; " +
                               "move, rename, or delete it before re-running psQTL_proc.py!")
-    print("Deletion variant ED file generation complete!")
+    print("CNV variant ED file generation complete!")
 
 def smain(args, metadataDict, locations):
     # Validate sPLS-DA arguments
     validate_s(args)
-    
-    # Validate input types before proceeding
-    if "call" in args.inputType:
-        validate_c(args)
-    if "depth" in args.inputType:
-        validate_d(args)
     os.makedirs(locations.splsdaDir, exist_ok=True)
     
     # Validate that R and necessary packages are available
@@ -301,32 +295,32 @@ def call_splsda(args, metadataDict, locations):
         print("# 'call' variants already processed for sPLS-DA analysis; skipping ...")
 
 def depth_splsda(args, metadataDict, locations):
-    # Encode deletion variants for sPLS-DA analysis
-    if (not os.path.isfile(locations.deletionRecodedFile)) or (not os.path.isfile(locations.deletionRecodedFile + ".ok")):
+    # Encode CNVs for sPLS-DA analysis
+    if (not os.path.isfile(locations.depthRecodedFile)) or (not os.path.isfile(locations.depthRecodedFile + ".ok")):
         print("# Encoding 'depth' CNVs for sPLS-DA analysis ...")
-        recode_vcf(args.deletionFile, locations.deletionRecodedFile, metadataDict, isCNV=True)
-        open(locations.deletionRecodedFile + ".ok", "w").close() # touch a .ok file to indicate success
+        recode_vcf(args.depthFile, locations.depthRecodedFile, metadataDict, isCNV=True)
+        open(locations.depthRecodedFile + ".ok", "w").close() # touch a .ok file to indicate success
     else:
         print("# 'depth' CNVs already encoded for sPLS-DA analysis; skipping ...")
     
-    # Run windowed sPLS-DA for deletion variants
-    if (not os.path.isfile(locations.deletionSplsdaSelectedFile) or \
-        not os.path.isfile(locations.deletionSplsdaSelectedFile + ".ok")) or \
-        (not os.path.isfile(locations.deletionSplsdaBerFile) or \
-        not os.path.isfile(locations.deletionSplsdaBerFile + ".ok")) or \
-        (not os.path.isfile(locations.deletionSplsdaRdataFile) or \
-        not os.path.isfile(locations.deletionSplsdaRdataFile + ".ok")):
+    # Run windowed sPLS-DA for CNV variants
+    if (not os.path.isfile(locations.depthSplsdaSelectedFile) or \
+        not os.path.isfile(locations.depthSplsdaSelectedFile + ".ok")) or \
+        (not os.path.isfile(locations.depthSplsdaBerFile) or \
+        not os.path.isfile(locations.depthSplsdaBerFile + ".ok")) or \
+        (not os.path.isfile(locations.depthSplsdaRdataFile) or \
+        not os.path.isfile(locations.depthSplsdaRdataFile + ".ok")):
             print("# Running windowed sPLS-DA for 'depth' CNVs ...")
-            run_windowed_splsda(args.metadataFile, locations.deletionRecodedFile,
-                                locations.deletionSplsdaSelectedFile,
-                                locations.deletionSplsdaBerFile,
-                                locations.deletionSplsdaRdataFile,
+            run_windowed_splsda(args.metadataFile, locations.depthRecodedFile,
+                                locations.depthSplsdaSelectedFile,
+                                locations.depthSplsdaBerFile,
+                                locations.depthSplsdaRdataFile,
                                 locations.windowedSplsdaRscript,
                                 args.threads, args.splsdaWindowSize, args.berFilter,
                                 args.mafFilter, args.numRepeats, args.maxIterations)
-            open(locations.deletionSplsdaSelectedFile + ".ok", "w").close()
-            open(locations.deletionSplsdaBerFile + ".ok", "w").close()
-            open(locations.deletionSplsdaRdataFile + ".ok", "w").close()
+            open(locations.depthSplsdaSelectedFile + ".ok", "w").close()
+            open(locations.depthSplsdaBerFile + ".ok", "w").close()
+            open(locations.depthSplsdaRdataFile + ".ok", "w").close()
             print("'depth' sPLS-DA analysis complete!")
     else:
         print("# 'depth' CNVs already processed for sPLS-DA analysis; skipping ...")
@@ -334,15 +328,15 @@ def depth_splsda(args, metadataDict, locations):
 def integrative_splsda(args, metadataDict, locations):
     # Check if it is possible to run integrative sPLS-DA
     if (not os.path.isfile(locations.variantSplsdaRdataFile) or \
-        not os.path.isfile(locations.deletionSplsdaRdataFile)):
+        not os.path.isfile(locations.depthSplsdaRdataFile)):
         raise FileNotFoundError(f"Cannot run integrative sPLS-DA without both 'call' ({locations.variantSplsdaRdataFile}) " + 
-                                f"and 'depth' ({locations.deletionSplsdaRdataFile}) sPLS-DA RData files!")
+                                f"and 'depth' ({locations.depthSplsdaRdataFile}) sPLS-DA RData files!")
     
     # Run integrative sPLS-DA for variant calls
     if (not os.path.isfile(locations.integrativeSplsdaSelectedFile) or \
         not os.path.isfile(locations.integrativeSplsdaSelectedFile + ".ok")):
             print("# Running integration of sPLS-DA for 'call' and 'depth' variants ...")
-            run_integrative_splsda(locations.variantSplsdaRdataFile, locations.deletionSplsdaRdataFile,
+            run_integrative_splsda(locations.variantSplsdaRdataFile, locations.depthSplsdaRdataFile,
                                    locations.integrativeSplsdaSelectedFile,
                                    locations.integrativeSplsdaRscript,
                                    args.threads, args.numRepeats, args.maxIterations)
