@@ -195,9 +195,10 @@ if ((ncol(df)-2) != nrow(metadata.table)) # -2 to account for c("chrom", "pos")
 }
 
 # Iterate over chromosomes and windows to run PLS-DA
-window.explanation <- data.frame("chrom" = numeric(0), "pos" = numeric(0), "BER" = numeric(0))
-selected.features <- data.frame(matrix(ncol = ncol(df)+1, nrow=0)) # +1 for BER column
-colnames(selected.features) <- c(colnames(df)[1:2], "BER", colnames(df)[3:ncol(df)])
+window.explanation <- list()
+window.index <- 1
+selected.features <- list()
+selected.index <- 1
 for (chromosome in unique(df$chrom))
 {
   chromDF <- df[df$chrom == chromosome,]
@@ -223,7 +224,8 @@ for (chromosome in unique(df$chrom))
     # Skip windows with no variant presence
     if (nrow(windowDF) == 0)
     {
-        window.explanation[nrow(window.explanation) + 1,] <- c(chromosome, windowStart, 0.5) # BER=0.5
+        window.explanation[[window.index]] <- data.frame(chrom=chromosome, pos=windowStart, BER=0.5)
+        window.index <- window.index + 1
         next
     }
     
@@ -261,15 +263,19 @@ for (chromosome in unique(df$chrom))
         }
         
         # Store window and feature
-        window.explanation[nrow(window.explanation) + 1,] <- c(chromosome, windowStart, window.ber)
-        selected.features[nrow(selected.features) + 1,] <- c(chromosome, feature.pos, window.ber, lm.df$X)
+        window.explanation[[window.index]] <- data.frame(chrom=chromosome, pos=windowStart, BER=window.ber)
+        window.index <- window.index + 1
+
+        selected.features[[selected.index]] <- cbind(data.frame(chrom=chromosome, pos=feature.pos, BER=window.ber), feature.row)
+        selected.index <- selected.index + 1
         next
     }
 
     # Detect scenario where only 1 variant site exists in a population
     if (sum(colSums(windowDF) > 0) < 2)
     {
-        window.explanation[nrow(window.explanation) + 1,] <- c(chromosome, windowStart, 0.5) # BER=0.5
+        window.explanation[[window.index]] <- data.frame(chrom=chromosome, pos=windowStart, BER=0.5)
+        window.index <- window.index + 1
         next
     }
     
@@ -308,7 +314,8 @@ for (chromosome in unique(df$chrom))
 
     # If performance could not be calculated, skip this window
     if (all(is.na(window.perf))) {
-        window.explanation[nrow(window.explanation) + 1,] <- c(chromosome, windowStart, 0.5) # BER=0.5
+        window.explanation[[window.index]] <- data.frame(chrom=chromosome, pos=windowStart, BER=0.5)
+        window.index <- window.index + 1
         next
     }
     window.ber <- window.perf$error.rate$BER[[1]] # since we could calculate performance, we can extract BER
@@ -327,11 +334,13 @@ for (chromosome in unique(df$chrom))
     # Store window explanatory power if features are found
     if (nrow(window.features) == 0)
     {
-        window.explanation[nrow(window.explanation) + 1,] <- c(chromosome, windowStart, 0.5) # BER=0.5
+        window.explanation[[window.index]] <- data.frame(chrom=chromosome, pos=windowStart, BER=0.5)
+        window.index <- window.index + 1
         next
     }
-    window.explanation[nrow(window.explanation) + 1,] <- c(chromosome, windowStart, window.ber)
-    
+    window.explanation[[window.index]] <- data.frame(chrom=chromosome, pos=windowStart, BER=window.ber)
+    window.index <- window.index + 1
+
     # Set up df for feature encodings and ensure its compatibility with the feature positions
     encodings.df <- windowDF[rownames(window.features),]
     if (nrow(encodings.df) != nrow(window.features))
@@ -347,10 +356,13 @@ for (chromosome in unique(df$chrom))
         feature.pos <- as.numeric(feature.pos[length(feature.pos)])
 
         encodings.row <- encodings.df[row.index,]
-        selected.features[nrow(selected.features) + 1,] <- c(chromosome, feature.pos, window.ber, as.numeric(encodings.row[1,]))
+        selected.features[[selected.index]] <- cbind(data.frame(chrom=chromosome, pos=feature.pos, BER=window.ber), encodings.row)
+        selected.index <- selected.index + 1
     }
   }
 }
+window.explanation <- as.data.frame(dplyr::bind_rows(window.explanation))
+selected.features <- as.data.frame(dplyr::bind_rows(selected.features))
 selected.features$BER <- as.numeric(selected.features$BER)
 
 # Filter down feature table to those selected in windows
