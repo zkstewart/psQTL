@@ -414,7 +414,7 @@ def rmain(args, locations, dataDict):
         if "depth" in args.inputType:
             if "ed" in args.measurementType:
                 report_markers(dataDict["depth"]["ed"], args.gff3Obj, args.regions,
-                               args.windowSize, args.outputFileName,
+                               args.outputFileName,
                                radiusSize=args.radiusSize)
         if "splsda" in args.measurementType:
             # Store data in a dictionary for reporting
