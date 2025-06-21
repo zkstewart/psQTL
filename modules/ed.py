@@ -496,7 +496,7 @@ def parse_vcf_for_ed(vcfFile, metadataDict, isCNV, parents=[],
                     continue
             
             # Calculate inheritance Euclidean distance if parents are provided
-            numFilteredG1, numFilteredG2, inheritanceED = None, None, None # these will be set later if inheritance ED is calculated
+            numFilteredG1, numFilteredG2, inheritanceED = 0, 0, 0 # these will be set later if inheritance ED is calculated
             if parents != [] and len(parents) == 2:
                 # Re-obtain our group genotypes, this time using the parents
                 g1Gt, g2Gt, parentsGT = separate_genotypes_by_group(snpDict, metadataDict, parents=parents)
