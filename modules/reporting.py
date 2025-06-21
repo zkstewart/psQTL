@@ -211,8 +211,8 @@ def report_genes_depth(windowedNCLS, gff3Obj, regions, outputFileName, radiusSiz
                 overlapping_mean = sum([ed for _, ed in overlapping]) / len(overlapping) if overlapping != [] else -1
                 
                 # Calculate N1 and max ED within radius
-                N1 = sum([ 1 for _, ed in mrnaSnpsList if ed >= 1 ])
-                max_ED_within_radius = max([ ed for _, ed in mrnaSnpsList ])
+                N1 = sum([ 1 for _, ed, _ in mrnaSnpsList if ed >= 1 ])
+                max_ED_within_radius = max([ ed for _, ed, _ in mrnaSnpsList ])
                 
                 # Write to file
                 fileOut.write(f"{mrnaFeature.ID}\t{contigID}\t{mrnaFeature.strand}\t{mrnaFeature.start}\t{mrnaFeature.end}\t" +
@@ -348,13 +348,11 @@ def extract_markers(windowedNCLSObj, contigID, start, end):
                    where statistic can be the ED value, or the type of feature that was
                    selected
     '''
-    PRIORITY = ["depth", "call"] # prioritise depth over call if both are present
-    
     # Grab all markers that overlap with the specified region
     markers = {}
     if isinstance(windowedNCLSObj, dict):
         for datasetKey, windowedNCLS in windowedNCLSObj.items():
-            datasetKey = datasetKey if not "integrated" in datasetKey else "integrated" # standardise key for integrated results
+            #datasetKey = datasetKey if not "integrated" in datasetKey else "integrated" # standardise key for integrated results
             for pos, windowEnd, splsdaStat in windowedNCLS.find_overlap(contigID, start, end): # splsdaStat is ignored
                 markers.setdefault(pos, [])
                 markers[pos].append([windowEnd, datasetKey]) # windowEnd gives pos+windowSize
@@ -368,8 +366,13 @@ def extract_markers(windowedNCLSObj, contigID, start, end):
     for pos in markers.keys():
         markersList = markers[pos]
         if len(markersList) > 1:
-            markersList.sort(key=lambda x: (0 if "integrated" in x else 1, # sort by priority
-                                            PRIORITY.index(x[1]))) # and then by depth > call
+            # Handle sPLS-DA statistics
+            if isinstance(markersList[0][1], str): # sPLS-DA statistics are strings
+                markersList.sort(key=lambda x: (0 if "integrated" in x else 1, # sort by integrated > selected
+                                                0 if "depth" in x else 1)) # and then by depth > call
+            # Handle ED statistics
+            else: # ED statistics are floats
+                markersList.sort(key=lambda x: x[1], reverse=True) # sort by ED value descending
         deduplicated.append([pos, *markersList[0]]) # reconstitute a tuple format (pos, windowEnd, statistic)
     
     # Convert to dictionary format
