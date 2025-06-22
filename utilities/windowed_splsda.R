@@ -297,9 +297,17 @@ for (chromosome in unique(df$chrom))
             } else {
                 tryCatch(
                     {
-                        perf(window.plsda,
-                             folds = 2, validation = "Mfold", 
-                             nrepeat = NREP)
+                        if (mixomicsVersion[2] <= 30) {
+                            perf(window.plsda,
+                                 folds = 2, validation = "Mfold",
+                                 nrepeat = args$nrepeat,
+                                 cpus = args$threads)
+                        } else {
+                            perf(window.plsda,
+                                 folds = 2, validation = "Mfold",
+                                 nrepeat = args$nrepeat,
+                                 BPPARAM = BPPARAM)
+                        }
                     },
                     error = function(e) {
                         perf(window.plsda, validation = "loo")
@@ -311,7 +319,7 @@ for (chromosome in unique(df$chrom))
             NA
         }
     )
-
+    
     # If performance could not be calculated, skip this window
     if (all(is.na(window.perf))) {
         window.explanation[[window.index]] <- data.frame(chrom=chromosome, pos=windowStart, BER=0.5)
@@ -367,7 +375,7 @@ selected.features$BER <- as.numeric(selected.features$BER)
 
 # Filter down feature table to those selected in windows
 original.number <- nrow(selected.features) # keep track of this for later diagnostic error information
-selected.features <- selected.features[selected.features$BER <= BER,]
+selected.features <- selected.features[selected.features$BER <= args$berCutoff,]
 
 # Format features for sPLS-DA
 selected.df <- selected.df[, ! colnames(selected.df) %in% c("chrom", "pos", "BER")] # drop non-feature columns
