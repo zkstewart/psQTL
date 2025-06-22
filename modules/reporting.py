@@ -352,7 +352,6 @@ def extract_markers(windowedNCLSObj, contigID, start, end):
     markers = {}
     if isinstance(windowedNCLSObj, dict):
         for datasetKey, windowedNCLS in windowedNCLSObj.items():
-            #datasetKey = datasetKey if not "integrated" in datasetKey else "integrated" # standardise key for integrated results
             for pos, windowEnd, splsdaStat in windowedNCLS.find_overlap(contigID, start, end): # splsdaStat is ignored
                 markers.setdefault(pos, [])
                 markers[pos].append([windowEnd, datasetKey]) # windowEnd gives pos+windowSize

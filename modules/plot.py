@@ -504,6 +504,11 @@ class Plot:
         else:
             smoothedY = y
         
+        # Handle the case where there are no data points
+        if len(x) == 0 or len(smoothedY) == 0:
+            print(f"WARNING: region '{contigID, start, end}' has no data points to plot as a line")
+            return np.array([]), np.array([]) # implicitly handles len(x) != len(smoothedY)
+        
         # Locate the start and end indices in the x array
         xstart = 0
         while x[xstart] < start:
@@ -1191,6 +1196,10 @@ class HorizontalPlot(Plot):
                 "x can be reused from the group plot"
                 y = coverageData[sample]
                 
+                # Skip if there are no values
+                if y is None or len(y) == 0:
+                    continue
+                
                 # Extend tails for better visualisation
                 y = np.concatenate(([y[0]], y, [y[-1]]))
                 
@@ -1223,7 +1232,7 @@ class HorizontalPlot(Plot):
         
         # Set y limits
         for colNum in range(len(self.regions)):
-            if np.floor(minY) == np.ceil(maxY):
+            if np.floor(minY) == np.ceil(maxY): # minY is always 0, so this is only true if maxY is also 0
                 self.axs[self.rowNum, colNum].set_ylim(0, 1)
             else:
                 self.axs[self.rowNum, colNum].set_ylim(np.floor(minY), np.ceil(maxY))

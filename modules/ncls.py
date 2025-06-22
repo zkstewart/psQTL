@@ -44,7 +44,8 @@ class WindowedNCLS:
                        and stat value
         '''
         if not chrom in self.ncls:
-            raise KeyError(f"Chromosome '{chrom}' does not exist in this WindowedNCLS object")
+            return iter(())
+            #raise KeyError(f"Chromosome '{chrom}' does not exist in this WindowedNCLS object")
         return (
             (windowStart, windowEnd, self.values[chrom][valueIndex])
             for windowStart, windowEnd, valueIndex in self.ncls[chrom].find_overlap(start if start >= 0 else 0, end)
@@ -59,7 +60,8 @@ class WindowedNCLS:
                        and stat value
         '''
         if not chrom in self.ncls:
-            raise KeyError(f"Chromosome '{chrom}' does not exist in this WindowedNCLS object")
+            return iter(())
+            #raise KeyError(f"Chromosome '{chrom}' does not exist in this WindowedNCLS object")
         return (
             (windowStart, windowEnd, self.values[chrom][valueIndex])
             for windowStart, windowEnd, valueIndex in self.find_overlap(chrom, 0, self.longestContig+1)
