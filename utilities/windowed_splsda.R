@@ -366,12 +366,14 @@ selected.features <- as.data.frame(dplyr::bind_rows(selected.features))
 selected.features$BER <- as.numeric(selected.features$BER)
 
 # Filter down feature table to those selected in windows
-selected.df <- selected.features[selected.features$BER <= args$berCutoff,] # new df so we can track the number of lost features
+original.number <- nrow(selected.features) # keep track of this for later diagnostic error information
+selected.features <- selected.features[selected.features$BER <= BER,]
+
+# Format features for sPLS-DA
 selected.df <- selected.df[, ! colnames(selected.df) %in% c("chrom", "pos", "BER")] # drop non-feature columns
 selected.df <- selected.df %>%
   mutate(across(everything(), as.numeric)) # convert feature values back into numeric, since it gets changed along the way
 
-# Format features for sPLS-DA
 selected.X <- t(selected.df)
 colnames(selected.X) <- paste0(selected.features$chrom, "_", selected.features$pos)
 
