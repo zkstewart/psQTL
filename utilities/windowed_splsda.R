@@ -319,7 +319,7 @@ for (chromosome in unique(df$chrom))
             NA
         }
     )
-    
+
     # If performance could not be calculated, skip this window
     if (all(is.na(window.perf))) {
         window.explanation[[window.index]] <- data.frame(chrom=chromosome, pos=windowStart, BER=0.5)
@@ -375,26 +375,25 @@ selected.features$BER <- as.numeric(selected.features$BER)
 
 # Filter down feature table to those selected in windows
 original.number <- nrow(selected.features) # keep track of this for later diagnostic error information
-selected.features <- selected.features[selected.features$BER <= args$berCutoff,]
-
-# Format features for sPLS-DA
-selected.df <- selected.df[, ! colnames(selected.df) %in% c("chrom", "pos", "BER")] # drop non-feature columns
-selected.df <- selected.df %>%
-  mutate(across(everything(), as.numeric)) # convert feature values back into numeric, since it gets changed along the way
-
-selected.X <- t(selected.df)
-colnames(selected.X) <- paste0(selected.features$chrom, "_", selected.features$pos)
+selected.features <- selected.features[selected.features$BER <= args$berCutoff,,drop=FALSE]
 
 # Raise error if we've filtered out all features with BER cutoff
-if (nrow(selected.X) == 0)
+if (nrow(selected.features) == 0)
 {
-    original.number <- ncol(selected.df) - 2 # sans the chrom and pos columns
     stop(paste0(
         "BER cutoff of ", args$berCutoff, " reduces potential features from ",
         original.number, " down to 0. Your data either has insufficient information ",
         "to enable QTL prediction with sPLS-DA or your BER cutoff may be too strict."
     ))
 }
+
+# Format features for sPLS-DA
+selected.df <- selected.features[, ! colnames(selected.features) %in% c("chrom", "pos", "BER")] # drop non-feature columns
+selected.df <- selected.df %>%
+  mutate(across(everything(), as.numeric)) # convert feature values back into numeric, since it gets changed along the way
+
+selected.X <- t(selected.df)
+colnames(selected.X) <- paste0(selected.features$chrom, "_", selected.features$pos)
 
 # Tune sPLS-DA to choose number of genomic features
 if (ncol(selected.X) < 2)
