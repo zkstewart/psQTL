@@ -166,8 +166,8 @@ class GFF3Graph:
         self.features = {}
         self.contigs = set()
         
-        self.idRegex = re.compile(r"ID=(.+?)(;|$)")
-        self.parentRegex = re.compile(r"Parent=(.+?)(;|$)")
+        self.idRegex = re.compile(r"(^|;)ID=(.+?)(;|$)")
+        self.parentRegex = re.compile(r"(^|;)Parent=(.+?)(;|$)")
         
         self.ncls = None
         self._nclsType = None
@@ -266,7 +266,7 @@ class GFF3Graph:
                 self.contigs.add(contig)
                 
                 # Get the ID attribute
-                featureID = [ x[0] for x in self.idRegex.findall(attributes) ]
+                featureID = [ x[1] for x in self.idRegex.findall(attributes) ] # x == [startCharacter, ID, endCharacter]
                 if len(featureID) == 1:
                     featureID = featureID[0]
                 elif len(featureID) == 0:
@@ -275,7 +275,7 @@ class GFF3Graph:
                     raise ValueError(f"GFF3 parsing failed since line #{lineCount} (\"{line}\") has multiple IDs")
                 
                 # Get the parent ID(s)
-                parentIDs = [ x[0] for x in self.parentRegex.findall(attributes) ]
+                parentIDs = [ x[1] for x in self.parentRegex.findall(attributes) ] # x == [startCharacter, ID, endCharacter]
                 
                 # Create a feature object
                 feature = GFF3Feature(ID=featureID, ftype=ftype,
