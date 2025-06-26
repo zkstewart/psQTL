@@ -160,6 +160,19 @@ class GFF3Graph:
         # "gene": None  # Gene is the top-level feature, no parent should be inferred
     }
     
+    @staticmethod
+    def clean_attributes(attributes):
+        '''
+        Cleans the attributes string from a GFF3 file by removing unnecessary
+        characters and ensuring it is properly formatted.
+        
+        Parameters:
+            attributes -- a string containing the attributes from a GFF3 line.
+        Returns:
+            cleanedAttributes -- a cleaned string with unnecessary characters removed.
+        '''
+        return attributes.strip("\r\n\t;'\" ")
+    
     def __init__(self, fileLocation):
         self.fileLocation = fileLocation
         self.ftypes = {}
@@ -260,6 +273,7 @@ class GFF3Graph:
                 start = int(start)
                 end = int(end)
                 ftype = GFF3Feature.make_ftype_case_appropriate(ftype)
+                attributes = GFF3Graph.clean_attributes(attributes) # necessary for regex to work properly
                 
                 # Establish or populate tracking containers
                 self.ftypes.setdefault(ftype, [])
