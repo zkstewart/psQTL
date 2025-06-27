@@ -557,12 +557,34 @@ class TestED(unittest.TestCase):
         # Act
         g1Gt, g2Gt = filter_impossible_genotypes(g1Gt, g2Gt, parentsGT)
         g1Filtered, g2Filtered, iED = calculate_inheritance_ed(g1Gt, g2Gt, parentsGT)
-                
+        
         # Assert
         self.assertAlmostEqual(iED, truth, places=5, 
                              msg=f"Expected ED to be approximately {truth} but got {iED}")
         self.assertEqual(g1Filtered, 8, "Expected 8 alleles in group 1")
         self.assertEqual(g2Filtered, 8, "Expected 8 alleles in group 2")
+    
+    def test_inheritance_equals_genotypes(self):
+        # Arrange
+        parentsGT = [ [0, 1], [0, 2] ] # represents "A/T" and "A/G" parents
+        g1Gt = [[0, 2], [1, 2], [0, 2], [0, 0]] # represents "A/G", "T/G", "A/G", "A/A" genotypes in group 1
+        g2Gt = [[1, 2], [0, 1], [0, 1], [0, 0]] # represents "T/G", "A/T", "A/A", "A/A" genotypes in group 2
+        
+        naiveTruth = 0.3535533905932738
+        parentTruth = 0.7071067811865476
+        
+        # Act
+        g1Alleles, g2Alleles, aED = calculate_allele_frequency_ed(g1Gt, g2Gt)
+        _, _, gED = calculate_genotype_frequency_ed(g1Gt, g2Gt)
+        
+        g1Gt, g2Gt = filter_impossible_genotypes(g1Gt, g2Gt, parentsGT)
+        g1Filtered, g2Filtered, iED = calculate_inheritance_ed(g1Gt, g2Gt, parentsGT)
+        
+        # Assert
+        self.assertAlmostEqual(aED, naiveTruth, places=5, 
+                             msg=f"Expected alleles ED to be approximately {naiveTruth} but got {aED}")
+        self.assertAlmostEqual(gED, parentTruth, places=5, 
+                             msg=f"Expected genotypes ED to be approximately {parentTruth} but got {gED}")
     
     def test_calculate_inheritance_ed_tet_tet_parents_1(self):
         "Non-segregation should still give ED==0 with tetraploid parents and samples"
