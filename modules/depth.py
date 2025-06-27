@@ -1,6 +1,7 @@
 import os, gzip, sys
 import pandas as pd
 import numpy as np
+
 from .parsing import parse_binned_tsv
 from .ncls import WindowedNCLS
 
@@ -96,6 +97,44 @@ def convert_alleles_to_gt(alleles, ploidy=2):
     
     return genotypes
 
+def validate_df(df):
+    '''
+    Validates a DataFrame to ensure that all rows have consistent list lengths
+    across all columns, with the exception of NaN values. This is a core assumption
+    necessary for the subsequent processing of the DataFrame especially with the
+    explode_dedup() function.
+    '''
+    for row in df.itertuples():
+        rowListLength = None
+        for rowColumn in row._fields[1:]:
+            rowValue = getattr(row, rowColumn)
+            if isinstance(rowValue, list):
+                if rowListLength is None:
+                    rowListLength = len(rowValue)
+                elif len(rowValue) != rowListLength:
+                    raise ValueError(f"Contig '{row}' has an inconsistent number of bins: {len(rowValue)} vs {rowListLength}; " + 
+                                     "this indicates some sort of discrepancy in the input data, " +
+                                     "possibly a different reference genome used for binned depth files " + 
+                                     "or a different binning window size used for some of the samples. " +
+                                     "Suggestion is to delete all depth files and re-run 'psQTL_prep.py depth'.")
+            elif pd.isna(rowValue):
+                continue
+            else:
+                raise ValueError("An unhandled error occurred when checking your binned depth files. " +
+                                 "Suggestion is to delete all depth files and re-run 'psQTL_prep.py depth'. " +
+                                 "If this error persists, please report it in the GitHub issues page.")
+
+def explode_dedup(s):
+    '''
+    See https://stackoverflow.com/questions/77996844/how-to-explode-a-pandas-dataframe-that-has-nulls-in-some-rows-but-populated-in
+    
+    The assumptions of this function are checked by validate_df().
+    '''
+    s = s.explode()
+    return s.set_axis(
+        pd.MultiIndex.from_arrays([s.index, s.groupby(level=0).cumcount()])
+    )
+
 def call_cnvs_from_depth(samplePairs, outputFileName, windowSize, ploidy=2):
     '''
     Calls allele copy numbers (and hence CNVs) based on binned depth files and writes
@@ -129,10 +168,17 @@ def call_cnvs_from_depth(samplePairs, outputFileName, windowSize, ploidy=2):
             genotypesDict[sampleName][contigID] = genotypes
         samples.append(sampleName)
     
-    # Convert to DataFrame with VCF-like format
+    # Convert to DataFrame and validate file structure
     df = pd.DataFrame(genotypesDict)
-    exploded_df = df.apply(lambda x: x.explode()).reset_index()
-    exploded_df.rename(columns={"index": "#CHROM"}, inplace=True)    
+    validate_df(df)
+    
+    # Explode the DataFrame to have one row per window/bin
+    exploded_df = pd.concat({c: explode_dedup(df[c]) for c in df}, axis=1).reset_index()
+    exploded_df.drop(columns="level_1", inplace=True)
+    exploded_df.fillna(value=".", inplace=True)
+    
+    # Convert to VCF-like format
+    exploded_df.rename(columns={"level_0": "#CHROM"}, inplace=True)
     exploded_df["POS"] = exploded_df.groupby("#CHROM").cumcount() * windowSize
     exploded_df["ID"] = "."
     exploded_df["REF"] = "N"
