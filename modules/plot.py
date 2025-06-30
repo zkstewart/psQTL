@@ -1579,7 +1579,7 @@ class CircosPlot(Plot):
                         # If they do, set the background colour for this region/sector
                         sector = self.circos.sectors[colNum]
                         sector.rect(highlightDict["start"], highlightDict["end"],
-                                    r_lim=(0, CircosPlot.START_POSITION),
+                                    r_lim=(CircosPlot.CENTRE_SPACE, CircosPlot.START_POSITION),
                                     color=HIGHLIGHT_COLOUR, alpha=0.5, zorder=-1)
         
         # Create the figure object
