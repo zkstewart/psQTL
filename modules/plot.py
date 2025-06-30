@@ -735,8 +735,9 @@ class HorizontalPlot(Plot):
         self.fig.tight_layout()
         
         # Establish column labels
-        self.colLabels = [f"{regionDict['contig']}:{regionDict['start']}-{regionDict['end']}" if regionDict['reverse'] == False
-                          else f"{regionDict['contig']}:{regionDict['end']}-{regionDict['start']}" # if reversed
+        self.colLabels = [f"{regionDict['contig']}:{regionDict['end']}-{regionDict['start']}" if regionDict['reverse'] == True
+                          else f"{regionDict['contig']}:{regionDict['start']}-{regionDict['end']}" if regionDict['full'] == False
+                          else regionDict['contig'] # indicate only the contig if we are plotting the full contig
                           for regionDict in self.regions]
         for ax, label in zip(self.axs[0], self.colLabels):
             ax.set_title(label, fontweight="bold")
@@ -1509,8 +1510,9 @@ class CircosPlot(Plot):
         self.rowNum = -1 # to keep track of the current row/track number
         
         # Establish column labels
-        self.colLabels = [f"{regionDict['contig']}:{regionDict['start']}-{regionDict['end']}" if regionDict['reverse'] == False
-                          else f"{regionDict['contig']}:{regionDict['end']}-{regionDict['start']}" # if reversed
+        self.colLabels = [f"{regionDict['contig']}:{regionDict['end']}-{regionDict['start']}" if regionDict['reverse'] == True
+                          else f"{regionDict['contig']}:{regionDict['start']}-{regionDict['end']}" if regionDict['full'] == False
+                          else regionDict['contig'] # indicate only the contig if we are plotting the full contig
                           for regionDict in self.regions]
         for label, sector in zip(self.colLabels, self.circos.sectors):
             sector.text(label, size=10)

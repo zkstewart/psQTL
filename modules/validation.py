@@ -301,7 +301,12 @@ def validate_regions(regions, mode, plotStyle, lengthsDict, argName="--region"):
                 raise ValueError(f"{argName} '{contigID, start, end}' end position is > contig length '{lengthsDict[contigID]}'!")
             
             # Store region
-            parsedRegions.append({"contig": contigID, "start": start, "end": end, "reverse": reverse})
+            if start <= 1 and end == lengthsDict[contigID]:
+                # If the region covers the full contig, set 'full' to True
+                parsedRegions.append({"contig": contigID, "start": start, "end": end, "reverse": reverse, "full": True})
+            else:
+                # Otherwise, set 'full' to False
+                parsedRegions.append({"contig": contigID, "start": start, "end": end, "reverse": reverse, "full": False})
         
         # Handle invalid format
         elif ":" in region:
@@ -311,12 +316,15 @@ def validate_regions(regions, mode, plotStyle, lengthsDict, argName="--region"):
         else:
             if not region in lengthsDict:
                 raise ValueError(f"{argName} contig ID '{region}' not found in the -f FASTA!")
-            parsedRegions.append({"contig": region, "start": 0, "end": lengthsDict[region], "reverse": False})
+            parsedRegions.append({"contig": region, "start": 1, "end": lengthsDict[region], "reverse": False, "full": True})
     
     # Handle empty regions
     "Empty is interpreted as all regions"
     if parsedRegions == []:
-        parsedRegions = [ {"contig": contigID, "start": 0, "end": lengthsDict[contigID], "reverse": False} for contigID in lengthsDict ]
+        parsedRegions = [
+            {"contig": contigID, "start": 1, "end": lengthsDict[contigID], "reverse": False, "full": True}
+            for contigID in lengthsDict
+        ]
     
     return parsedRegions
 
