@@ -9,6 +9,7 @@ from matplotlib.patches import Patch
 from matplotlib.lines import Line2D
 
 from .gff3 import GFF3Graph
+from .reporting import is_overlapping
 
 SAMPLE_AESTHETICS = [["#000000", "dotted"], ["#002D7E", "dashed"], ["#ECE45A", "dashdot"]]
 LINESCATTER_COLOURS = [["#2166ac", "#b2182b"], # blue to red, for ED measurements
@@ -17,6 +18,7 @@ INTEGRATED_AESTHETICS = ["#1b7837", "D", "Integrated SNP/CNV"] # green with diam
 SPLSDA_DOTSIZE = 15 # size of the dots for sPLSDA selected SNPs/CNVs
 COVERAGE_COLOURS = ["#004488", "#ddaa33"] # set aside to ensure contrast of colours
 GENE_COLOURS = ["coral", "dodgerblue"]
+HIGHLIGHT_COLOUR = "#f9e659" # orange-yellow for highlights
 NUM_SAMPLE_LINES = len(SAMPLE_AESTHETICS) # for validation
 
 SMOOTHING_BUFFER = 100000 # buffer to apply to the start and end positions for smoothing
@@ -80,7 +82,7 @@ class Plot:
     MEASUREMENT_TYPES = ["ed", "splsda"]
     PLOT_TYPES = ["line", "scatter", "histogram", "coverage", "genes"]
     STANDARD_DIMENSION = 5
-    def __init__(self, regions,
+    def __init__(self, regions, highlights=None,
                  callED=None, depthED=None,
                  callSPLSDA=None, depthSPLSDA=None, integratedSPLSDA=None,
                  coverageNCLSDict=None, coverageSamples=None,
@@ -92,6 +94,9 @@ class Plot:
                 (contigID, start, end, reverse)
                 where contigID is a string, start and end are integers,
                 and reverse is a boolean indicating whether the region is reversed
+            highlights -- values equivalently formatted to 'regions' but to denote
+                         regions that should be highlighted in the plot with
+                         a coloured opaque background
             callED -- a WindowedNCLS object with Euclidean Distance (ED) values
                       obtained from the call method
             depthED -- a WindowedNCLS object with ED values obtained from the depth method
@@ -138,6 +143,7 @@ class Plot:
         self.annotationGFF3 = annotationGFF3
         
         # Aesthetic parameters
+        self.highlights = highlights
         self.power = power
         self.wmaSize = wmaSize
         self.width = width
@@ -302,6 +308,20 @@ class Plot:
             raise ValueError("regions must be a list of length >= 1")
         
         self._regions = value
+    
+    @property
+    def highlights(self):
+        return self._highlights
+    
+    @highlights.setter
+    def highlights(self, value):
+        "Validation should have occurred prior to setting this property"
+        if value is None:
+            value = []
+        if not isinstance(value, list):
+            raise TypeError("highlights must be a list")
+        
+        self._highlights = value
     
     @property
     def power(self):
@@ -676,13 +696,13 @@ class HorizontalPlot(Plot):
     YLIM_HEADSPACE = 0.1 # proportion of ylim to add to the top of the plot
     SPACING = 0.1 # padding for gene plots
     
-    def __init__(self, regions,
+    def __init__(self, regions, highlights=None,
                  callED=None, depthED=None,
                  callSPLSDA=None, depthSPLSDA=None, integratedSPLSDA=None,
                  coverageNCLSDict=None, coverageSamples=None,
                  annotationGFF3=None,
                  power=1, wmaSize=5, width=None, height=None):
-        super().__init__(regions, callED, depthED, callSPLSDA, depthSPLSDA, integratedSPLSDA,
+        super().__init__(regions, highlights, callED, depthED, callSPLSDA, depthSPLSDA, integratedSPLSDA,
                          coverageNCLSDict, coverageSamples, annotationGFF3,
                          power, wmaSize, width, height)
     
@@ -769,6 +789,18 @@ class HorizontalPlot(Plot):
         if self.annotationGFF3 != None:
             self.plot_genes(self.annotationGFF3)
             self.rowLabels.append("Gene annotations")
+        
+        # Add background colour to highlights regions
+        if self.highlights != []:
+            # For each region, ...
+            for colNum, (regionContig, regionStart, regionEnd, _) in enumerate(self.regions): # reverse is irrelevant
+                # ... find if any highlights overlap with it
+                for highlightContig, highlightStart, highlightEnd, _ in self.highlights:
+                    if regionContig == highlightContig and is_overlapping(regionStart, regionEnd, highlightStart, highlightEnd):
+                        # If they do, set the background colour on all rows in this column
+                        for rowNum in range(self.nrow):
+                            self.axs[rowNum, colNum].axvspan(highlightStart, highlightEnd,
+                                                             color=HIGHLIGHT_COLOUR, alpha=0.5, zorder=-1)
         
         # Set row labels
         for ax, label in zip(self.axs[:,0], self.rowLabels):
@@ -1306,13 +1338,13 @@ class CircosPlot(Plot):
     NUM_Y_TICKS = 3 # number of y ticks to aim for on each track
     STANDARD_DIMENSION = 8
     
-    def __init__(self, regions,
+    def __init__(self, regions, highlights=None,
                  callED=None, depthED=None,
                  callSPLSDA=None, depthSPLSDA=None, integratedSPLSDA=None,
                  coverageNCLSDict=None, coverageSamples=None,
                  annotationGFF3=None,
                  power=1, wmaSize=5, width=None, height=None):
-        super().__init__(regions, callED, depthED, callSPLSDA, depthSPLSDA, integratedSPLSDA,
+        super().__init__(regions, highlights, callED, depthED, callSPLSDA, depthSPLSDA, integratedSPLSDA,
                          coverageNCLSDict, coverageSamples, annotationGFF3,
                          power, wmaSize, width, height)
         
@@ -1506,6 +1538,18 @@ class CircosPlot(Plot):
         if self.annotationGFF3 != None:
             self.plot_genes(self.annotationGFF3)
             self.rowLabels.append("Genes")
+        
+        # Add background colour to highlights regions
+        if self.highlights != []:
+            # For each region, ...
+            for colNum, (regionContig, regionStart, regionEnd, _) in enumerate(self.regions): # reverse is irrelevant
+                # ... find if any highlights overlap with it
+                for highlightContig, highlightStart, highlightEnd, _ in self.highlights:
+                    if regionContig == highlightContig and is_overlapping(regionStart, regionEnd, highlightStart, highlightEnd):
+                        # If they do, set the background colour for this region/sector
+                        sector = self.circos.sectors[colNum]
+                        sector.rect(highlightStart, highlightEnd, r_lim=(0, CircosPlot.START_POSITION),
+                                    color=HIGHLIGHT_COLOUR, alpha=0.5, zorder=-1)
         
         # Create the figure object
         "Necessary prior to legend addition"

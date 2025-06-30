@@ -164,6 +164,14 @@ def main():
                          to plot coverage data as individual lines; these samples will
                          be omitted from the group values""",
                          default=[])
+    pparser.add_argument("--highlights", dest="highlights",
+                         required=False,
+                         nargs="+",
+                         help="""Optionally, specify plotted regions to highlight using the same
+                         format as --regions; these regions will have an opaque background colour
+                         used to indicate their location(s).
+                         """,
+                         default=[])
     ## Style arguments
     pparser.add_argument("--width", dest="width",
                          type=int,
@@ -232,7 +240,9 @@ def main():
         raise ValueError(f"No contigs found in genome FASTA '{args.genomeFasta}'; is it actually a FASTA file?")
     
     # Validate and impute regions
-    args.regions = validate_regions(args, lengthsDict)
+    args.regions = validate_regions(args.regions, args.mode, args.plotStyle if args.mode == "plot" else None, lengthsDict)
+    if args.mode == "plot" and args.highlights != []:
+        args.highlights = validate_regions(args.highlights, args.mode, args.plotStyle, lengthsDict, "--highlights")
     
     # Parse 'call' data if necessary
     dataDict = {}
@@ -323,6 +333,7 @@ def pmain(args, locations, dataDict):
     # Establish plotting object
     if args.plotStyle == "horizontal":
         plotter = HorizontalPlot(args.regions,
+            highlights=args.highlights,
             callED = dataDict["call"]["ed"] \
                      if "call" in dataDict and "ed" in dataDict["call"] and ("line" in args.plotTypes or "scatter" in args.plotTypes) \
                      else None,
@@ -350,6 +361,7 @@ def pmain(args, locations, dataDict):
         plotter.plot(args.plotTypes, args.outputFileName)
     elif args.plotStyle == "circos":
         plotter = CircosPlot(args.regions,
+            highlights=args.highlights,
             callED = dataDict["call"]["ed"] \
                      if "call" in dataDict and "ed" in dataDict["call"] and ("line" in args.plotTypes or "scatter" in args.plotTypes) \
                      else None,

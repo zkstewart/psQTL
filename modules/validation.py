@@ -244,19 +244,19 @@ def validate_post_args(args):
     
     return locations
 
-def validate_regions(args, lengthsDict):
+def validate_regions(regions, mode, plotStyle, lengthsDict, argName="--region"):
     '''
     Returns:
-        regions -- a list of lists with structure like:
-                   [
-                       [contigID, start, end, reverse],
-                       ...
-                   ]
+        parsedRegions -- a list of lists with structure like:
+                         [
+                             [contigID, start, end, reverse],
+                             ...
+                         ]
     '''
     # Parse regions
-    regions = []
+    parsedRegions = []
     regionsRegex = re.compile(r"^([^:]+):(\d+)-(\d+)$")
-    for region in args.regions:
+    for region in regions:
         reMatch = regionsRegex.match(region)
         
         # Handle chr:start-end format
@@ -267,21 +267,21 @@ def validate_regions(args, lengthsDict):
             
             # Validate contig ID
             if not contigID in lengthsDict:
-                raise ValueError(f"--region contig ID '{contigID}' not found in the -f FASTA!")
+                raise ValueError(f"{argName} contig ID '{contigID}' not found in the -f FASTA!")
             
             # Validate start position
             if start < 0:
-                raise ValueError(f"--region start position '{start}' is < 0!")
+                raise ValueError(f"{argName} start position '{start}' is < 0!")
             if start == end:
-                raise ValueError(f"--region start position '{start}' is equal to end position '{end}'!")
+                raise ValueError(f"{argName} start position '{start}' is equal to end position '{end}'!")
             
             # Detect reverse orientation and swap start/end if necessary
             reverse = False
             if start > end:
-                if args.mode == "plot":
+                if mode == "plot":
                     # Prevent reverse orientation if plotStyle == "circos"
-                    if args.plotStyle == "circos":
-                        raise ValueError(f"--region '{contigID, start, end}' cannot be in reverse orientation " + 
+                    if plotStyle == "circos":
+                        raise ValueError(f"{argName} '{contigID, start, end}' cannot be in reverse orientation " + 
                                         "with '-s circos'; only '-s horizontal' plot style can plot in reverse.")
                     # Otherwise, swap start and end
                     else:
@@ -294,10 +294,10 @@ def validate_regions(args, lengthsDict):
             
             # Validate end position
             if end > lengthsDict[contigID]:
-                raise ValueError(f"--region '{contigID, start, end}' end position is > contig length '{lengthsDict[contigID]}'!")
+                raise ValueError(f"{argName} '{contigID, start, end}' end position is > contig length '{lengthsDict[contigID]}'!")
             
             # Store region
-            regions.append([contigID, start, end, reverse])
+            parsedRegions.append([contigID, start, end, reverse])
         
         # Handle invalid format
         elif ":" in region:
@@ -306,14 +306,14 @@ def validate_regions(args, lengthsDict):
         # Handle chr format
         else:
             if not region in lengthsDict:
-                raise ValueError(f"--region contig ID '{region}' not found in the -f FASTA!")
-            regions.append([region, 0, lengthsDict[region], False])
+                raise ValueError(f"{argName} contig ID '{region}' not found in the -f FASTA!")
+            parsedRegions.append([region, 0, lengthsDict[region], False])
     
     # Handle empty regions
-    if regions == []:
-        regions = [[contigID, 0, lengthsDict[contigID], False] for contigID in lengthsDict]
+    if parsedRegions == []:
+        parsedRegions = [[contigID, 0, lengthsDict[contigID], False] for contigID in lengthsDict]
     
-    return regions
+    return parsedRegions
 
 def validate_depth_files(depthDir, metadataDict, windowSize):
     '''
