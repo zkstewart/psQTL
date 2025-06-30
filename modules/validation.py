@@ -247,10 +247,14 @@ def validate_post_args(args):
 def validate_regions(regions, mode, plotStyle, lengthsDict, argName="--region"):
     '''
     Returns:
-        parsedRegions -- a list of lists with structure like:
+        parsedRegions -- a list of dictionaries with structure like:
                          [
-                             [contigID, start, end, reverse],
-                             ...
+                             {
+                                 "contig": contigID, # string
+                                 "start": start, # int
+                                 "end": end, # int
+                                 "reverse": reverse] # bool
+                             }, { ... }, ...
                          ]
     '''
     # Parse regions
@@ -297,7 +301,7 @@ def validate_regions(regions, mode, plotStyle, lengthsDict, argName="--region"):
                 raise ValueError(f"{argName} '{contigID, start, end}' end position is > contig length '{lengthsDict[contigID]}'!")
             
             # Store region
-            parsedRegions.append([contigID, start, end, reverse])
+            parsedRegions.append({"contig": contigID, "start": start, "end": end, "reverse": reverse})
         
         # Handle invalid format
         elif ":" in region:
@@ -307,11 +311,12 @@ def validate_regions(regions, mode, plotStyle, lengthsDict, argName="--region"):
         else:
             if not region in lengthsDict:
                 raise ValueError(f"{argName} contig ID '{region}' not found in the -f FASTA!")
-            parsedRegions.append([region, 0, lengthsDict[region], False])
+            parsedRegions.append({"contig": region, "start": 0, "end": lengthsDict[region], "reverse": False})
     
     # Handle empty regions
+    "Empty is interpreted as all regions"
     if parsedRegions == []:
-        parsedRegions = [[contigID, 0, lengthsDict[contigID], False] for contigID in lengthsDict]
+        parsedRegions = [ {"contig": contigID, "start": 0, "end": lengthsDict[contigID], "reverse": False} for contigID in lengthsDict ]
     
     return parsedRegions
 

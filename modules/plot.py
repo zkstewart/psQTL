@@ -90,13 +90,16 @@ class Plot:
                  power=1, wmaSize=5, width=None, height=None):
         '''
         Parameters:
-            regions -- a list of tuples, each tuple containing:
-                (contigID, start, end, reverse)
-                where contigID is a string, start and end are integers,
-                and reverse is a boolean indicating whether the region is reversed
+            regions -- a list of dictionaries, each dict structured like:
+                       {
+                            "contig": contigID, # string
+                            "start": start, # int
+                            "end": end, # int
+                            "reverse": reverse] # bool
+                        }
             highlights -- values equivalently formatted to 'regions' but to denote
-                         regions that should be highlighted in the plot with
-                         a coloured opaque background
+                          regions that should be highlighted in the plot with
+                          a coloured opaque background
             callED -- a WindowedNCLS object with Euclidean Distance (ED) values
                       obtained from the call method
             depthED -- a WindowedNCLS object with ED values obtained from the depth method
@@ -732,9 +735,9 @@ class HorizontalPlot(Plot):
         self.fig.tight_layout()
         
         # Establish column labels
-        self.colLabels = [f"{region[0]}:{region[1]}-{region[2]}" if region[3] == False
-                          else f"{region[0]}:{region[2]}-{region[1]}" # if reversed
-                          for region in self.regions]
+        self.colLabels = [f"{regionDict['contig']}:{regionDict['start']}-{regionDict['end']}" if regionDict['reverse'] == False
+                          else f"{regionDict['contig']}:{regionDict['end']}-{regionDict['start']}" # if reversed
+                          for regionDict in self.regions]
         for ax, label in zip(self.axs[0], self.colLabels):
             ax.set_title(label, fontweight="bold")
         
@@ -793,13 +796,14 @@ class HorizontalPlot(Plot):
         # Add background colour to highlights regions
         if self.highlights != []:
             # For each region, ...
-            for colNum, (regionContig, regionStart, regionEnd, _) in enumerate(self.regions): # reverse is irrelevant
+            for colNum, regionDict in enumerate(self.regions):
                 # ... find if any highlights overlap with it
-                for highlightContig, highlightStart, highlightEnd, _ in self.highlights:
-                    if regionContig == highlightContig and is_overlapping(regionStart, regionEnd, highlightStart, highlightEnd):
+                for highlightDict in self.highlights:
+                    if regionDict["contig"] == highlightDict["contig"] and \
+                    is_overlapping(regionDict["start"], regionDict["end"], highlightDict["start"], highlightDict["end"]):
                         # If they do, set the background colour on all rows in this column
                         for rowNum in range(self.nrow):
-                            self.axs[rowNum, colNum].axvspan(highlightStart, highlightEnd,
+                            self.axs[rowNum, colNum].axvspan(highlightDict["start"], highlightDict["end"],
                                                              color=HIGHLIGHT_COLOUR, alpha=0.5, zorder=-1)
         
         # Set row labels
@@ -866,7 +870,13 @@ class HorizontalPlot(Plot):
         plotScaleBar = self.rowNum+1 == self.nrow # set up scale bar if this is the last row
         
         maxY = 0 # to set y limits at end
-        for colNum, (contigID, start, end, reverse) in enumerate(self.regions):
+        for colNum, regionDict in enumerate(self.regions):
+            # Decompose dictionary into variables
+            contigID = regionDict["contig"]
+            start = regionDict["start"]
+            end = regionDict["end"]
+            reverse = regionDict["reverse"]
+            
             # Set xlim
             self.axs[self.rowNum, colNum].set_xlim(start, end)
             
@@ -950,14 +960,20 @@ class HorizontalPlot(Plot):
         
         # Get the maximum Y value across all regions
         maxY = 0
-        for contigID, start, end, reverse in self.regions:
-            if contigID in windowedNCLS.contigs:
-                x, y = self.histogram(windowedNCLS, contigID, start, end)
+        for regionDict in self.regions:
+            if regionDict["contig"] in windowedNCLS.contigs:
+                x, y = self.histogram(windowedNCLS, regionDict["contig"], regionDict["start"], regionDict["end"])
                 if y.size != 0:
                     maxY = max(maxY, max(y))
         
         # Plot each region
-        for colNum, (contigID, start, end, reverse) in enumerate(self.regions):
+        for colNum, regionDict in enumerate(self.regions):
+            # Decompose dictionary into variables
+            contigID = regionDict["contig"]
+            start = regionDict["start"]
+            end = regionDict["end"]
+            reverse = regionDict["reverse"]
+            
             # Set limits
             self.axs[self.rowNum, colNum].set_xlim(start, end)
             if maxY == 0:
@@ -1000,7 +1016,13 @@ class HorizontalPlot(Plot):
         self.fig.canvas.draw() # need to draw the figure to get the renderer
         alreadyWarned = False
         
-        for colNum, (contigID, start, end, reverse) in enumerate(self.regions):        
+        for colNum, regionDict in enumerate(self.regions):
+            # Decompose dictionary into variables
+            contigID = regionDict["contig"]
+            start = regionDict["start"]
+            end = regionDict["end"]
+            reverse = regionDict["reverse"]
+             
             # Get longest isoform for each gene in this region
             mrnaFeatures = self.genes(gff3Obj, contigID, start, end)
             
@@ -1186,7 +1208,14 @@ class HorizontalPlot(Plot):
         # Plot each region
         minY = 0 # to set y limits at end
         maxY = 0
-        for colNum, (contigID, start, end, reverse) in enumerate(self.regions):
+        for colNum, regionDict in enumerate(self.regions):
+            # Decompose dictionary into variables
+            contigID = regionDict["contig"]
+            start = regionDict["start"]
+            end = regionDict["end"]
+            reverse = regionDict["reverse"]
+            
+            # Get coverage data for this region
             coverageData = self.coverage(depthNCLSDict, samples, contigID, start, end) # keys: group1, group2, [*samples]
             
             # Plot each group
@@ -1469,8 +1498,8 @@ class CircosPlot(Plot):
         
         # Initialise the circos figure object
         seqid2size = {
-            f"{contigID}:{start}-{end}": (start, end) # reversed plotting is not supported in Circos
-            for contigID, start, end, reverse in self.regions
+            f"{regionDict['contig']}:{regionDict['start']}-{regionDict['end']}": (regionDict['start'], regionDict['end']) # reversed plotting is not supported in Circos
+            for regionDict in self.regions
         }
         self.circos = Circos(seqid2size, space = 0 if len(seqid2size) == 1 else 2,
                              end=360-self.axisSpace) # leave space for y ticks
@@ -1480,9 +1509,9 @@ class CircosPlot(Plot):
         self.rowNum = -1 # to keep track of the current row/track number
         
         # Establish column labels
-        self.colLabels = [f"{region[0]}:{region[1]}-{region[2]}" if region[3] == False
-                          else f"{region[0]}:{region[2]}-{region[1]}" # if reversed
-                          for region in self.regions]
+        self.colLabels = [f"{regionDict['contig']}:{regionDict['start']}-{regionDict['end']}" if regionDict['reverse'] == False
+                          else f"{regionDict['contig']}:{regionDict['end']}-{regionDict['start']}" # if reversed
+                          for regionDict in self.regions]
         for label, sector in zip(self.colLabels, self.circos.sectors):
             sector.text(label, size=10)
         
@@ -1542,13 +1571,15 @@ class CircosPlot(Plot):
         # Add background colour to highlights regions
         if self.highlights != []:
             # For each region, ...
-            for colNum, (regionContig, regionStart, regionEnd, _) in enumerate(self.regions): # reverse is irrelevant
+            for colNum, regionDict in enumerate(self.regions):
                 # ... find if any highlights overlap with it
-                for highlightContig, highlightStart, highlightEnd, _ in self.highlights:
-                    if regionContig == highlightContig and is_overlapping(regionStart, regionEnd, highlightStart, highlightEnd):
+                for highlightDict in self.highlights:
+                    if regionDict["contig"] == highlightDict["contig"] and \
+                    is_overlapping(regionDict["start"], regionDict["end"], highlightDict["start"], highlightDict["end"]):
                         # If they do, set the background colour for this region/sector
                         sector = self.circos.sectors[colNum]
-                        sector.rect(highlightStart, highlightEnd, r_lim=(0, CircosPlot.START_POSITION),
+                        sector.rect(highlightDict["start"], highlightDict["end"],
+                                    r_lim=(0, CircosPlot.START_POSITION),
                                     color=HIGHLIGHT_COLOUR, alpha=0.5, zorder=-1)
         
         # Create the figure object
@@ -1721,13 +1752,13 @@ class CircosPlot(Plot):
         
         # Derive y limits from the maximum Y value across all regions
         maxY = 0 # to set y limits at end
-        for colNum, (contigID, start, end, reverse) in enumerate(self.regions):
-            if scatterNCLS != None and contigID in scatterNCLS.contigs:
-                x, y = self.scatter(scatterNCLS, contigID, start, end)
+        for colNum, regionDict in enumerate(self.regions):
+            if scatterNCLS != None and regionDict["contig"] in scatterNCLS.contigs:
+                x, y = self.scatter(scatterNCLS, regionDict["contig"], regionDict["start"], regionDict["end"])
                 if y.size != 0 and not scatterFollowsLine:
                     maxY = max(maxY, max(y))
-            if lineNCLS != None and contigID in lineNCLS.contigs:
-                x, smoothedY = self.line(lineNCLS, contigID, start, end,
+            if lineNCLS != None and regionDict["contig"] in lineNCLS.contigs:
+                x, smoothedY = self.line(lineNCLS, regionDict["contig"], regionDict["start"], regionDict["end"],
                                          applyWMA=applyWMA, buffer=SMOOTHING_BUFFER)
                 if smoothedY.size != 0:
                     maxY = max(maxY, max(smoothedY))
@@ -1737,7 +1768,13 @@ class CircosPlot(Plot):
         self.axs[self.rowNum, 0].yticks(yticks, ylabels, vmin=0, vmax=maxY, side="left")
         
         # Plot each region
-        for colNum, (contigID, start, end, reverse) in enumerate(self.regions):
+        for colNum, regionDict in enumerate(self.regions):
+            # Decompose dictionary into variables
+            contigID = regionDict["contig"]
+            start = regionDict["start"]
+            end = regionDict["end"]
+            reverse = regionDict["reverse"]
+            
             # Plot line (if applicable)
             if lineNCLS != None and contigID in lineNCLS.contigs:
                 lineX, smoothedY = self.line(lineNCLS, contigID, start, end,
@@ -1792,9 +1829,9 @@ class CircosPlot(Plot):
         
         # Get the maximum Y value across all regions
         maxY = 0
-        for contigID, start, end, reverse in self.regions:
-            if contigID in windowedNCLS.contigs:
-                x, y = self.histogram(windowedNCLS, contigID, start, end)
+        for regionDict in self.regions:
+            if regionDict["contig"] in windowedNCLS.contigs:
+                x, y = self.histogram(windowedNCLS, regionDict["contig"], regionDict["start"], regionDict["end"])
                 if y.size != 0:
                     maxY = max(maxY, max(y))
         
@@ -1803,10 +1840,10 @@ class CircosPlot(Plot):
         self.axs[self.rowNum, 0].yticks(yticks, ylabels, vmin=0, vmax=maxY, side="left")
         
         # Plot each region
-        for colNum, (contigID, start, end, reverse) in enumerate(self.regions):
-            if contigID in windowedNCLS.contigs:
-                x, y = self.histogram(windowedNCLS, contigID, start, end)
-                self.axs[self.rowNum, colNum].bar(np.clip(x, start, end), y, vmax=maxY,
+        for colNum, regionDict in enumerate(self.regions):
+            if regionDict["contig"] in windowedNCLS.contigs:
+                x, y = self.histogram(windowedNCLS, regionDict["contig"], regionDict["start"], regionDict["end"])
+                self.axs[self.rowNum, colNum].bar(np.clip(x, regionDict["start"], regionDict["end"]), y, vmax=maxY,
                                                   width=self.binSize,
                                                   color="grey",
                                                   align="edge")
@@ -1820,7 +1857,13 @@ class CircosPlot(Plot):
         '''
         self.rowNum += 1 # increment row number for plotting
         
-        for colNum, (contigID, start, end, reverse) in enumerate(self.regions):        
+        for colNum, regionDict in enumerate(self.regions):
+            # Decompose dictionary into variables
+            contigID = regionDict["contig"]
+            start = regionDict["start"]
+            end = regionDict["end"]
+            reverse = regionDict["reverse"]
+            
             # Get longest isoform for each gene in this region
             mrnaFeatures = self.genes(gff3Obj, contigID, start, end)
             
@@ -1868,8 +1911,8 @@ class CircosPlot(Plot):
         
         # Get the maximum Y value across all regions
         maxY = 0
-        for contigID, start, end, reverse in self.regions:
-            coverageData = self.coverage(depthNCLSDict, samples, contigID, start, end)
+        for regionDict in self.regions:
+            coverageData = self.coverage(depthNCLSDict, samples, regionDict["contig"], regionDict["start"], regionDict["end"])
             for group in ["group1", "group2"]:
                 groupData = coverageData[group]
                 if groupData != None:
@@ -1882,7 +1925,14 @@ class CircosPlot(Plot):
         self.axs[self.rowNum, 0].yticks(yticks, ylabels, vmin=0, vmax=maxY, side="left")
         
         # Plot each region
-        for colNum, (contigID, start, end, reverse) in enumerate(self.regions):
+        for colNum, regionDict in enumerate(self.regions):
+            # Decompose dictionary into variables
+            contigID = regionDict["contig"]
+            start = regionDict["start"]
+            end = regionDict["end"]
+            reverse = regionDict["reverse"]
+            
+            # Get coverage data for this region
             coverageData = self.coverage(depthNCLSDict, samples, contigID, start, end) # keys: group1, group2, [*samples]
             
             # Plot each group

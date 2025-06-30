@@ -27,7 +27,13 @@ def report_genes_call(windowedNCLS, gff3Obj, regions, outputFileName, radiusSize
     Parameters:
         windowedNCLS -- a WindowedNCLS object
         gff3Obj -- a GFF3 class object from gff3.py in this repository
-        regions -- a list of lists containing four values: [contigID, start, end, reverse]
+        regions -- a list of dictionaries, each dict structured like:
+                       {
+                            "contig": contigID, # string
+                            "start": start, # int
+                            "end": end, # int
+                            "reverse": reverse] # bool
+                        }
         radiusSize -- OPTIONAL; an integer indicating the radius surrounding a gene that
                       you want to consider as being 'proximal' to a gene; default
                       == 50000 (bp).
@@ -41,7 +47,13 @@ def report_genes_call(windowedNCLS, gff3Obj, regions, outputFileName, radiusSize
                                       "num_intron", "intron_mean", "num_adjacent", "adjacent_mean"]) + "\n")
         
         # Iterate over each region
-        for contigID, start, end, reverse in regions:
+        for regionDict in regions:
+            # Decompose dictionary into variables
+            contigID = regionDict["contig"]
+            start = regionDict["start"]
+            end = regionDict["end"]
+            reverse = regionDict["reverse"]
+            
             # Get longest isoform for each gene in this region
             geneFeatures = gff3Obj.ncls_finder(start, end, "contig", contigID)
             mrnaFeatures = [
@@ -132,7 +144,13 @@ def report_genes_depth(windowedNCLS, gff3Obj, regions, outputFileName, radiusSiz
     Parameters:
         windowedNCLS -- a WindowedNCLS object
         gff3Obj -- a GFF3 class object from gff3.py in this repository
-        regions -- a list of lists containing four values: [contigID, start, end, reverse]
+        regions -- a list of dictionaries, each dict structured like:
+                       {
+                            "contig": contigID, # string
+                            "start": start, # int
+                            "end": end, # int
+                            "reverse": reverse] # bool
+                        }
         radiusSize -- OPTIONAL; an integer indicating the radius surrounding a gene that
                       you want to consider as being 'proximal' to a gene; default
                       == 50000 (bp).
@@ -146,7 +164,13 @@ def report_genes_depth(windowedNCLS, gff3Obj, regions, outputFileName, radiusSiz
                                       "num_adjacent", "adjacent_mean"]) + "\n")
         
         # Iterate over each region
-        for contigID, start, end, reverse in regions:
+        for regionDict in regions:
+            # Decompose dictionary into variables
+            contigID = regionDict["contig"]
+            start = regionDict["start"]
+            end = regionDict["end"]
+            reverse = regionDict["reverse"]
+            
             # Get longest isoform for each gene in this region
             geneFeatures = gff3Obj.ncls_finder(start, end, "contig", contigID)
             mrnaFeatures = [
@@ -235,7 +259,13 @@ def report_genes_splsda(windowedNCLSDict, gff3Obj, regions, outputFileName, radi
             depth -- the selected SNPs from sPLS-DA analysis of 'depth' variants
             integrated_call & integrated_depth -- the selected SNPs from sPLS-DA analysis of 'integrated' variants
         gff3Obj -- a GFF3 class object from gff3.py in this repository
-        regions -- a list of lists containing four values: [contigID, start, end, reverse]
+        regions -- a list of dictionaries, each dict structured like:
+                       {
+                            "contig": contigID, # string
+                            "start": start, # int
+                            "end": end, # int
+                            "reverse": reverse] # bool
+                        }
         radiusSize -- OPTIONAL; an integer indicating the radius surrounding a gene that
                       you want to consider as being 'proximal' to a gene; default
                       == 50000 (bp).
@@ -250,7 +280,13 @@ def report_genes_splsda(windowedNCLSDict, gff3Obj, regions, outputFileName, radi
                                       "num_adjacent_integrated_selected", "num_overlapping_integrated_selected"]) + "\n")
         
         # Iterate over each region
-        for contigID, start, end, reverse in regions:
+        for regionDict in regions:
+            # Decompose dictionary into variables
+            contigID = regionDict["contig"]
+            start = regionDict["start"]
+            end = regionDict["end"]
+            reverse = regionDict["reverse"]
+            
             # Get longest isoform for each gene in this region
             geneFeatures = gff3Obj.ncls_finder(start, end, "contig", contigID)
             mrnaFeatures = [
@@ -395,7 +431,13 @@ def report_markers(windowedNCLS, gff3Obj, regions, outputFileName, radiusSize=50
     Parameters:
         windowedNCLS -- a WindowedNCLS object, containing any type of results (call, depth, etc.)
         gff3Obj -- a GFF3 class object from gff3.py in this repository
-        regions -- a list of lists containing four values: [contigID, start, end, reverse]
+        regions -- a list of dictionaries, each dict structured like:
+                       {
+                            "contig": contigID, # string
+                            "start": start, # int
+                            "end": end, # int
+                            "reverse": reverse] # bool
+                        }
         radiusSize -- OPTIONAL; an integer indicating the radius surrounding a gene that
                       you want to consider as being 'proximal' to a gene; default
                       == 50000 (bp).
@@ -407,7 +449,13 @@ def report_markers(windowedNCLS, gff3Obj, regions, outputFileName, radiusSize=50
         fileOut.write(delimiter.join(["contig", "position", "statistic", "nearest_gene"]) + "\n")
         
         # Iterate over each region
-        for contigID, start, end, reverse in regions:
+        for regionDict in regions:
+            # Decompose dictionary into variables
+            contigID = regionDict["contig"]
+            start = regionDict["start"]
+            end = regionDict["end"]
+            reverse = regionDict["reverse"]
+            
             # Get all markers that occur within this region
             markers = extract_markers(windowedNCLS, contigID, start, end)
             
