@@ -102,6 +102,10 @@ class Locations:
         return os.path.join(self.splsdaDir, "psQTL_integrative.selected.tsv")
     
     @property
+    def integrativeSplsdaPredictionsFile(self):
+        return os.path.join(self.splsdaDir, "psQTL_integrative.predictions.tsv")
+    
+    @property
     def windowedSplsdaRscript(self):
         return os.path.join(os.path.dirname(os.path.dirname(__file__)), "utilities", "windowed_splsda.R")
     

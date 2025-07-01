@@ -226,7 +226,7 @@ def run_windowed_splsda(metadataFile, encodedVcfFile, outputVariants, outputBER,
         raise Exception(("run_windowed_splsda encountered an unhandled situation when processing " + 
                          f"'{encodedVcfFile}'; have a look at the stderr to make sense of this:\n'{errorMsg}'"))
 
-def run_integrative_splsda(callRdataFile, depthRdataFile, outputVariants,
+def run_integrative_splsda(callRdataFile, depthRdataFile, outputSelected, outputPredictions,
                            scriptLocation, threads=1, nrepeat=10, maxiters=1000):
     '''
     Calls the integrative_splsda.R script to run sPLS-DA on the outputs of call and depth sPLS-DA.
@@ -234,16 +234,17 @@ def run_integrative_splsda(callRdataFile, depthRdataFile, outputVariants,
     Parameters:
         callRdataFile -- a string indicating the location of the call sPLS-DA RData file
         depthRdataFile -- a string indicating the location of the depth sPLS-DA RData file
-        outputVariants -- a string indicating the location of the output variants file
+        outputSelected -- a string indicating the location of the output selected features file
+        outputPredictions -- a string indicating the location of the output predictions file
         scriptLocation -- a string indicating the location of the integrative_plsda.R script
-        windowSize -- (OPTIONAL) an integer indicating the size of the windows to run local
-                       PLS-DA within (default is 1000000)
-        berCutoff -- (OPTIONAL) a float indicating the BER cutoff to filter on (default is 0.4)
-        maf -- (OPTIONAL) a float indicating the minor allele frequency threshold to
-               filter on (default is 0.05)
+        threads -- (OPTIONAL) an integer indicating the number of threads to use (default is 1)
+        nrepeat -- (OPTIONAL) an integer indicating the number of repeats for
+                   stability analysis (default is 10)
+        maxiters -- (OPTIONAL) an integer indicating the maximum number of iterations when
+                    tuning sPLS-DA (default is 1000)
     '''
     # Format command
-    cmd = ["Rscript", scriptLocation, callRdataFile, depthRdataFile, outputVariants,
+    cmd = ["Rscript", scriptLocation, callRdataFile, depthRdataFile, outputSelected, outputPredictions,
            "--threads", str(threads), "--nrepeat", str(nrepeat), "--maxiters", str(maxiters)]
     
     # Run bcftools index

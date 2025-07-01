@@ -338,6 +338,7 @@ def integrative_splsda(args, metadataDict, locations):
             print("# Running integration of sPLS-DA for 'call' and 'depth' variants ...")
             run_integrative_splsda(locations.variantSplsdaRdataFile, locations.depthSplsdaRdataFile,
                                    locations.integrativeSplsdaSelectedFile,
+                                   locations.integrativeSplsdaPredictionsFile,
                                    locations.integrativeSplsdaRscript,
                                    args.threads, args.numRepeats, args.maxIterations)
             open(locations.integrativeSplsdaSelectedFile + ".ok", "w").close()

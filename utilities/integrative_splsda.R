@@ -16,7 +16,8 @@ p <- arg_parser("Run sPLS-DA on features selected from 2 analyses to identify th
 # Add arguments
 p <- add_argument(p, "call", help="Call sPLS-DA Rdata file", type = "character")
 p <- add_argument(p, "depth", help="Depth sPLS-DA Rdata file", type = "character")
-p <- add_argument(p, "o", help="Output file for selected variants", type = "character")
+p <- add_argument(p, "os", help="Output file for selected variants", type = "character")
+p <- add_argument(p, "op", help="Output file for predicted sample groups", type = "character")
 p <- add_argument(p, "--threads", help="Threads to use", type = "numeric", default = 1)
 p <- add_argument(p, "--nrepeat", help="Number of repeats for stability analysis", type = "numeric", default = 10)
 p <- add_argument(p, "--maxiters", help="Maximum number of iterations when tuning sPLS-DA", type = "numeric", default = 1000)
@@ -479,4 +480,12 @@ colnames(feature.details.table) <- c("chrom", "pos", "type", "stability", "abs_l
 feature.details.table <- feature.details.table[order(feature.details.table$stability, decreasing = TRUE),,drop=FALSE]
 
 # Write selected variants to file
-write.table(feature.details.table, file=args$o, sep="\t", row.names=FALSE, quote=FALSE)
+write.table(feature.details.table, file=args$os, sep="\t", row.names=FALSE, quote=FALSE)
+
+# Produce an additional output to see what class sPLS-DA predicts each sample as belonging to
+mbsplsda.pred <- predict(final.mbsplsda, splsda.X)
+mbsplsda.pred <- as.data.frame(mbsplsda.pred$WeightedPredict[,,])
+mbsplsda.pred$predicted_group <- ifelse(mbsplsda.pred$group1 >= mbsplsda.pred$group2, "group1", "group2")
+mbsplsda.pred$true_group <- Y
+
+write.table(mbsplsda.pred, file=args$op, sep="\t", row.names=TRUE, quote=FALSE, col.names=NA)
