@@ -454,6 +454,28 @@ if (nrow(loadings.depth) == 1)
 }
 rownames(stability.depth) <- stability.depth$Var1
 
+# Identify and fix mismatches between loadings and stability values
+## This is a bug in mixOmics which appears to be corrected in later versions but can occur prior to R 4.5
+if (any(is.na(match(rownames(loadings.call), rownames(stability.call)))))
+{
+    stability.call <- data.frame(
+        "Var1" = rownames(loadings.call),
+        "Freq" = rep(0, nrow(loadings.call))
+    )
+    rownames(stability.call) <- stability.call$Var1
+    print("WARNING: a bug in older mixOmics versions does not let us obtain 'call' stability values; program will otherwise continue without issues")
+}
+
+if (any(is.na(match(rownames(loadings.depth), rownames(stability.depth)))))
+{
+    stability.depth <- data.frame(
+        "Var1" = rownames(loadings.depth),
+        "Freq" = rep(0, nrow(loadings.depth))
+    )
+    rownames(stability.depth) <- stability.depth$Var1
+    print("WARNING: a bug in older mixOmics versions does not let us obtain 'depth' stability values; program will otherwise continue without issues")
+}
+
 # Format call and depth values
 stability.call <- stability.call[match(rownames(loadings.call), rownames(stability.call)),,drop=FALSE]
 stability.call <- na.omit(stability.call)

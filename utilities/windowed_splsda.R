@@ -469,6 +469,19 @@ if (nrow(splsda.loadings) == 1)
 stability.table <- na.omit(stability.table) # this might not be needed anymore, but is kept for safety
 rownames(stability.table) <- stability.table$Var1
 
+# Identify and fix mismatches between loadings and stability values
+## This is a bug in mixOmics which appears to be corrected in later versions but can occur prior to R 4.5
+if (any(is.na(match(rownames(splsda.loadings), rownames(stability.table)))))
+{
+  stability.table <- data.frame(
+    "Var1" = rownames(splsda.loadings),
+    "Freq" = rep(0, nrow(splsda.loadings))
+  )
+  rownames(stability.table) <- stability.table$Var1
+  print("WARNING: a bug in older mixOmics versions does not let us obtain stability values; program will otherwise continue without issues")
+}
+
+# Reformat and reorder stability table
 stability.table <- stability.table[,c("Freq"), drop=FALSE]
 stability.table <- stability.table[order(stability.table$Freq, decreasing = TRUE),,drop=FALSE]
 stability.table <- na.omit(stability.table)
