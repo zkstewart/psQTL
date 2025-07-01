@@ -429,10 +429,19 @@ def parse_vcf_for_ed(vcfFile, metadataDict, isCNV, parents=[],
             if l == "":
                 continue
             
-            # Handle header line
+            # Handle header lines
             if l.startswith("#CHROM"):
-                samples = sl[9:] # This gives us the ordered sample IDs
+                # Get the ordered sample IDs from the header line
+                samples = sl[9:]
+                
+                # Validate the metadata dictionary against the samples
                 vcf_header_to_metadata_validation(samples, metadataDict, strict=False, quiet=quiet)
+                
+                # Check that the parents are in the samples
+                if parents != []:
+                    for parent in parents:
+                        if parent not in samples:
+                            raise ValueError(f"Parent sample '{parent}' is not in the VCF file; check your --parents argument")
             if l.startswith("#"):
                 continue
             
