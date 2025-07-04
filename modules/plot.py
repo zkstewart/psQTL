@@ -77,6 +77,21 @@ def WMA(s, period):
         return None
     return sw
 
+def minmax_norm(x, minValue, maxValue):
+    '''
+    Normalize an integer x to the range [0, 1] based on the provided minValue and maxValue.
+    
+    Parameters:
+        x -- an integer to normalise
+        minValue -- the minimum value
+        maxValue -- the maximum value
+    Returns:
+        x_norm -- a numpy array of normalized values
+    '''
+    if minValue == maxValue:
+        return 0
+    return (x - minValue) / (maxValue - minValue)
+
 class Plot:
     RESULT_TYPES = ["depth", "call"]
     MEASUREMENT_TYPES = ["ed", "splsda"]
@@ -1334,6 +1349,7 @@ class CircosPlot(Plot):
     OUTER_HEIGHT = 0.3
     CENTRE_SPACE = 20
     AXIS_SPACE = 10
+    ARC_DISTANCE = 1.5
     
     TOP=1.05
     LEFT=-0.1
@@ -1367,6 +1383,8 @@ class CircosPlot(Plot):
     NUM_MAJOR_TICKS = 5 # number of major ticks to aim for on the scale bar
     NUM_Y_TICKS = 3 # number of y ticks to aim for on each track
     STANDARD_DIMENSION = 8
+    
+    ASCII_LETTERS_START = ord("a") # ASCII value of 'a'
     
     def __init__(self, regions, highlights=None,
                  callED=None, depthED=None,
@@ -1507,7 +1525,6 @@ class CircosPlot(Plot):
         
         # Establish axes for each region/column and track/row
         self._set_axs()
-        self.rowNum = -1 # to keep track of the current row/track number
         
         # Establish column labels
         self.colLabels = [f"{regionDict['contig']}:{regionDict['end']}-{regionDict['start']}" if regionDict['reverse'] == True
@@ -1584,6 +1601,35 @@ class CircosPlot(Plot):
                                     r_lim=(CircosPlot.CENTRE_SPACE, CircosPlot.START_POSITION),
                                     color=HIGHLIGHT_COLOUR, alpha=0.5, zorder=-1)
         
+        # Set panel annotations
+        minRcenter = self.axs[self.nrow-1, 0].r_center
+        maxRcenter = self.axs[0, 0].r_center
+        
+        for i in range(self.nrow):
+            # Get information for this track
+            track = self.axs[i, 0]
+            r = track.r_center
+            
+            # Get the min-max normalised scaling for the arc distance
+            "We scale the arc distance (shorter at edges, longer at centre) since it makes the result look better."
+            scalingFactor = (1 - minmax_norm(track.r_center, minRcenter, maxRcenter))
+            
+            # Calculate the angle for the text label
+            """Given the known radius distance from the centre of the plot, we want to 
+            position the text label at a consistent arc distance away from the leftmost
+            edge of the track. We do this by calculating the angle of the straight line
+            with the set radius length that will pass through the point where we have
+            the desired arc distance.
+            """
+            theta0 = math.radians(360 - self.axisSpace)
+            arcAngle = (CircosPlot.ARC_DISTANCE*scalingFactor) / r
+            thetaFinal = theta0 + arcAngle
+            angleDegrees = math.degrees(thetaFinal)
+            
+            # Add the text label to the track
+            self.circos.text(chr(CircosPlot.ASCII_LETTERS_START+i), r=track.r_center,
+                             deg=angleDegrees)
+        
         # Create the figure object
         "Necessary prior to legend addition"
         fig = self.circos.plotfig(figsize=(self.width, self.height))
@@ -1649,12 +1695,12 @@ class CircosPlot(Plot):
             self.circos.ax.add_artist(coverageLegend)
             numLegends += 1
         
-        # Set row annotations
+        # Set panel legend
         self.rowHandles = [
-            Patch(label=f"{i+1}: {label}")
+            Patch(label=f"{chr(CircosPlot.ASCII_LETTERS_START+i)}: {label}") # produces 'a: SNP ED^4', etc.
             for i, label in enumerate(self.rowLabels)
         ]
-        legendTitle = "Rows"
+        legendTitle = "Panels"
         rowLabelLegend = self.circos.ax.legend(
             handles=self.rowHandles,
             bbox_to_anchor=CircosPlot.ROW_LABEL_POSITION[0:2],

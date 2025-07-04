@@ -192,8 +192,8 @@ def main():
                          required=False,
                          help="""CIRCOS PLOT: Optionally, specify the space (in degrees)
                          to allow for the Y-axis labels in the top centre of the plot
-                         (default: 10)""",
-                         default=10)
+                         (default: 15)""",
+                         default=15)
     
     # Report-subparser arguments
     ## Required arguments
