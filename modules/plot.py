@@ -1,4 +1,4 @@
-import math
+import math, re
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -1381,6 +1381,8 @@ class CircosPlot(Plot):
         1000000000000000: [1000000000000000, "Pb"] # that's got to future-proof it for a while
     }
     NUM_MAJOR_TICKS = 5 # number of major ticks to aim for on the scale bar
+    DEGREES_PER_X_TICK = 90 # the span of degrees for each x tick on the scale bar
+    
     NUM_Y_TICKS = 3 # number of y ticks to aim for on each track
     STANDARD_DIMENSION = 8
     
@@ -1399,6 +1401,23 @@ class CircosPlot(Plot):
         # Figure-related parameters (not to be set by user)
         self.axs = None
         self.rowNum = None
+    
+    @staticmethod
+    def number_formatter(value, divisor, unit):
+        '''
+        Parameters:
+            value -- a float value to format
+            divisor -- an integer value to divide the value by
+            unit -- a string indicating the unit to append to the formatted value
+        Returns:
+            formattedNumber -- a string representing the formatted value
+        '''
+        dividedValue = value / divisor
+        formattedValue = str(dividedValue).rstrip("0") # remove trailing zeros
+        if formattedValue.endswith("."):
+            formattedValue = formattedValue[:-1] # remove trailing decimal if it exists
+        
+        return f"{formattedValue} {unit}"
     
     @property
     def width(self):
@@ -1457,12 +1476,18 @@ class CircosPlot(Plot):
             
             self._axisSpace = value
     
+    @property
+    def plottedLength(self):
+        "Returns the total length of all regions"
+        return sum(regionDict["end"] - regionDict["start"] for regionDict in self.regions) # end > start since reversed plotting isn't allowed
+    
     def _set_axs(self):
         "Enables us to use a similar interface to the HorizontalPlot class for plotting to specific [row,col] indices"
         self.axs = []
         self.linescatterHandles = []
         self.coverageHandles = []
         self.rowLegend = []
+        
         for colNum, sector in enumerate(self.circos.sectors):
             currentPosition = CircosPlot.START_POSITION
             
@@ -1470,17 +1495,26 @@ class CircosPlot(Plot):
             outer_track = sector.add_track((currentPosition-CircosPlot.OUTER_HEIGHT, currentPosition))
             outer_track.axis(fc="black")
             
+            # Determine the approximate amount of degrees this sector will take up
+            sectorDegrees = (sector.size / self.plottedLength) * 360
+            numTicksInThisSector = math.ceil(sectorDegrees / CircosPlot.DEGREES_PER_X_TICK) + 1 # +1 since show_endlabel==False
+            
+            # Determine the divisor and unit for the scale bar
+            midwayPoint = int((sector.start + sector.end - 1) / 2) # midpoint of the sector
+            divisor, unit = CircosPlot.INTERVALS[10 ** (len(str(midwayPoint)) - 1)] # divisor is based on the unit of the region itself
+            
             # Determine scale bar intervals
-            major_interval = 10 ** (len(str(sector.size)) - 1)
-            divisor, unit = CircosPlot.INTERVALS[major_interval]
-            minor_interval = int(major_interval / 10)
-            major_tick_interval = math.ceil((sector.size / CircosPlot.NUM_MAJOR_TICKS) / major_interval) * major_interval
+            majorInterval = 10 ** (len(str(sector.size)) - 1) # majorInterval is based on the length of the region
+            minorInterval = int(majorInterval / 10)
+            if minorInterval < 1:
+                minorInterval = 1
+            majorTickInterval = math.ceil((sector.size / numTicksInThisSector) / majorInterval) * majorInterval
             
             # Set up the scale bar
-            if sector.size > minor_interval:
-                outer_track.xticks_by_interval(major_tick_interval, label_formatter=lambda v: f"{v / divisor:.0f} {unit}",
+            if sector.size > minorInterval:
+                outer_track.xticks_by_interval(majorTickInterval, label_formatter=lambda v: CircosPlot.number_formatter(v, divisor, unit),
                                                show_endlabel=False)
-                outer_track.xticks_by_interval(minor_interval, tick_length=1, show_label=False)
+                outer_track.xticks_by_interval(minorInterval, tick_length=1, show_label=False)
             currentPosition -= (CircosPlot.OUTER_HEIGHT + CircosPlot.TRACK_GAP)
             
             # Set all inner row/tracks
@@ -1613,6 +1647,8 @@ class CircosPlot(Plot):
             # Get the min-max normalised scaling for the arc distance
             "We scale the arc distance (shorter at edges, longer at centre) since it makes the result look better."
             scalingFactor = (1 - minmax_norm(track.r_center, minRcenter, maxRcenter))
+            if self.nrow == 1:
+                scalingFactor = 1 # add the padding if there is only one track
             
             # Calculate the angle for the text label
             """Given the known radius distance from the centre of the plot, we want to 
@@ -1731,9 +1767,14 @@ class CircosPlot(Plot):
             Truncates a float value to a specified number of decimal places. This prevents
             rounding up higher than maxY which triggers an error with pycirclize.
             '''
-            integer, decimal = str(float(value)).split(".")
-            decimal = decimal[:decimals]  # truncate to the specified number of decimals
-            return float(f"{integer}.{decimal}")
+            integer, decimal, scientific = re.match(r"^(\d+)(\.\d+)?(e[+-]?\d+)?$", str(value)).groups()
+            if decimal is None:
+                decimal = ""
+            else:
+                decimal = decimal[:decimals+1]  # truncate to the specified number of decimals + the dot
+            if scientific is None:
+                scientific = ""
+            return float(f"{integer}{decimal}{scientific}")
         
         yticks = np.linspace(0, maxY, CircosPlot.NUM_Y_TICKS)
         if maxY < 1:
