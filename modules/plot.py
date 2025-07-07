@@ -501,7 +501,9 @@ class Plot:
         regionValues = windowedNCLS.find_overlap(contigID, start, end)
         x, y = [], []
         for pos, _, ed in regionValues:
-            if clipped and (pos < start or pos > end):
+            if clipped and pos < start: # can occur if windowSize > 1; this is treated as our first value
+                pos = start
+            if clipped and pos > end: # this should not happen
                 continue
             x.append(pos)
             y.append(ed)
@@ -549,7 +551,7 @@ class Plot:
         
         # Locate the start and end indices in the x array
         xstart = 0
-        while x[xstart] < start:
+        while (xstart+1) < len(x) and x[xstart] < start:
             xstart += 1
         
         xend = len(x) - 1
@@ -557,7 +559,7 @@ class Plot:
             xend -= 1
         
         # Prepend values
-        if x[xstart] > start: # if we need to extend the line backwards
+        if x[xstart] != start: # if we need to extend the line backwards
             xprepend = [start]
             if xstart > 0:
                 xprev, xnext = x[xstart - 1], x[xstart]
@@ -582,9 +584,15 @@ class Plot:
             xappend = []
             yappend = []
         
+        # Identify how many points we want to obtain from the x/y arrays
+        arrayLength = 0
+        for xValue in x:
+            if start <= xValue <= end:
+                arrayLength += 1
+        
         # Generate the new x and smoothedY arrays
-        x = np.concatenate((xprepend, x[xstart:xend+1], xappend))
-        smoothedY = np.concatenate((yprepend, smoothedY[xstart:xend+1], yappend))
+        x = np.concatenate((xprepend, x[xstart:xstart+arrayLength], xappend))
+        smoothedY = np.concatenate((yprepend, smoothedY[xstart:xstart+arrayLength], yappend))
         
         return x, smoothedY
     
@@ -1771,14 +1779,17 @@ class CircosPlot(Plot):
             if decimal is None:
                 decimal = ""
             else:
-                decimal = decimal[:decimals+1]  # truncate to the specified number of decimals + the dot
+                firstNonZero = re.search(r"[^0.]", decimal)
+                firstNonZero = 0 if firstNonZero is None else firstNonZero.start()
+                decimalLength = max(decimals, firstNonZero)
+                decimal = decimal[:decimalLength+1] # +1 to include the decimal point
             if scientific is None:
                 scientific = ""
             return float(f"{integer}{decimal}{scientific}")
         
         yticks = np.linspace(0, maxY, CircosPlot.NUM_Y_TICKS)
         if maxY < 1:
-            yticks = [ round(x, 2) if (i+1) != len(yticks) else truncate(x, 2) for i, x in enumerate(yticks) ]
+            yticks = [ truncate(x, 2) for i, x in enumerate(yticks) ]
         else:
             yticks = [ int(x) for x in yticks ]
         ylabels = [ str(x) for x in yticks ]

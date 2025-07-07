@@ -652,7 +652,7 @@ def parse_ed_as_dict(edFile, missingFilter=0.5):
                 edDict[chrom][1].append(euclideanDistance)
     return edDict
 
-def convert_dict_to_windowed_ncls(statDict, windowSize=0):
+def convert_dict_to_windowed_ncls(statDict, windowSize=1):
     '''
     Parameters:
         statDict -- a dictionary with structure like:

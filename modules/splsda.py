@@ -262,12 +262,12 @@ def run_integrative_splsda(callRdataFile, depthRdataFile, outputSelected, output
                          f"'{callRdataFile}' and '{depthRdataFile}'; have a look at the stderr to " + 
                          f"make sense of this:\n'{errorMsg}'"))
 
-def parse_selected_to_windowed_ncls(selectedFileName, windowSize=0):
+def parse_selected_to_windowed_ncls(selectedFileName, windowSize=1):
     '''
     Parameters:
         selectedFileName -- a file name indicating the location of the selected variants file
         windowSize -- (OPTIONAL) an integer indicating the size of the windows that CNVs were predicted with;
-                      if 0, the file is not windowed (as seen in call variants); default is 0
+                      if 1, the file is not windowed (as seen in call variants); default is 1
     Returns:
         windowedNCLS -- a WindowedNCLS object containing statistical values indexed by chromosome
                         and position
@@ -372,7 +372,7 @@ def parse_integrated_to_windowed_ncls(selectedFileName, windowSize):
     for featuretype in ["call", "depth"]: # ensure ordering; we always have at least one of each type
         # Create a WindowedNCLS object for the feature type
         if featuretype == "call":
-            windowedNCLS = WindowedNCLS(windowSize=0) # call variants are not windowed
+            windowedNCLS = WindowedNCLS(windowSize=1)
         else:
             windowedNCLS = WindowedNCLS(windowSize=windowSize)
         

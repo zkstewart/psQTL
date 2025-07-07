@@ -14,6 +14,7 @@ from modules.depth import get_median_value, convert_depth_to_alleles, call_cnvs_
 from modules.samtools_handling import depth_to_histoDict
 from modules.splsda import recode_variant, recode_cnv, recode_vcf
 from modules.gff3 import GFF3Graph
+from modules.plot import Plot
 
 # Specify data locations
 dataDir = os.path.join(os.getcwd(), "data")
@@ -2067,6 +2068,353 @@ class TestGFF3(unittest.TestCase):
                         f"Expected GFF3Graph object to have {numCDS} CDS but got {len(gff3Obj.ftypes['CDS'])}")
         self.assertTrue(all([ len(gff3Obj[x].parents) == 0 for x in gff3Obj.ftypes["mRNA"] ]),
                         "Expected mRNAs to be unlinked from their gene parents, but some have parents")
+
+class TestNCLS(unittest.TestCase):
+    def test_find_overlap_1(self):
+        "Test a standard WindowedNCLS object for overlap finding"
+        # Arrange: init WindowedNCLS
+        windowSize=1
+        chrom = "chr1"
+        positions = np.array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+        edValues = np.array([0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0])
+        windowedNCLS = WindowedNCLS(windowSize)
+        windowedNCLS.add(chrom, positions, edValues)
+        
+        # Arrange: set variables for testing
+        start = 0
+        end = 10
+        
+        # Act
+        overlaps = list(windowedNCLS.find_overlap(chrom, start, end))
+        
+        # Assert
+        self.assertTrue(len(overlaps) == 11, f"Expected 11 overlaps but got {len(overlaps)}")
+        self.assertTrue(all([ overlaps[i][0] == positions[i] for i in range(len(overlaps)) ]),
+                        f"Expected overlaps to match positions but got {overlaps}")
+        self.assertTrue(all([ overlaps[i][2] == edValues[i] for i in range(len(overlaps)) ]),
+                        f"Expected overlaps to match positions but got {overlaps}")
+    
+    def test_find_overlap_2(self):
+        '''Test a standard WindowedNCLS object for overlap finding with a window size.
+        This test is a bit non-intuitive, since I would normally want start2==109 to grab
+        the second last position (9-109). However, when parsing binned depth files, we
+        are anticipating that windows are non-overlapping. So any one position (e.g., 1000,1000
+        or 999,999) will only ever return a single value.'''
+        # Arrange: init WindowedNCLS
+        windowSize=100
+        chrom = "chr1"
+        positions = np.array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+        edValues = np.array([0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0])
+        windowedNCLS = WindowedNCLS(windowSize)
+        windowedNCLS.add(chrom, positions, edValues)
+        
+        # Arrange: set variables for testing
+        start1 = 0 # should grab first
+        end1 = 10 # should grab last
+        
+        start2 = 109 # should grab last
+        end2 = 110 # should grab last
+        
+        # Act
+        overlaps1 = list(windowedNCLS.find_overlap(chrom, start1, end1))
+        overlaps2 = list(windowedNCLS.find_overlap(chrom, start2, end2))
+        
+        # Assert
+        self.assertTrue(len(overlaps1) == 11, f"Expected 11 overlaps but got {len(overlaps1)}")
+        self.assertTrue(all([ overlaps1[i][0] == positions[i] for i in range(len(overlaps1)) ]),
+                        f"Expected overlaps to match positions but got {overlaps1}")
+        self.assertTrue(all([ overlaps1[i][2] == edValues[i] for i in range(len(overlaps1)) ]),
+                        f"Expected overlaps to match positions but got {overlaps1}")
+        
+        self.assertTrue(len(overlaps2) == 1, f"Expected 2 overlaps but got {len(overlaps2)}")
+    
+    def test_find_overlap_3(self):
+        '''This is similar to test_find_overlap_2, but with positions that accurately reflect
+        the windowSize we'd see in a binned depth file which makes the results more intuitive.'''
+        # Arrange: init WindowedNCLS
+        windowSize=100
+        chrom = "chr1"
+        positions = np.array([0, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000])
+        edValues = np.array([0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0])
+        windowedNCLS = WindowedNCLS(windowSize)
+        windowedNCLS.add(chrom, positions, edValues)
+        
+        # Arrange: set variables for testing
+        start1 = 0 # should grab first
+        end1 = 100 # should grab second
+        
+        start2 = 899 # should grab last
+        end2 = 1000 # should grab last
+        
+        # Act
+        overlaps1 = list(windowedNCLS.find_overlap(chrom, start1, end1))
+        overlaps2 = list(windowedNCLS.find_overlap(chrom, start2, end2))
+        
+        # Assert
+        self.assertTrue(len(overlaps1) == 2, f"Expected 2 overlaps but got {len(overlaps1)}")
+        self.assertTrue(all([ overlaps1[i][0] == positions[i] for i in range(len(overlaps1)) ]),
+                        f"Expected overlaps to match positions but got {overlaps1}")
+        self.assertTrue(all([ overlaps1[i][2] == edValues[i] for i in range(len(overlaps1)) ]),
+                        f"Expected overlaps to match positions but got {overlaps1}")
+        
+        self.assertTrue(len(overlaps2) == 3, f"Expected 3 overlaps but got {len(overlaps2)}")
+    
+    def test_find_overlap_4(self):
+        "Test a WindowedNCLS object for overlap finding when dealing with short ranges"
+        # Arrange: init WindowedNCLS
+        windowSize=1
+        chrom = "chr1"
+        positions = np.array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+        edValues = np.array([0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0])
+        windowedNCLS = WindowedNCLS(windowSize)
+        windowedNCLS.add(chrom, positions, edValues)
+        
+        # Arrange: set variables for testing
+        start = 0
+        end = 1
+        
+        # Act
+        overlaps = list(windowedNCLS.find_overlap(chrom, start, end))
+        
+        # Assert
+        self.assertTrue(len(overlaps) == 2, f"Expected 2 overlaps but got {len(overlaps)}")
+
+    def test_find_overlap_with_negative(self):
+        "Test a WindowedNCLS object for overlap finding when dealing with negative start positions"
+        # Arrange: init WindowedNCLS
+        windowSize=1
+        chrom = "chr1"
+        positions = np.array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+        edValues = np.array([0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0])
+        windowedNCLS = WindowedNCLS(windowSize)
+        windowedNCLS.add(chrom, positions, edValues)
+        
+        # Arrange: set variables for testing
+        start = -10 # should grab first
+        end = 1 # should grab second
+        
+        # Act
+        overlaps = list(windowedNCLS.find_overlap(chrom, start, end))
+        
+        # Assert
+        self.assertTrue(len(overlaps) == 2, f"Expected 2 overlaps but got {len(overlaps)}")
+
+class TestPlot(unittest.TestCase):
+    def test_plot_linescatter_1(self):
+        "Test Plot object with WindowedNCLS and scatter/line methods with standard parameters"
+        # Arrange: init Plot object
+        regions = [{"contig": "chr1", "start": 0, "end": 10, "reverse": False}]
+        plot = Plot(regions)
+        
+        # Arrange: init WindowedNCLS
+        windowSize=1
+        chrom = "chr1"
+        positions = np.array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+        edValues = np.array([0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0])
+        windowedNCLS = WindowedNCLS(windowSize)
+        windowedNCLS.add(chrom, positions, edValues)
+        
+        # Arrange: set variables for testing
+        start = 0 # should grab first
+        end = 9 # should grab second last
+        
+        buffer=0
+        
+        # Act
+        x, y = plot.scatter(windowedNCLS, chrom, start, end)
+        xLine, yLine = plot.line(windowedNCLS, chrom, start, end, applyWMA=False, buffer=buffer)
+        xWMA, yWMA = plot.line(windowedNCLS, chrom, start, end, applyWMA=True, buffer=buffer)
+        
+        # Assert
+        self.assertTrue(len(x) == (end+1)-start, f"Expected {(end+1)-start} x values but got {len(x)}")
+        self.assertTrue(all(x == positions[start:end+1]), f"Expected {x} to match {positions}")
+        self.assertTrue(all(y == edValues[start:end+1]), f"Expected {y} to match {edValues}")
+        
+        self.assertTrue(len(xLine) == (end+1)-start, f"Expected {(end+1)-start} x values but got {len(xLine)}")
+        self.assertTrue(all(xLine == positions[start:end+1]), f"Expected {xLine} to match {positions}")
+        self.assertTrue(all(yLine == edValues[start:end+1]), f"Expected {yLine} to match {edValues}")
+        
+        self.assertTrue(len(xWMA) == (end+1)-start, f"Expected {(end+1)-start} x values but got {len(xWMA)}")
+        self.assertTrue(all(xWMA == positions[start:end+1]), f"Expected {xWMA} to match {positions}")
+    
+    def test_plot_linescatter_2(self):
+        "Test Plot object with WindowedNCLS and scatter/line methods with window size"
+        # Arrange: init Plot object
+        regions = [{"contig": "chr1", "start": 0, "end": 10, "reverse": False}]
+        plot = Plot(regions)
+        
+        # Arrange: init WindowedNCLS
+        windowSize=100
+        chrom = "chr1"
+        positions = np.array([0, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000])
+        edValues = np.array([0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0])
+        windowedNCLS = WindowedNCLS(windowSize)
+        windowedNCLS.add(chrom, positions, edValues)
+        
+        # Arrange: set variables for testing
+        start1 = 0 # should grab first
+        end1 = 100 # should grab second
+        x1Truth = np.array([0, 100]) # should grab first and second
+        
+        x2Truth = np.array([899, 900, 1000]) # should grab (clipped) third last, second last, and last
+        start2 = 899 # should grab third last
+        end2 = 1000 # should grab last
+        
+        yLine2Truth = np.array([0.899, 0.9  , 1.   ]) # should grab (interpolated) third last, second last, and last
+        
+        buffer=0
+        
+        # Act
+        x1, y1 = plot.scatter(windowedNCLS, chrom, start1, end1)
+        xLine1, yLine1 = plot.line(windowedNCLS, chrom, start1, end1, applyWMA=False, buffer=buffer)
+        
+        x2, y2 = plot.scatter(windowedNCLS, chrom, start2, end2) # should be clipped
+        xLine2, yLine2 = plot.line(windowedNCLS, chrom, start2, end2, applyWMA=False, buffer=buffer)
+        
+        # Assert
+        self.assertTrue(len(x1) == 2, f"Expected 2 x1 values but got {len(x1)}")
+        self.assertTrue(len(x2) == 3, f"Expected 3 x2 values but got {len(x2)}")
+        
+        self.assertTrue(all(x1 == x1Truth), f"Expected x1 to match {x1Truth}")
+        self.assertTrue(all(x2 == x2Truth), f"Expected x2 to match {x2Truth}")
+        
+        self.assertTrue(all(yLine2 == yLine2Truth), f"Expected yLine2 to match {yLine2Truth}")
+    
+    def test_plot_line_nodata_unbuffered(self):
+        "Test Plot line method when dealing with no values in the range"
+        # Arrange: init Plot object
+        regions = [{"contig": "chr1", "start": 0, "end": 11, "reverse": False}]
+        plot = Plot(regions)
+        
+        # Arrange: init WindowedNCLS
+        windowSize=100
+        chrom = "chr1"
+        positions = np.array([100, 200, 300, 400, 500, 600, 700, 800, 900, 1000])
+        edValues = np.array([0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0])
+        windowedNCLS = WindowedNCLS(windowSize)
+        windowedNCLS.add(chrom, positions, edValues)
+        
+        # Arrange: set variables for testing
+        start = 0 # should grab nothing
+        end = 1 # should grab nothing
+        buffer = 0
+        
+        # Act
+        xLine, yLine = plot.line(windowedNCLS, chrom, start, end, applyWMA=False, buffer=buffer)
+        
+        # Assert
+        self.assertTrue(len(xLine) == 0, f"Expected no xLine values but got {len(xLine)}")
+    
+    def test_plot_line_nodata_buffered(self):
+        "Test Plot line method when dealing with no values in the range but with a buffer"
+        # Arrange: init Plot object
+        regions = [{"contig": "chr1", "start": 0, "end": 11, "reverse": False}]
+        plot = Plot(regions)
+        
+        # Arrange: init WindowedNCLS
+        windowSize=100
+        chrom = "chr1"
+        positions = np.array([100, 200, 300, 400, 500, 600, 700, 800, 900, 1000])
+        edValues = np.array([0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0])
+        windowedNCLS = WindowedNCLS(windowSize)
+        windowedNCLS.add(chrom, positions, edValues)
+        
+        # Arrange: set variables for testing
+        start = 0 # should grab nothing
+        end = 1 # should grab nothing
+        buffer = 100
+        
+        # Act
+        xLine, yLine = plot.line(windowedNCLS, chrom, start, end, applyWMA=False, buffer=buffer)
+        
+        # Assert
+        self.assertTrue(len(xLine) == 1, f"Expected 1 xLine value but got {len(xLine)}")
+        self.assertTrue(yLine[0] == edValues[0], f"Expected yLine value to be {edValues[0]} but got {yLine[0]}")
+    
+    def test_plot_line_interpolation(self):
+        "Test Plot line method when using buffer and interpolation"
+        # Arrange: init Plot object
+        regions = [{"contig": "chr1", "start": 0, "end": 11, "reverse": False}]
+        plot = Plot(regions)
+        
+        # Arrange: init WindowedNCLS
+        windowSize=100
+        chrom = "chr1"
+        positions = np.array([100, 200, 300, 400, 700, 800, 900, 1000]) # omit 500 and 600
+        edValues = np.array([0.1, 0.2, 0.3, 0.4, 0.7, 0.8, 0.9, 1.0])
+        windowedNCLS = WindowedNCLS(windowSize)
+        windowedNCLS.add(chrom, positions, edValues)
+        
+        # Arrange: set variables for testing
+        start = 401
+        end = 699
+        buffer = 100
+        yLineTruth = np.array([0.401, 0.699])
+        
+        # Act
+        xLine, yLine = plot.line(windowedNCLS, chrom, start, end, applyWMA=False, buffer=buffer)
+        
+        # Assert
+        self.assertTrue(len(xLine) == 2, f"Expected 2 xLine values but got {len(xLine)}")
+        self.assertTrue(all(yLine == yLineTruth), f"Expected yLine to be {yLineTruth} but got {yLine}")
+    
+    def test_plot_line_singlepoint(self):
+        "Test Plot line method when obtaining a single point"
+        # Arrange: init Plot object
+        regions = [{"contig": "chr1", "start": 0, "end": 11, "reverse": False}]
+        plot = Plot(regions)
+        
+        # Arrange: init WindowedNCLS
+        windowSize=100
+        chrom = "chr1"
+        positions = np.array([100, 200, 300, 400, 700, 800, 900, 1000]) # omit 500 and 600
+        edValues = np.array([0.1, 0.2, 0.3, 0.4, 0.7, 0.8, 0.9, 1.0])
+        windowedNCLS = WindowedNCLS(windowSize)
+        windowedNCLS.add(chrom, positions, edValues)
+        
+        # Arrange: set variables for testing
+        start = 100
+        end = 100
+        buffer = 0
+        xLineTruth = np.array([100.])
+        yLineTruth = np.array([0.1])
+        
+        # Act
+        xLine, yLine = plot.line(windowedNCLS, chrom, start, end, applyWMA=False, buffer=buffer)
+        
+        # Assert
+        self.assertTrue(len(xLine) == 1, f"Expected 1 xLine value but got {len(xLine)}")
+        self.assertTrue(all(xLine == xLineTruth), f"Expected xLine to be {xLineTruth} but got {xLine}")
+        self.assertTrue(all(yLine == yLineTruth), f"Expected yLine to be {yLineTruth} but got {yLine}")
+    
+    def test_plot_line_nointerpolation(self):
+        "Test Plot line method when without any buffer or interpolation"
+        # Arrange: init Plot object
+        regions = [{"contig": "chr1", "start": 0, "end": 11, "reverse": False}]
+        plot = Plot(regions)
+        
+        # Arrange: init WindowedNCLS
+        windowSize=100
+        chrom = "chr1"
+        positions = np.array([100, 200, 300, 400, 700, 800, 900, 1000]) # omit 500 and 600
+        edValues = np.array([0.1, 0.2, 0.3, 0.4, 0.7, 0.8, 0.9, 1.0])
+        windowedNCLS = WindowedNCLS(windowSize)
+        windowedNCLS.add(chrom, positions, edValues)
+        
+        # Arrange: set variables for testing
+        start = 401
+        end = 699
+        buffer = 0
+        xLineTruth = np.array([401, 699])
+        yLineTruth = np.array([0.4, 0.4])
+        
+        # Act
+        xLine, yLine = plot.line(windowedNCLS, chrom, start, end, applyWMA=False, buffer=buffer)
+        
+        # Assert
+        self.assertTrue(len(xLine) == 2, f"Expected 2 xLine values but got {len(xLine)}")
+        self.assertTrue(all(xLine == xLineTruth), f"Expected xLine to be {xLineTruth} but got {xLine}")
+        self.assertTrue(all(yLine == yLineTruth), f"Expected yLine to be {yLineTruth} but got {yLine}")
 
 if __name__ == '__main__':
     unittest.main()

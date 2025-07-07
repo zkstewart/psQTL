@@ -266,7 +266,7 @@ def main():
             
             # Convert dictionary to Euclidean distance NCLS data structure
             "WindowedNCLS cannot be pickled so we need to do it like file->dict->WindowedNCLS"
-            dataDict["call"]["ed"] = convert_dict_to_windowed_ncls(dataDict["call"]["ed"], 0) # windowSize = 0
+            dataDict["call"]["ed"] = convert_dict_to_windowed_ncls(dataDict["call"]["ed"], 1) # windowSize = 1
         
         # Parse 'call' sPLS-DA data
         if "splsda" in args.measurementType:

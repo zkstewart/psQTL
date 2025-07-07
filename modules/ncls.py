@@ -2,7 +2,16 @@ import numpy as np
 from ncls import NCLS
 
 class WindowedNCLS:
-    def __init__(self, windowSize=0):
+    '''
+    Note for how ranges are handled:
+    - The start and end positions of the ranges are inclusive.
+    - The window size must be a positive integer
+    - Values are stored in "windows" beginning at the start position
+      and extending to the end position, which is inclusive. If you
+      query any position within that range, you will get the
+      contents within that "window".
+    '''
+    def __init__(self, windowSize=None):
         self.ncls = {}
         self.values = {}
         self.windowSize = windowSize
@@ -15,6 +24,18 @@ class WindowedNCLS:
     def contigs(self):
         return list(self.ncls.keys())
     
+    @property
+    def windowSize(self):
+        return self._windowSize
+    
+    @windowSize.setter
+    def windowSize(self, value):
+        if value is None:
+            value = 1
+        if not isinstance(value, int) or value < 1:
+            raise ValueError("Window size must be a positive integer")
+        self._windowSize = value
+    
     def add(self, chrom, positions, edValues):
         '''
         Parameters:
@@ -25,7 +46,7 @@ class WindowedNCLS:
         if chrom in self.ncls:
             raise ValueError(f"Chromosome '{chrom}' already exists in this WindowedNCLS object")
         
-        ends = positions + 1 + self.windowSize
+        ends = positions + self.windowSize
         self.values[chrom] = edValues
         
         self.ncls[chrom] = NCLS(positions, ends, np.arange(len(edValues)))
@@ -48,7 +69,7 @@ class WindowedNCLS:
             #raise KeyError(f"Chromosome '{chrom}' does not exist in this WindowedNCLS object")
         return (
             (windowStart, windowEnd, self.values[chrom][valueIndex])
-            for windowStart, windowEnd, valueIndex in self.ncls[chrom].find_overlap(start if start >= 0 else 0, end)
+            for windowStart, windowEnd, valueIndex in self.ncls[chrom].find_overlap(start if start >= 0 else 0, end+1) # end+1 for inclusive end
         )
     
     def find_all(self, chrom):
@@ -62,10 +83,7 @@ class WindowedNCLS:
         if not chrom in self.ncls:
             return iter(())
             #raise KeyError(f"Chromosome '{chrom}' does not exist in this WindowedNCLS object")
-        return (
-            (windowStart, windowEnd, self.values[chrom][valueIndex])
-            for windowStart, windowEnd, valueIndex in self.find_overlap(chrom, 0, self.longestContig+1)
-        )
+        return self.find_overlap(chrom, 0, self.longestContig+1)
     
     def __contains__(self, value):
         return value in self.ncls
