@@ -1389,7 +1389,7 @@ class CircosPlot(Plot):
         1000000000000000: [1000000000000000, "Pb"] # that's got to future-proof it for a while
     }
     NUM_MAJOR_TICKS = 5 # number of major ticks to aim for on the scale bar
-    DEGREES_PER_X_TICK = 90 # the span of degrees for each x tick on the scale bar
+    DEGREES_PER_X_TICK = 45 # the span of degrees for each x tick on the scale bar
     
     NUM_Y_TICKS = 3 # number of y ticks to aim for on each track
     STANDARD_DIMENSION = 8
@@ -1426,6 +1426,30 @@ class CircosPlot(Plot):
             formattedValue = formattedValue[:-1] # remove trailing decimal if it exists
         
         return f"{formattedValue} {unit}"
+    
+    @staticmethod
+    def truncate(value, decimals):
+        '''
+        Truncates a float value to a specified number of decimal places. This prevents
+        rounding up higher than maxY which triggers an error with pycirclize.
+        
+        Parameters:
+            value -- a float value to truncate
+            decimals -- an integer value indicating the number of decimal places to truncate to
+        Returns:
+            truncatedValue -- a float value truncated to the specified number of decimal places
+        '''
+        integer, decimal, scientific = re.match(r"^(\d+)(\.\d+)?(e[+-]?\d+)?$", str(value)).groups()
+        if decimal is None:
+            decimal = ""
+        else:
+            firstNonZero = re.search(r"[^0.]", decimal)
+            firstNonZero = 0 if firstNonZero is None else firstNonZero.start()
+            decimalLength = max(decimals, firstNonZero)
+            decimal = decimal[:decimalLength+1] # +1 to include the decimal point
+        if scientific is None:
+            scientific = ""
+        return float(f"{integer}{decimal}{scientific}")
     
     @property
     def width(self):
@@ -1498,31 +1522,51 @@ class CircosPlot(Plot):
         
         for colNum, sector in enumerate(self.circos.sectors):
             currentPosition = CircosPlot.START_POSITION
-            
+                        
             # Set up outer track
             outer_track = sector.add_track((currentPosition-CircosPlot.OUTER_HEIGHT, currentPosition))
             outer_track.axis(fc="black")
             
-            # Determine the approximate amount of degrees this sector will take up
-            sectorDegrees = (sector.size / self.plottedLength) * 360
-            numTicksInThisSector = math.ceil(sectorDegrees / CircosPlot.DEGREES_PER_X_TICK) + 1 # +1 since show_endlabel==False
-            
             # Determine the divisor and unit for the scale bar
             midwayPoint = int((sector.start + sector.end - 1) / 2) # midpoint of the sector
-            divisor, unit = CircosPlot.INTERVALS[10 ** (len(str(midwayPoint)) - 1)] # divisor is based on the unit of the region itself
+            divisor, unit = CircosPlot.INTERVALS[10 ** (len(str(midwayPoint)) - 1)] # divisor is based on the unit of the region
             
             # Determine scale bar intervals
-            majorInterval = 10 ** (len(str(sector.size)) - 1) # majorInterval is based on the length of the region
+            majorInterval = 10 ** (len(str(sector.size-1)) - 1) # majorInterval is based on the length of the region
             minorInterval = int(majorInterval / 10)
             if minorInterval < 1:
                 minorInterval = 1
+            
+            # Determine the approximate amount of degrees this sector will take up
+            sectorDegrees = (sector.size / self.plottedLength) * 360
+            numTicksInThisSector = math.ceil(sectorDegrees / CircosPlot.DEGREES_PER_X_TICK) + 2 # first and last ticks are unlabelled
+            if numTicksInThisSector < 3:
+                numTicksInThisSector = 3 # need at least 3 ticks to offset first and last ticks not being labelled
+            
+            # Determine where the major ticks will be placed
             majorTickInterval = math.ceil((sector.size / numTicksInThisSector) / majorInterval) * majorInterval
+            
+            ongoingCount = 1
+            while (sector.size / majorTickInterval < numTicksInThisSector) and (majorTickInterval > majorInterval): # coerce the number of ticks to be at least numTicksInThisSector
+                majorTickInterval = math.ceil((sector.size / (numTicksInThisSector+ongoingCount)) / majorInterval) * majorInterval
+                ongoingCount += 1
             
             # Set up the scale bar
             if sector.size > minorInterval:
-                outer_track.xticks_by_interval(majorTickInterval, label_formatter=lambda v: CircosPlot.number_formatter(v, divisor, unit),
-                                               show_endlabel=False)
-                outer_track.xticks_by_interval(minorInterval, tick_length=1, show_label=False)
+                firstTick = sector.start - (sector.start % majorTickInterval) # first tick may preceed sector.start
+                xTicks = [
+                    x if x != 0 else 1 # first tick at 1 needs special handling
+                    for x in range(firstTick, sector.end+1, majorTickInterval)
+                    if x == 0 or (x >= sector.start and x <= sector.end) # first tick at 1 needs special handling
+                ] # ensure we don't go past the end of the sector
+                xLabels = [
+                    None if i == 0 or i == len(xTicks)-1
+                    else CircosPlot.number_formatter(x, divisor, unit)
+                    for i, x in enumerate(xTicks)
+                ]
+                outer_track.xticks(xTicks, labels=xLabels)
+            
+            outer_track.xticks_by_interval(minorInterval, tick_length=1, show_label=False)
             currentPosition -= (CircosPlot.OUTER_HEIGHT + CircosPlot.TRACK_GAP)
             
             # Set all inner row/tracks
@@ -1769,27 +1813,10 @@ class CircosPlot(Plot):
             CircosPlot.CENTRE_SPACE)
         ) / self.nrow # height of each track
     
-    def _format_y_ticks(self, maxY):
-        def truncate(value, decimals):
-            '''
-            Truncates a float value to a specified number of decimal places. This prevents
-            rounding up higher than maxY which triggers an error with pycirclize.
-            '''
-            integer, decimal, scientific = re.match(r"^(\d+)(\.\d+)?(e[+-]?\d+)?$", str(value)).groups()
-            if decimal is None:
-                decimal = ""
-            else:
-                firstNonZero = re.search(r"[^0.]", decimal)
-                firstNonZero = 0 if firstNonZero is None else firstNonZero.start()
-                decimalLength = max(decimals, firstNonZero)
-                decimal = decimal[:decimalLength+1] # +1 to include the decimal point
-            if scientific is None:
-                scientific = ""
-            return float(f"{integer}{decimal}{scientific}")
-        
+    def _format_y_ticks(self, maxY):        
         yticks = np.linspace(0, maxY, CircosPlot.NUM_Y_TICKS)
         if maxY < 1:
-            yticks = [ truncate(x, 2) for i, x in enumerate(yticks) ]
+            yticks = [ CircosPlot.truncate(x, 2) for i, x in enumerate(yticks) ]
         else:
             yticks = [ int(x) for x in yticks ]
         ylabels = [ str(x) for x in yticks ]
@@ -1875,6 +1902,7 @@ class CircosPlot(Plot):
             end = regionDict["end"]
             reverse = regionDict["reverse"]
             
+            # Adjust start and end for one-based indexing
             # Plot line (if applicable)
             if lineNCLS != None and contigID in lineNCLS.contigs:
                 lineX, smoothedY = self.line(lineNCLS, contigID, start, end,

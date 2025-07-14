@@ -179,7 +179,7 @@ def call_cnvs_from_depth(samplePairs, outputFileName, windowSize, ploidy=2):
     
     # Convert to VCF-like format
     exploded_df.rename(columns={"level_0": "#CHROM"}, inplace=True)
-    exploded_df["POS"] = exploded_df.groupby("#CHROM").cumcount() * windowSize
+    exploded_df["POS"] = (exploded_df.groupby("#CHROM").cumcount() * windowSize) + 1 # 1-based indexing for VCF
     exploded_df["ID"] = "."
     exploded_df["REF"] = "N"
     exploded_df["ALT"] = "N"

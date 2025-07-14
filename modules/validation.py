@@ -244,7 +244,7 @@ def validate_post_args(args):
     
     return locations
 
-def validate_regions(regions, mode, plotStyle, lengthsDict, argName="--region"):
+def validate_regions(regions, mode, plotStyle, lengthsDict, argName="--regions"):
     '''
     Returns:
         parsedRegions -- a list of dictionaries with structure like:
@@ -276,6 +276,9 @@ def validate_regions(regions, mode, plotStyle, lengthsDict, argName="--region"):
             # Validate start position
             if start < 0:
                 raise ValueError(f"{argName} start position '{start}' is < 0!")
+            if start == 0:
+                print(f"# Note: {argName} start position '{start}' was set to 1, as psQTL uses 1-based indexing.")
+                start = 1
             if start == end:
                 raise ValueError(f"{argName} start position '{start}' is equal to end position '{end}'!")
             

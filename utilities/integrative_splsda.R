@@ -158,7 +158,7 @@ if (callEmphasis == min(callEmphasis, balance, depthEmphasis))
       previousBest <- newCallAlone
       next
     } else if (newDepthAlone < previousBest) {
-      depthIndex <- depthIndex + 
+      depthIndex <- depthIndex + 1
       previousBest <- newDepthAlone
       next
     }
