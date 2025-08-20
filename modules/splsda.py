@@ -182,8 +182,8 @@ def recode_vcf(vcfFile, outputFileName, metadataDict, isCNV=False, quiet=False):
             fileOut.write("\t".join(encodedLine) + "\n")
 
 def run_windowed_splsda(metadataFile, encodedVcfFile, outputVariants, outputBER, outputRdata,
-                        scriptLocation, threads=1, windowSize=1000000, berCutoff=0.4, maf=0.05,
-                        nrepeat=10, maxiters=1000):
+                        scriptLocation, threads=1, windowSize=1000000, windowSizeIsSNPs=False,
+                        berCutoff=0.4, maf=0.05, nrepeat=10, maxiters=1000):
     '''
     Calls the windowed_plsda.R script to run sPLS-DA on the provided encoded VCF file.
     
@@ -199,6 +199,8 @@ def run_windowed_splsda(metadataFile, encodedVcfFile, outputVariants, outputBER,
         threads -- (OPTIONAL) an integer indicating the number of threads to use (default is 1)
         windowSize -- (OPTIONAL) an integer indicating the size of the windows to run local
                        PLS-DA within (default is 1000000)
+        windowSizeIsSNPs -- (OPTIONAL) a boolean indicating whether the window size is in
+                            number of SNPs (True) or in base pairs (False; the default)
         berCutoff -- (OPTIONAL) a float indicating the BER cutoff to filter on (default is 0.4)
         maf -- (OPTIONAL) a float indicating the minor allele frequency threshold to
                filter on (default is 0.05)

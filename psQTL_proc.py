@@ -148,6 +148,13 @@ def main():
                          help="""Optionally, specify the window size that sPLS-DA will
                          be run within (recommended: 100000)""",
                          default=100000)
+    sparser.add_argument("--windowSizeIsSNPs", dest="windowSizeIsSNPs",
+                         required=False,
+                         action="store_true",
+                         help="""Optionally, provide this flag to indicate that the value
+                         given to --splsdaWindowSize is the number of SNPs to include
+                         in each window, rather than the length in base pairs""",
+                         default=False)
     sparser.add_argument("--maf", dest="mafFilter",
                          type=float,
                          required=False,
@@ -285,8 +292,9 @@ def call_splsda(args, metadataDict, locations):
                                 locations.variantSplsdaBerFile,
                                 locations.variantSplsdaRdataFile,
                                 locations.windowedSplsdaRscript,
-                                args.threads, args.splsdaWindowSize, args.berFilter,
-                                args.mafFilter, args.numRepeats, args.maxIterations)
+                                args.threads, args.splsdaWindowSize, args.windowSizeIsSNPs,
+                                args.berFilter, args.mafFilter,
+                                args.numRepeats, args.maxIterations)
             open(locations.variantSplsdaSelectedFile + ".ok", "w").close()
             open(locations.variantSplsdaBerFile + ".ok", "w").close()
             open(locations.variantSplsdaRdataFile + ".ok", "w").close()
@@ -316,8 +324,9 @@ def depth_splsda(args, metadataDict, locations):
                                 locations.depthSplsdaBerFile,
                                 locations.depthSplsdaRdataFile,
                                 locations.windowedSplsdaRscript,
-                                args.threads, args.splsdaWindowSize, args.berFilter,
-                                args.mafFilter, args.numRepeats, args.maxIterations)
+                                args.threads, args.splsdaWindowSize, args.windowSizeIsSNPs,
+                                args.berFilter, args.mafFilter,
+                                args.numRepeats, args.maxIterations)
             open(locations.depthSplsdaSelectedFile + ".ok", "w").close()
             open(locations.depthSplsdaBerFile + ".ok", "w").close()
             open(locations.depthSplsdaRdataFile + ".ok", "w").close()

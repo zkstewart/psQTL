@@ -102,6 +102,47 @@ auto_rerun_tuning <- function(mixomicsVersion, selected.X, Y, list.keepX, nrep, 
     return (select.keepX)
 }
 
+get_window_borders <- function(numberToChunk, chunks) {
+  stopifnot(is.numeric(numberToChunk), is.numeric(chunks))
+  numberToChunk <- as.integer(numberToChunk)
+  chunks <- as.integer(chunks)
+  
+  # Exit early if we can't make more than one chunk
+  if (numberToChunk < chunks) {
+    return(c(numberToChunk+1))
+  }
+  
+  # Determine number of chunks
+  numChunks <- ceiling(numberToChunk / chunks)
+  rawNum <- numberToChunk / numChunks
+  numRoundedUp <- round((rawNum %% 1) * numChunks, 0)
+  
+  # Identify points to split numberToChunk into distinct chunks
+  chunkPoints <- c()
+  ongoingCount <- 0
+  for (i in seq_len(numChunks)) {
+    if (i <= numRoundedUp) {
+      point <- ceiling(rawNum) + ongoingCount
+      if (point >= numberToChunk) {
+        break
+      }
+      chunkPoints <- c(chunkPoints, point)
+      ongoingCount <- ongoingCount + ceiling(rawNum)
+    } else {
+      point <- floor(rawNum) + ongoingCount
+      if (point >= numberToChunk) {
+        break
+      }
+      chunkPoints <- c(chunkPoints, point)
+      ongoingCount <- ongoingCount + floor(rawNum)
+    }
+  }
+  
+  # Make the last chunk exceed the ending
+  chunkPoints <- c(chunkPoints, numberToChunk+1)
+  return(chunkPoints)
+}
+
 # Establish parser
 p <- arg_parser("Run PLS-DA in windows across a genome, using sPLS-DA to select features that contribute to the model")
 
@@ -113,6 +154,7 @@ p <- add_argument(p, "ob", help="Output file for Balanced Error Rate (BER) by wi
 p <- add_argument(p, "or", help="Output file for Rdata objects", type = "character")
 p <- add_argument(p, "--threads", help="Threads to use", type = "numeric", default = 1)
 p <- add_argument(p, "--windowSize", help="Window size (default: 100000)", type="numeric", default=100000)
+p <- add_argument(p, "--windowSizeIsSNPs", help="If true, window size is interpreted as number of SNPs (default: false)", flag=TRUE, default=FALSE)
 p <- add_argument(p, "--berCutoff", help="BER cutoff (default: 0.4)", type="numeric", default=0.4)
 p <- add_argument(p, "--MAF", help="Minor Allele Frequency (MAF) filter (default: 0.05)", type="numeric", default=0.05)
 p <- add_argument(p, "--nrepeat", help="Number of repeats for stability analysis", type = "numeric", default = 10)
@@ -203,12 +245,40 @@ for (chromosome in unique(df$chrom))
 {
   chromDF <- df[df$chrom == chromosome,]
   chromLength <- max(chromDF$pos)+1 # +1 to ensure we include the last position in the chromosome
-  numWindows <- ceiling(chromLength / args$windowSize)
-  for (windowIndex in 1:numWindows)
+  
+  # Determine window start and end positions
+  chromWindows <- list()
+  if (windowSizeIsSNPs) {
+    chunkPoints <- get_window_borders(nrow(chromDF), args$windowSize)
+    windowStartIndex <- 1
+    for (windowEndIndex in chunkPoints)
+    {
+        windowStart <- chromDF[windowStartIndex,]$pos
+
+        # Adjust the final window end index so we don't go beyond nrow(chromDF)
+        if (windowEndIndex > nrow(chromDF)) {
+            windowEndIndex <- nrow(chromDF)
+        }
+        windowEnd <- chromDF[windowEndIndex,]$pos + 1 # later check is <, need to include this position
+        
+        chromWindows <- append(chromWindows, list(c(windowStart,windowEnd)))
+        windowStartIndex <- windowEndIndex
+    }
+  } else {
+    chunkPoints <- get_window_borders(chromLength, args$windowSize)
+    windowStart <- 1
+    for (windowEnd in chunkPoints)
+    {
+        chromWindows <- append(chromWindows, list(c(windowStart,windowEnd)))
+        windowStart <- windowEnd
+    }
+  }
+  
+  for (startEndPair in chromWindows)
   {
     # Extract variants in window
-    windowStart <- (windowIndex-1) * args$windowSize # 0-based index
-    windowEnd <- windowIndex * args$windowSize
+    windowStart <- startEndPair[1]
+    windowEnd <- startEndPair[2]
     windowDF <- chromDF[chromDF$pos >= windowStart & chromDF$pos < windowEnd,]
     windowDF <- windowDF[,! colnames(windowDF) %in% c("chrom", "pos"),drop=FALSE]
     
