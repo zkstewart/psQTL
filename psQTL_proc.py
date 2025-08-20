@@ -146,7 +146,10 @@ def main():
                          type=int,
                          required=False,
                          help="""Optionally, specify the window size that sPLS-DA will
-                         be run within (recommended: 100000)""",
+                         be run within (recommended: 100000, unless --windowSizeIsSNPs
+                         is set, in which case you should lower this according to some
+                         division of the number of variants you expect to find in each
+                         chromosome or contig)""",
                          default=100000)
     sparser.add_argument("--windowSizeIsSNPs", dest="windowSizeIsSNPs",
                          required=False,
