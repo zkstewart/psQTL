@@ -154,7 +154,7 @@ p <- add_argument(p, "ob", help="Output file for Balanced Error Rate (BER) by wi
 p <- add_argument(p, "or", help="Output file for Rdata objects", type = "character")
 p <- add_argument(p, "--threads", help="Threads to use", type = "numeric", default = 1)
 p <- add_argument(p, "--windowSize", help="Window size (default: 100000)", type="numeric", default=100000)
-p <- add_argument(p, "--windowSizeIsSNPs", help="If true, window size is interpreted as number of SNPs (default: false)", flag=TRUE, default=FALSE)
+p <- add_argument(p, "--windowSizeIsSNPs", help="If true, window size is interpreted as number of SNPs (default: false)", flag=TRUE)
 p <- add_argument(p, "--berCutoff", help="BER cutoff (default: 0.4)", type="numeric", default=0.4)
 p <- add_argument(p, "--MAF", help="Minor Allele Frequency (MAF) filter (default: 0.05)", type="numeric", default=0.05)
 p <- add_argument(p, "--nrepeat", help="Number of repeats for stability analysis", type = "numeric", default = 10)
