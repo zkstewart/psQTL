@@ -248,7 +248,7 @@ for (chromosome in unique(df$chrom))
   
   # Determine window start and end positions
   chromWindows <- list()
-  if (windowSizeIsSNPs) {
+  if (args$windowSizeIsSNPs) {
     chunkPoints <- get_window_borders(nrow(chromDF), args$windowSize)
     windowStartIndex <- 1
     for (windowEndIndex in chunkPoints)
