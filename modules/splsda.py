@@ -213,6 +213,8 @@ def run_windowed_splsda(metadataFile, encodedVcfFile, outputVariants, outputBER,
            "--threads", str(threads), "--windowSize", str(windowSize),
            "--berCutoff", str(berCutoff), "--MAF", str(maf),
             "--nrepeat", str(nrepeat), "--maxiters", str(maxiters)]
+    if windowSizeIsSNPs:
+        cmd.append("--windowSizeIsSNPs")
     
     # Run bcftools index
     run_Rscript = subprocess.Popen(" ".join(cmd), shell=True,
