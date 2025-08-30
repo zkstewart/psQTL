@@ -155,8 +155,8 @@ def main():
                          required=False,
                          action="store_true",
                          help="""Optionally, provide this flag to indicate that the value
-                         given to --splsdaWindowSize is the number of SNPs to include
-                         in each window, rather than the length in base pairs""",
+                         given to --splsdaWindowSize is the number of SNPs/CNVs to include
+                         in each window, rather than a length in base pairs""",
                          default=False)
     sparser.add_argument("--maf", dest="mafFilter",
                          type=float,
