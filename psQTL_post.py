@@ -316,7 +316,7 @@ def main():
     # Parse depth data if necessary
     if args.mode == "plot" and "coverage" in args.plotTypes and "depth" in args.inputType:
         depthFileDict = validate_depth_files(locations.depthDir, args.metadataDict, args.windowSize)
-        coverageDict = parse_bins_as_dict(depthFileDict, args.windowSize)
+        coverageDict = parse_bins_as_dict(depthFileDict)
         normalise_coverage_dict(coverageDict)
         dataDict["depth"]["ncls"] = convert_dict_to_depthncls(coverageDict, args.windowSize)
     

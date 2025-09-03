@@ -197,7 +197,7 @@ def call_cnvs_from_depth(samplePairs, outputFileName, windowSize, ploidy=2):
         fileOut.write(f"##psQTL_prep;module=depth, version={__version__}, windowSize={windowSize}; DD-MM-YYYY={todaysDate}\n")
         exploded_df.to_csv(fileOut, sep="\t", index=False)
 
-def parse_bins_as_dict(depthFileDict, windowSize):
+def parse_bins_as_dict(depthFileDict):
     '''
     Parameters:
         depthFileDict -- a dictionary with structure like:
@@ -209,7 +209,6 @@ def parse_bins_as_dict(depthFileDict, windowSize):
                             ],
                              "group2": [ ... ]
                          }
-        windowSize -- an integer indicating the size of the windows used for binning
     Returns:
         coverageDict -- a dictionary with structure like:
                   {
