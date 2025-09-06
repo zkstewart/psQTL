@@ -171,6 +171,10 @@ def simplify_depth(xy: np.ndarray, tolerance: Union[int, float]) -> np.ndarray:
 def round_to_pointfive(number):
     return round((number)*2)/2
 
+def isOverlapping(start1, end1, start2, end2):
+    """Does the range (start1, end1) overlap with (start2, end2)?"""
+    return end1 >= start2 and end2 >= start1
+
 def main():
     usage = """%(prog)s produces interactive plotly visualisation of median-normalised depths
     for each sample.
@@ -198,6 +202,11 @@ def main():
                    required=False,
                    help="""Optionally, specify the ploidy level to convert median-normalised
                    depth to putative allele count""",
+                   default=None)
+    p.add_argument("--smoothing", dest="smoothingWindow",
+                   required=False,
+                   type=int,
+                   help="""Optionally, specify the a window size to smooth data""",
                    default=None)
     p.add_argument("--outputBed", dest="outputBedFileName",
                    required=False,
@@ -242,6 +251,32 @@ def main():
                 xy = np.column_stack((x, y))
                 xy = simplify_depth(xy, 0)
                 simpleX, simpleY = xy[:, 0], xy[:, 1]
+                
+                # Smooth over genomic window size
+                if args.smoothingWindow and args.smoothingWindow > 1:
+                    flatX, flatY = [], []
+                    for xstart in range(int(simpleX[0]), int(simpleX[-1])+1, args.smoothingWindow):
+                        xend = xstart + args.smoothingWindow
+                        regionXY = np.array([
+                            (_x, _y)
+                            for _x, _y in xy
+                            if isOverlapping(_x, _x, xstart, xend)
+                        ])
+                        if len(regionXY) == 0:
+                            continue
+                        
+                        # Calculate the median
+                        _, medianY = np.median(regionXY, axis=0)
+                        medianY = round(medianY) # naturally moves value to the "poles" of 2 or 0 if inbetween
+                        
+                        # Store values
+                        flatX.extend([xstart, xend])
+                        flatY.extend([medianY, medianY])
+                    
+                    # Re-simplify after transform
+                    xy = np.column_stack((flatX, flatY))
+                    xy = simplify_depth(xy, 0)
+                    simpleX, simpleY = xy[:, 0], xy[:, 1]
                 
                 fig.add_trace(go.Scatter(x=simpleX, y=simpleY,
                                          mode="lines",
