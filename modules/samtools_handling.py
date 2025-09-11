@@ -117,8 +117,9 @@ def depth_to_histoDict(depthFile, lengthsDict, binSize):
             elif pos == 1:
                 contigZeroBase[contigID] = 1 # results in subtracting 1 from the position
             else:
-                raise ValueError(f"First line in contig {contigID} is not 0 or 1; please check " +
-                                 "that the input depth file is valid and produced by samtools depth.")
+                contigZeroBase[contigID] = 1 # assume samtools depth, which is 1-based; file may have been manually filtered
+                #raise ValueError(f"First line in contig {contigID} is not 0 or 1; please check " +
+                #                 "that the input depth file is valid and produced by samtools depth.")
         
         binIndex = (pos-contigZeroBase[contigID]) // binSize # adjust position to be 0-based if necessary
         histoDict[contigID][binIndex] += depth
