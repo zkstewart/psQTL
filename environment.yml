@@ -1,0 +1,24 @@
+name: psqtl
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  # R packages from conda-forge
+  - r-base
+  - r-argparser
+  - r-dplyr
+  - r-mixomics
+  
+  # Python packages from conda-forge
+  - biopython
+  - numpy
+  - pandas
+  - matplotlib
+  - pycirclize
+  - qt6-wayland
+  
+  # Bioinformatics tools from bioconda
+  - samtools
+  - bcftools
+  - vt
+  - ncls
