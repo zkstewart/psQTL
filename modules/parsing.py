@@ -1,6 +1,8 @@
 import gzip, codecs
 from contextlib import contextmanager
 
+from .ncls import RangeNCLS
+
 class WriteGzFile:
     def __init__(self, filename):
         self.filename = filename
@@ -146,7 +148,7 @@ def parse_binned_tsv(binFile):
     returns a dictionary mapping contig IDs to depth bins.
     
     Parameters:
-        binFile -- a strings indicating the path to a depth bin file
+        binFile -- a string indicating the path to a depth bin file
     Returns:
         histoDict -- a dictionary mapping contig IDs to depth bins
     '''
@@ -357,3 +359,36 @@ def parse_vcf_genotypes(formatField, sampleFields, samples):
         
         ongoingCount += 1
     return posGenotypeDict
+
+def parse_exclusions_tsv(exclusionsTsv):
+    '''
+    Receives a 3-column headerless TSV file with format:
+    
+    CHROM START END
+    
+    And returns a RangeNCLS object which can be queried to rapidly
+    identify whether a position overlaps an excluded range.
+    
+    Parameters:
+        exclusionsTsv -- a string indicating the path to a BED-like file
+    Returns:
+        exclusionsNCLS -- a RangeNCLS object indexing ranges to 
+    '''
+    exclusionsNCLS = RangeNCLS()
+    with read_gz_file(exclusionsTsv) as fileIn:
+        for line in fileIn:
+            # Parse out relevant details from this line
+            try:
+                contigID, start, end = line.rstrip("\r\n ").split("\t")
+                start, end = int(start), int(end)
+                if start > end:
+                    start, end = end, start
+            except ValueError:
+                raise(ValueError(f"Exclusions BED file is improperly formatted; offending line is '{line}'"))
+            
+            # Store the range
+            exclusionsNCLS.add(contigID, start, end)
+    
+    # Build the NCLS data structure then return
+    exclusionsNCLS.build()
+    return exclusionsNCLS

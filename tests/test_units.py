@@ -4,6 +4,7 @@ import os, sys, unittest, shutil, subprocess
 import numpy as np
 from collections import Counter
 
+sys.path.append("/mnt/c/git/psQTL") # DELETE
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from modules.parsing import parse_metadata, vcf_header_to_metadata_validation, parse_vcf_genotypes, \
     parse_vcf_stats, parse_samtools_depth_tsv, parse_binned_tsv, read_gz_file
@@ -17,6 +18,9 @@ from modules.gff3 import GFF3Graph
 from modules.plot import Plot
 
 # Specify data locations
+os.chdir("/mnt/c/git/psQTL/tests") # DELETE
+__file__="/mnt/c/git/psQTL/tests/test_units.py" # DELETE
+
 dataDir = os.path.join(os.getcwd(), "data")
 metadataFile = os.path.join(dataDir, "metadata.tsv")
 baseDir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -2416,5 +2420,5 @@ class TestPlot(unittest.TestCase):
         self.assertTrue(all(xLine == xLineTruth), f"Expected xLine to be {xLineTruth} but got {xLine}")
         self.assertTrue(all(yLine == yLineTruth), f"Expected yLine to be {yLineTruth} but got {yLine}")
 
-if __name__ == '__main__':
-    unittest.main()
+#if __name__ == '__main__':
+#    unittest.main()

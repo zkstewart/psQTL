@@ -178,6 +178,10 @@ if (!requireNamespace("dplyr", quietly=TRUE))
     install.packages("dplyr")
 library(dplyr)
 
+if (!requireNamespace("stringr", quietly=TRUE))
+    install.packages("stringr")
+library(stringr)
+
 # Set up parallel processing
 if (args$threads == 1) {
   BPPARAM <- BiocParallel::SerialParam()
@@ -294,7 +298,7 @@ for (chromosome in unique(df$chrom))
     # Skip windows with no variant presence
     if (nrow(windowDF) == 0)
     {
-        window.explanation[[window.index]] <- data.frame(chrom=chromosome, pos=windowStart, BER=0.5)
+        window.explanation[[window.index]] <- data.frame(chrom=chromosome, start=windowStart, end=windowEnd, BER=0.5)
         window.index <- window.index + 1
         next
     }
@@ -333,10 +337,10 @@ for (chromosome in unique(df$chrom))
         }
         
         # Store window and feature
-        window.explanation[[window.index]] <- data.frame(chrom=chromosome, pos=windowStart, BER=window.ber)
+        window.explanation[[window.index]] <- data.frame(chrom=chromosome, start=windowStart, end=windowEnd, BER=window.ber)
         window.index <- window.index + 1
 
-        selected.features[[selected.index]] <- cbind(data.frame(chrom=chromosome, pos=feature.pos, BER=window.ber), feature.row)
+        selected.features[[selected.index]] <- cbind(data.frame(chrom=chromosome, start=feature.pos, end=windowEnd, BER=window.ber), feature.row)
         selected.index <- selected.index + 1
         next
     }
@@ -344,7 +348,7 @@ for (chromosome in unique(df$chrom))
     # Detect scenario where only 1 variant site exists in a population
     if (sum(colSums(windowDF) > 0) < 2)
     {
-        window.explanation[[window.index]] <- data.frame(chrom=chromosome, pos=windowStart, BER=0.5)
+        window.explanation[[window.index]] <- data.frame(chrom=chromosome, start=windowStart, end=windowEnd, BER=0.5)
         window.index <- window.index + 1
         next
     }
@@ -392,7 +396,7 @@ for (chromosome in unique(df$chrom))
 
     # If performance could not be calculated, skip this window
     if (all(is.na(window.perf))) {
-        window.explanation[[window.index]] <- data.frame(chrom=chromosome, pos=windowStart, BER=0.5)
+        window.explanation[[window.index]] <- data.frame(chrom=chromosome, start=windowStart, end=windowEnd, BER=0.5)
         window.index <- window.index + 1
         next
     }
@@ -412,11 +416,11 @@ for (chromosome in unique(df$chrom))
     # Store window explanatory power if features are found
     if (nrow(window.features) == 0)
     {
-        window.explanation[[window.index]] <- data.frame(chrom=chromosome, pos=windowStart, BER=0.5)
+        window.explanation[[window.index]] <- data.frame(chrom=chromosome, start=windowStart, end=windowEnd, BER=0.5)
         window.index <- window.index + 1
         next
     }
-    window.explanation[[window.index]] <- data.frame(chrom=chromosome, pos=windowStart, BER=window.ber)
+    window.explanation[[window.index]] <- data.frame(chrom=chromosome, start=windowStart, end=windowEnd, BER=window.ber)
     window.index <- window.index + 1
 
     # Set up df for feature encodings and ensure its compatibility with the feature positions
@@ -434,7 +438,7 @@ for (chromosome in unique(df$chrom))
         feature.pos <- as.numeric(feature.pos[length(feature.pos)])
 
         encodings.row <- encodings.df[row.index,]
-        selected.features[[selected.index]] <- cbind(data.frame(chrom=chromosome, pos=feature.pos, BER=window.ber), encodings.row)
+        selected.features[[selected.index]] <- cbind(data.frame(chrom=chromosome, start=feature.pos, end=windowEnd, BER=window.ber), encodings.row)
         selected.index <- selected.index + 1
     }
   }
@@ -458,12 +462,12 @@ if (nrow(selected.features) == 0)
 }
 
 # Format features for sPLS-DA
-selected.df <- selected.features[, ! colnames(selected.features) %in% c("chrom", "pos", "BER")] # drop non-feature columns
+selected.df <- selected.features[, ! colnames(selected.features) %in% c("chrom", "start", "end", "BER")] # drop non-feature columns
 selected.df <- selected.df %>%
   mutate(across(everything(), as.numeric)) # convert feature values back into numeric, since it gets changed along the way
 
 selected.X <- t(selected.df)
-colnames(selected.X) <- make.names(paste0(selected.features$chrom, "_", selected.features$pos), unique=TRUE)
+colnames(selected.X) <- make.names(paste0(selected.features$chrom, "_", selected.features$start, "_", selected.features$end), unique=TRUE)
 
 # Tune sPLS-DA to choose number of genomic features
 if (ncol(selected.X) < 2)
@@ -569,9 +573,14 @@ stability.table <- stability.table[rownames(splsda.loadings),,drop=FALSE]
 
 # Join stability and loading values
 feature.details.table <- cbind(stability.table, splsda.loadings)
-feature.details.table[c("chrom", "pos")] <- do.call(rbind, strsplit(rownames(feature.details.table), "_(?=[^_]+$)", perl=TRUE))
-feature.details.table <- feature.details.table[,c("chrom", "pos", "Freq", "comp1", "direction")]
-colnames(feature.details.table) <- c("chrom", "pos", "stability", "abs_loading", "direction")
+
+# Split out the locations of the feature
+location.details <- str_match(rownames(feature.details.table), "^(.+)_(\\d+)_(\\d+)$")
+feature.details.table[c("chrom", "start", "end")] <- location.details[,2:4]
+
+# Sort and rename table columns
+feature.details.table <- feature.details.table[,c("chrom", "start", "end", "Freq", "comp1", "direction")]
+colnames(feature.details.table) <- c("chrom", "start", "end", "stability", "abs_loading", "direction")
 
 # Adjust BER to cap at 0.5
 window.explanation.adjusted <- window.explanation

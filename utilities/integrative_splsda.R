@@ -36,6 +36,10 @@ if (!requireNamespace("BiocParallel", quietly=TRUE))
     BiocManager::install("BiocParallel")
 library(BiocParallel)
 
+if (!requireNamespace("stringr", quietly=TRUE))
+    install.packages("stringr")
+library(stringr)
+
 # Identify mixOmics version
 mixomicsVersion = unlist(packageVersion("mixOmics"))
 
@@ -495,10 +499,14 @@ feature.details.table <- rbind(values.call, values.depth)
 # Reformat loading values for ease of interpretation
 feature.details.table$direction <- ifelse(feature.details.table$value.var > 0, "right", "left")
 feature.details.table$value.var <- abs(feature.details.table$value.var)
-feature.details.table[c("chrom", "pos")] <- do.call(rbind, strsplit(rownames(feature.details.table), "_(?=[^_]+$)", perl=TRUE))
 
-feature.details.table <- feature.details.table[,c("chrom", "pos", "type", "Freq", "value.var", "direction")]
-colnames(feature.details.table) <- c("chrom", "pos", "type", "stability", "abs_loading", "direction")
+# Split out the locations of the feature
+location.details <- str_match(rownames(feature.details.table), "^(.+)_(\\d+)_(\\d+)$")
+feature.details.table[c("chrom", "start", "end")] <- location.details[,2:4]
+
+# Sort and rename table columns and rows
+feature.details.table <- feature.details.table[,c("chrom", "start", "end", "type", "Freq", "value.var", "direction")]
+colnames(feature.details.table) <- c("chrom", "start", "end", "type", "stability", "abs_loading", "direction")
 feature.details.table <- feature.details.table[order(feature.details.table$stability, decreasing = TRUE),,drop=FALSE]
 
 # Write selected variants to file
