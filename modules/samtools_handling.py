@@ -1,7 +1,6 @@
-import os, shutil, subprocess, math
+import shutil, subprocess, math
 import concurrent.futures
 import numpy as np
-from itertools import repeat
 
 from .parsing import parse_samtools_depth_tsv
 

@@ -1,6 +1,5 @@
 import os, shutil, subprocess
 import concurrent.futures
-from itertools import repeat
 
 from .parsing import read_gz_file
 

@@ -4,7 +4,7 @@
 # 'proc'ess it to calculate Euclidean distance values of variants or CNVs among groups.
 # These results can then be used as input to psQTL_post.py to plot and tabulate relevant details.
 
-import os, argparse, sys, gzip
+import os, argparse, sys
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from modules.validation import validate_proc_args, validate_c, validate_d, validate_s

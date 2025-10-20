@@ -1,5 +1,4 @@
-import os, subprocess, re
-from pycirclize.parser import Gff
+import os, re
 
 from .locations import Locations
 from .parameters import ParameterCache

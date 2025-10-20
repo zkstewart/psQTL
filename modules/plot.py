@@ -1,6 +1,5 @@
 import math, re
 import numpy as np
-import pandas as pd
 import matplotlib.pyplot as plt
 
 from Bio.SeqFeature import SeqFeature, SimpleLocation, ExactPosition

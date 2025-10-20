@@ -1,4 +1,4 @@
-import os, gzip, codecs
+import gzip, codecs
 from contextlib import contextmanager
 
 class WriteGzFile:

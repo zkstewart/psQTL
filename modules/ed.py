@@ -1,5 +1,5 @@
 import numpy as np
-from math import sqrt, ceil
+from math import sqrt
 from statistics import mean
 from collections import Counter
 from itertools import combinations

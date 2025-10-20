@@ -1,4 +1,4 @@
-import os, shutil, subprocess, gzip
+import shutil, subprocess, gzip
 import numpy as np
 from collections import Counter
 
