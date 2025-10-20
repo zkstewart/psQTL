@@ -2,7 +2,7 @@ import shutil, subprocess, math
 import concurrent.futures
 import numpy as np
 
-from .parsing import parse_samtools_depth_tsv
+from .parsing import parse_samtools_depth_tsv, WriteGzFile
 
 # Validation functions
 def validate_samtools_exists():
@@ -49,13 +49,15 @@ def depth_task(ioPair):
     
     # Format command
     cmd = ["samtools", "depth", "-a", "-q", "13", inputBamFile]
+    if outputFileName.endswith(".gz"):
+        cmd.append(["|", "gzip", "-c", ">", outputFileName])
+    else:
+        cmd.append([">", outputFileName])
     
     # Run samtools depth
-    with open(outputFileName, "w") as fileOut:
-        run_depth = subprocess.Popen(" ".join(cmd), shell=True,
-                                     stdout = fileOut,
-                                     stderr = subprocess.PIPE)
-        depthout, deptherr = run_depth.communicate()
+    run_depth = subprocess.Popen(" ".join(cmd), shell=True,
+                                 stderr = subprocess.PIPE)
+    depthout, deptherr = run_depth.communicate()
     
     # Check for errors
     if run_depth.returncode == 0:
@@ -141,7 +143,7 @@ def bin_task(ioPair, lengthsDict, binSize):
     histoDict = depth_to_histoDict(depthFile, lengthsDict, binSize)
     
     # Write the binned depth values to a file
-    with open(outputFileName, "w") as fileOut:
+    with WriteGzFile(outputFileName) as fileOut:
         for contigID, depthList in histoDict.items():
             for binIndex, depthValue in enumerate(depthList):
                 fileOut.write(f"{contigID}\t{binIndex * binSize}\t{depthValue}\n")

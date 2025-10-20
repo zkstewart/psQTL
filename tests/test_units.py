@@ -1087,7 +1087,7 @@ class TestMain(unittest.TestCase):
         gff3File = os.path.join(dataDir, "fulltest.1.gff3")
         
         edTruth = "chr1\t10\tsnp\t42\t42\t98\t98\t1.0678755470980512" # 1.0967370483709717 if genotype inheritance is used
-        berTruth = "chr1\t0\t0.0714285714285715\n"
+        berTruth = "chr1\t1\t0.0714285714285715\n"
         selectedTruth = "chr1\t10\t1\t1\tleft\n"
         recodeTruth = ['chrom\tpos\tbulk1_1\tbulk1_10\tbulk1_11\tbulk1_12\tbulk1_13\tbulk1_14\tbulk1_15\tbulk1_16\tbulk1_17\tbulk1_18\tbulk1_19\tbulk1_2\tbulk1_20\tbulk1_21\tbulk1_3\tbulk1_4\tbulk1_5\tbulk1_6\tbulk1_7\tbulk1_8\tbulk1_9\tbulk2_1\tbulk2_10\tbulk2_11\tbulk2_12\tbulk2_13\tbulk2_14\tbulk2_15\tbulk2_16\tbulk2_17\tbulk2_18\tbulk2_19\tbulk2_2\tbulk2_20\tbulk2_21\tbulk2_22\tbulk2_23\tbulk2_24\tbulk2_25\tbulk2_26\tbulk2_27\tbulk2_28\tbulk2_29\tbulk2_3\tbulk2_30\tbulk2_31\tbulk2_32\tbulk2_33\tbulk2_34\tbulk2_35\tbulk2_36\tbulk2_37\tbulk2_38\tbulk2_39\tbulk2_4\tbulk2_40\tbulk2_41\tbulk2_42\tbulk2_43\tbulk2_44\tbulk2_45\tbulk2_46\tbulk2_47\tbulk2_48\tbulk2_49\tbulk2_5\tbulk2_6\tbulk2_7\tbulk2_8\tbulk2_9',
                        'chr1\t10\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t1\t1\t2\t2\t2\t1\t2\t2\t1\t0\t2\t1\t1\t2\t1\t1\t0\t1\t0\t1\t0\t0\t0\t0\t0']
@@ -1160,7 +1160,7 @@ class TestMain(unittest.TestCase):
         genomeFile = os.path.join(dataDir, "genome.fasta")
         
         edTruth = "chr1\t10\tsnp\t0\t42\t20\t98\t0"
-        berTruth = "chr1\t0\t0.0714285714285715\n"
+        berTruth = "chr1\t1\t0.0714285714285715\n"
         selectedTruth = "chr1\t10\t1\t1\tleft\n"
         recodeTruth = ['chrom\tpos\tbulk1_1\tbulk1_10\tbulk1_11\tbulk1_12\tbulk1_13\tbulk1_14\tbulk1_15\tbulk1_16\tbulk1_17\tbulk1_18\tbulk1_19\tbulk1_2\tbulk1_20\tbulk1_21\tbulk1_3\tbulk1_4\tbulk1_5\tbulk1_6\tbulk1_7\tbulk1_8\tbulk1_9\tbulk2_1\tbulk2_10\tbulk2_11\tbulk2_12\tbulk2_13\tbulk2_14\tbulk2_15\tbulk2_16\tbulk2_17\tbulk2_18\tbulk2_19\tbulk2_2\tbulk2_20\tbulk2_21\tbulk2_22\tbulk2_23\tbulk2_24\tbulk2_25\tbulk2_26\tbulk2_27\tbulk2_28\tbulk2_29\tbulk2_3\tbulk2_30\tbulk2_31\tbulk2_32\tbulk2_33\tbulk2_34\tbulk2_35\tbulk2_36\tbulk2_37\tbulk2_38\tbulk2_39\tbulk2_4\tbulk2_40\tbulk2_41\tbulk2_42\tbulk2_43\tbulk2_44\tbulk2_45\tbulk2_46\tbulk2_47\tbulk2_48\tbulk2_49\tbulk2_5\tbulk2_6\tbulk2_7\tbulk2_8\tbulk2_9',
                        'chr1\t10\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t1\t1\t2\t2\t2\t1\t2\t2\t1\t0\t2\t1\t1\t2\t1\t1\t0\t1\t0\t1\t0\t0\t0\t0\t0']
@@ -1236,7 +1236,7 @@ class TestMain(unittest.TestCase):
         genomeFile = os.path.join(dataDir, "genome.fasta")
         
         edTruth = "chr1\t10\tsnp\t42\t42\t58\t58\t1.4142135623730951"
-        berTruth = "chr1\t0\t0\n"
+        berTruth = "chr1\t1\t0\n"
         selectedTruth = "chr1\t10\t1\t1\tleft\n"
         recodeTruth = ['chrom\tpos\tbulk1_1\tbulk1_10\tbulk1_11\tbulk1_12\tbulk1_13\tbulk1_14\tbulk1_15\tbulk1_16\tbulk1_17\tbulk1_18\tbulk1_19\tbulk1_2\tbulk1_20\tbulk1_21\tbulk1_3\tbulk1_4\tbulk1_5\tbulk1_6\tbulk1_7\tbulk1_8\tbulk1_9\tbulk2_1\tbulk2_10\tbulk2_11\tbulk2_12\tbulk2_13\tbulk2_14\tbulk2_15\tbulk2_16\tbulk2_17\tbulk2_18\tbulk2_19\tbulk2_2\tbulk2_20\tbulk2_21\tbulk2_22\tbulk2_23\tbulk2_24\tbulk2_25\tbulk2_26\tbulk2_27\tbulk2_28\tbulk2_29\tbulk2_3\tbulk2_4\tbulk2_5\tbulk2_6\tbulk2_7\tbulk2_8\tbulk2_9',
                        'chr1\t10\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0']
@@ -1312,7 +1312,7 @@ class TestMain(unittest.TestCase):
         genomeFile = os.path.join(dataDir, "genome.fasta")
         
         edTruth = "chr1\t10\tsnp\t0\t42\t0\t58\t0"
-        berTruth = "chr1\t0\t0\n"
+        berTruth = "chr1\t1\t0\n"
         selectedTruth = "chr1\t10\t1\t1\tleft\n"
         recodeTruth = ['chrom\tpos\tbulk1_1\tbulk1_10\tbulk1_11\tbulk1_12\tbulk1_13\tbulk1_14\tbulk1_15\tbulk1_16\tbulk1_17\tbulk1_18\tbulk1_19\tbulk1_2\tbulk1_20\tbulk1_21\tbulk1_3\tbulk1_4\tbulk1_5\tbulk1_6\tbulk1_7\tbulk1_8\tbulk1_9\tbulk2_1\tbulk2_10\tbulk2_11\tbulk2_12\tbulk2_13\tbulk2_14\tbulk2_15\tbulk2_16\tbulk2_17\tbulk2_18\tbulk2_19\tbulk2_2\tbulk2_20\tbulk2_21\tbulk2_22\tbulk2_23\tbulk2_24\tbulk2_25\tbulk2_26\tbulk2_27\tbulk2_28\tbulk2_29\tbulk2_3\tbulk2_4\tbulk2_5\tbulk2_6\tbulk2_7\tbulk2_8\tbulk2_9',
                        'chr1\t10\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0']
@@ -1388,7 +1388,7 @@ class TestMain(unittest.TestCase):
         genomeFile = os.path.join(dataDir, "genome.fasta")
         
         edTruth = "chr1\t10\tsnp\t84\t84\t196\t196\t1.0678755470980512" # twice as many alleles, same ED as diploid version
-        berTruth = "chr1\t0\t0.0714285714285715\n"
+        berTruth = "chr1\t1\t0.0714285714285715\n"
         selectedTruth = "chr1\t10\t1\t1\tleft\n"
         recodeTruth = ['chrom\tpos\tbulk1_1\tbulk1_10\tbulk1_11\tbulk1_12\tbulk1_13\tbulk1_14\tbulk1_15\tbulk1_16\tbulk1_17\tbulk1_18\tbulk1_19\tbulk1_2\tbulk1_20\tbulk1_21\tbulk1_3\tbulk1_4\tbulk1_5\tbulk1_6\tbulk1_7\tbulk1_8\tbulk1_9\tbulk2_1\tbulk2_10\tbulk2_11\tbulk2_12\tbulk2_13\tbulk2_14\tbulk2_15\tbulk2_16\tbulk2_17\tbulk2_18\tbulk2_19\tbulk2_2\tbulk2_20\tbulk2_21\tbulk2_22\tbulk2_23\tbulk2_24\tbulk2_25\tbulk2_26\tbulk2_27\tbulk2_28\tbulk2_29\tbulk2_3\tbulk2_30\tbulk2_31\tbulk2_32\tbulk2_33\tbulk2_34\tbulk2_35\tbulk2_36\tbulk2_37\tbulk2_38\tbulk2_39\tbulk2_4\tbulk2_40\tbulk2_41\tbulk2_42\tbulk2_43\tbulk2_44\tbulk2_45\tbulk2_46\tbulk2_47\tbulk2_48\tbulk2_49\tbulk2_5\tbulk2_6\tbulk2_7\tbulk2_8\tbulk2_9',
                        'chr1\t10\t4\t4\t4\t4\t4\t4\t4\t4\t4\t4\t4\t4\t4\t4\t4\t4\t4\t4\t4\t4\t4\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t2\t2\t4\t4\t4\t2\t4\t4\t2\t0\t4\t2\t2\t4\t2\t2\t0\t2\t0\t2\t0\t0\t0\t0\t0']
@@ -1464,7 +1464,7 @@ class TestMain(unittest.TestCase):
         genomeFile = os.path.join(dataDir, "genome.fasta")
         
         edTruth = "chr1\t10\tsnp\t0\t84\t40\t196\t0"
-        berTruth = "chr1\t0\t0.0714285714285715\n"
+        berTruth = "chr1\t1\t0.0714285714285715\n"
         selectedTruth = "chr1\t10\t1\t1\tleft\n"
         recodeTruth = ['chrom\tpos\tbulk1_1\tbulk1_10\tbulk1_11\tbulk1_12\tbulk1_13\tbulk1_14\tbulk1_15\tbulk1_16\tbulk1_17\tbulk1_18\tbulk1_19\tbulk1_2\tbulk1_20\tbulk1_21\tbulk1_3\tbulk1_4\tbulk1_5\tbulk1_6\tbulk1_7\tbulk1_8\tbulk1_9\tbulk2_1\tbulk2_10\tbulk2_11\tbulk2_12\tbulk2_13\tbulk2_14\tbulk2_15\tbulk2_16\tbulk2_17\tbulk2_18\tbulk2_19\tbulk2_2\tbulk2_20\tbulk2_21\tbulk2_22\tbulk2_23\tbulk2_24\tbulk2_25\tbulk2_26\tbulk2_27\tbulk2_28\tbulk2_29\tbulk2_3\tbulk2_30\tbulk2_31\tbulk2_32\tbulk2_33\tbulk2_34\tbulk2_35\tbulk2_36\tbulk2_37\tbulk2_38\tbulk2_39\tbulk2_4\tbulk2_40\tbulk2_41\tbulk2_42\tbulk2_43\tbulk2_44\tbulk2_45\tbulk2_46\tbulk2_47\tbulk2_48\tbulk2_49\tbulk2_5\tbulk2_6\tbulk2_7\tbulk2_8\tbulk2_9',
                        'chr1\t10\t4\t4\t4\t4\t4\t4\t4\t4\t4\t4\t4\t4\t4\t4\t4\t4\t4\t4\t4\t4\t4\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t2\t2\t4\t4\t4\t2\t4\t4\t2\t0\t4\t2\t2\t4\t2\t2\t0\t2\t0\t2\t0\t0\t0\t0\t0']

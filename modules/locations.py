@@ -1,6 +1,8 @@
 import os
 
 class Locations:
+    depthSuffix = ".depth.tsv.gz"
+    
     def __init__(self, workingDirectory):
         self.workingDirectory = workingDirectory
     
@@ -29,10 +31,6 @@ class Locations:
         return os.path.join(self.workingDirectory, "splsda")
     
     # Naive file properties
-    @property
-    def depthSuffix(self):
-        return ".depth.tsv"
-    
     @property
     def finalDepthFile(self):
         return os.path.join(self.depthDir, "psQTL_depth.vcf.gz")

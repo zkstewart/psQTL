@@ -352,7 +352,7 @@ def validate_depth_files(depthDir, metadataDict, windowSize):
     depthFileDict = {"group1": [], "group2": []}
     for group, sampleList in metadataDict.items():
         for sample in sampleList:
-            depthFile = os.path.join(depthDir, f"{sample}.binned.{windowSize}.tsv")
+            depthFile = os.path.join(depthDir, f"{sample}.binned.{windowSize}{Locations.depthSuffix}")
             if not os.path.isfile(depthFile):
                 notFound.append(sample)
             else:

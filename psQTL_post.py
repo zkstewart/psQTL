@@ -11,6 +11,7 @@ from Bio import SeqIO
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from modules.validation import validate_post_args, validate_regions, validate_depth_files, \
                                validate_p, validate_r
+from modules.parsing import read_gz_file
 from modules.depth import parse_bins_as_dict, normalise_coverage_dict, convert_dict_to_depthncls
 from modules.ed import parse_ed_as_dict, convert_dict_to_windowed_ncls
 from modules.splsda import parse_selected_to_windowed_ncls, parse_ber_to_windowed_ncls, \
@@ -232,8 +233,9 @@ def main():
         validate_r(args)
     
     # Get contig lengths from genome FASTA
-    genomeRecords = SeqIO.parse(open(args.genomeFasta, 'r'), "fasta")
-    lengthsDict = { record.id:len(record) for record in genomeRecords }
+    with read_gz_file(args.genomeFasta) as fileIn:
+        genomeRecords = SeqIO.parse(fileIn, "fasta")
+        lengthsDict = { record.id:len(record) for record in genomeRecords }
     if lengthsDict == {}:
         raise ValueError(f"No contigs found in genome FASTA '{args.genomeFasta}'; is it actually a FASTA file?")
     
