@@ -227,8 +227,17 @@ def run_windowed_splsda(metadataFile, encodedVcfFile, outputVariants, outputBER,
         return None
     else:
         errorMsg = rerr.decode("utf-8").rstrip("\r\n ")
-        raise Exception(("run_windowed_splsda encountered an unhandled situation when processing " + 
-                         f"'{encodedVcfFile}'; have a look at the stderr to make sense of this:\n'{errorMsg}'"))
+        if "Y variable must have exactly two unique values" in errorMsg:
+            raise ValueError(f"Metadata seems to not have two groups; see original error message:\n{errorMsg}")
+        elif "Y variable is expected to only have" in errorMsg:
+            raise ValueError(f"Metadata seems to have unrecognised group labels; see original error message:\n{errorMsg}")
+        elif "has no variants" in errorMsg:
+            raise ValueError(f"There seem to be no variants available for sPLS-DA; see original error message:\n{errorMsg}")
+        elif "Error with ordering of encoded and selected features" in errorMsg:
+            raise Exception(f"Unexpected internal logic error in sPLS-DA code; see original error message:\n{errorMsg}")
+        else:
+            raise Exception(("run_windowed_splsda encountered an unrecoverable problem when processing " + 
+                             f"'{encodedVcfFile}'; have a look at the stderr to make sense of this:\n'{errorMsg}'"))
 
 def run_integrative_splsda(callRdataFile, depthRdataFile, outputSelected, outputPredictions,
                            scriptLocation, threads=1, nrepeat=10, maxiters=1000):
@@ -262,9 +271,16 @@ def run_integrative_splsda(callRdataFile, depthRdataFile, outputSelected, output
         return None
     else:
         errorMsg = rerr.decode("utf-8").rstrip("\r\n ")
-        raise Exception(("run_integrative_splsda encountered an unhandled situation when processing " + 
-                         f"'{callRdataFile}' and '{depthRdataFile}'; have a look at the stderr to " + 
-                         f"make sense of this:\n'{errorMsg}'"))
+        if "Integrative sPLS-DA is not possible or necessary" in errorMsg:
+            print(f"# Note: {errorMsg}; this does not constitute an error, and program operations will continue sans integrative predictions")
+        elif "X sample names do not match across datasets" in errorMsg:
+            raise Exception(f"'call' and 'depth' result sample names do not match (are you using combining results somehow?); see original error message:\n{errorMsg}")
+        elif "Y variables do not match across datasets" in errorMsg:
+            raise Exception(f"'call' and 'depth' result metadata do not match (are you using combining results somehow?); see original error message:\n{errorMsg}")
+        else:
+            raise Exception(("run_integrative_splsda encountered an unhandled situation when processing " + 
+                             f"'{callRdataFile}' and '{depthRdataFile}'; have a look at the stderr to " + 
+                             f"make sense of this:\n'{errorMsg}'"))
 
 def parse_selected_to_windowed_ncls(selectedFileName, windowSize=1):
     '''
