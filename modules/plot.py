@@ -184,8 +184,8 @@ class Plot:
         if value is None:
             self._callED = None
             return
-        if not hasattr(value, "isWindowedNCLS") or not value.isWindowedNCLS:
-            raise TypeError("callED must be a WindowedNCLS object")
+        if (not hasattr(value, "isWindowedNCLS") or not value.isWindowedNCLS) and (not hasattr(value, "isRangeNCLS") or not value.isRangeNCLS):
+            raise TypeError("callED must be a WindowedNCLS or RangeNCLS object")
         self._callED = value
     
     @property
@@ -197,8 +197,8 @@ class Plot:
         if value is None:
             self._depthED = None
             return
-        if not hasattr(value, "isWindowedNCLS") or not value.isWindowedNCLS:
-            raise TypeError("depthED must be a WindowedNCLS object")
+        if (not hasattr(value, "isWindowedNCLS") or not value.isWindowedNCLS) and (not hasattr(value, "isRangeNCLS") or not value.isRangeNCLS):
+            raise TypeError("depthED must be a WindowedNCLS or RangeNCLS object")
         self._depthED = value
     
     @property
@@ -215,8 +215,8 @@ class Plot:
         if not len(value) == 2:
             raise ValueError("callSPLSDA must be a list or tuple of length 2")
         for i, val in enumerate(value):
-            if not hasattr(val, "isWindowedNCLS") or not val.isWindowedNCLS:
-                raise TypeError(f"callSPLSDA[{i}] must be a WindowedNCLS object")
+            if (not hasattr(val, "isWindowedNCLS") or not val.isWindowedNCLS) and (not hasattr(val, "isRangeNCLS") or not val.isRangeNCLS):
+                raise TypeError(f"callSPLSDA[{i}] must be a WindowedNCLS or RangeNCLS object")
         self._callSPLSDA = value
     
     @property
@@ -233,8 +233,8 @@ class Plot:
         if not len(value) == 2:
             raise ValueError("depthSPLSDA must be a list or tuple of length 2")
         for i, val in enumerate(value):
-            if not hasattr(val, "isWindowedNCLS") or not val.isWindowedNCLS:
-                raise TypeError(f"depthSPLSDA[{i}] must be a WindowedNCLS object")
+            if (not hasattr(val, "isWindowedNCLS") or not val.isWindowedNCLS) and (not hasattr(val, "isRangeNCLS") or not val.isRangeNCLS):
+                raise TypeError(f"depthSPLSDA[{i}] must be a WindowedNCLS or RangeNCLS object")
         self._depthSPLSDA = value
     
     @property
@@ -251,8 +251,8 @@ class Plot:
         if not len(value) == 2:
             raise ValueError("integratedSPLSDA must be a list or tuple of length 2")
         for i, val in enumerate(value):
-            if not hasattr(val, "isWindowedNCLS") or not val.isWindowedNCLS:
-                raise TypeError(f"integratedSPLSDA[{i}] must be a WindowedNCLS object")
+            if (not hasattr(val, "isWindowedNCLS") or not val.isWindowedNCLS) and (not hasattr(val, "isRangeNCLS") or not val.isRangeNCLS):
+                raise TypeError(f"integratedSPLSDA[{i}] must be a WindowedNCLS or RangeNCLS object")
         self._integratedSPLSDA = value
     
     @property
@@ -270,8 +270,8 @@ class Plot:
             raise ValueError("coverageNCLSDict must have keys 'group1' and 'group2'")
         for group, sampleDict in value.items():
             for sampleID, sampleValue in sampleDict.items():
-                if not hasattr(sampleValue, "isWindowedNCLS") or not sampleValue.isWindowedNCLS:
-                    raise TypeError("coverageNCLSDict must index WindowedNCLS objects")
+                if (not hasattr(sampleValue, "isWindowedNCLS") or not sampleValue.isWindowedNCLS) and (not hasattr(sampleValue, "isRangeNCLS") or not sampleValue.isRangeNCLS):
+                    raise TypeError("coverageNCLSDict must index WindowedNCLS or RangeNCLS objects")
         self._coverageNCLSDict = value
     
     @property
