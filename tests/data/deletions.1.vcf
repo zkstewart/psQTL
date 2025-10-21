@@ -1,8 +1,6 @@
 ##fileformat=VCF-like
-##0/0=nodeletion
-##0/1=hemizygousdeletion
-##1/1=homozygousdeletion
-##psQTL_prepDeletionPrediction
+##FORMAT=<ID=GT,Number=1,Type=String,Description="Sums to number of median-normalised allele copies">
+##psQTL_prep;module=depth, version=1.3.7, windowSize=1000; DD-MM-YYYY=21-10-2025
 #CHROM	POS	ID	REF	ALT	QUAL	FILTER	INFO	FORMAT	S48	S57	S56	S78	S59	S79	S62	S53	S55	S91	S87	S94	S44	S67	S61	S73	S60	S80	S45	S77	S51	S90	S88	S75	S58	S65	S72	S64	S49	S92	S85	S83	S89	S81	S84	S63	S93	S54	S70	S82	S76	S50	S69	S47	S46	S52	S68	S66	S71	S86	S95	S74
 C.glau_02	36143000	.	N	N	.	.	.	GT	0/1	0/0	0/1	0/0	0/1	0/1	0/0	0/0	0/1	0/0	0/1	0/1	0/1	0/1	0/0	0/0	0/1	0/1	0/0	0/1	0/1	0/1	0/0	0/1	0/1	0/0	0/0	0/1	0/0	0/1	0/0	0/0	0/0	0/1	0/1	0/0	0/0	0/1	0/1	0/1	0/1	0/1	1/1	0/0	0/0	0/0	0/0	0/0	0/0	0/1	0/1	0/0
 C.glau_02	36144000	.	N	N	.	.	.	GT	1/2	0/1	1/2	0/1	0/1	0/1	0/1	0/0	0/1	0/0	1/2	0/0	0/1	0/1	0/0	0/0	0/0	1/2	0/0	1/2	0/1	1/2	0/0	1/2	1/2	0/0	0/1	1/2	0/0	1/2	0/1	0/0	0/0	1/2	0/0	0/1	0/1	1/2	1/2	2/2	1/2	1/2	1/2	0/1	0/1	0/0	0/1	0/0	0/1	1/1	1/2	0/0
