@@ -286,14 +286,22 @@ for (chromosome in unique(df$chrom))
     }
   }
   
-  for (startEndPair in chromWindows)
+  for (windowIndex in 1:length(chromWindows))
   {
     # Extract variants in window
+    startEndPair <- unlist(chromWindows[windowIndex])
     windowStart <- startEndPair[1]
     windowEnd <- startEndPair[2]
     windowDF <- chromDF[chromDF$start >= windowStart & chromDF$start < windowEnd,]
     windowDF <- windowDF[,! colnames(windowDF) %in% c("chrom", "start", "end"),drop=FALSE]
     
+    # Adjust windowEnd if this is the final chromosome window
+    ## get_window_borders() adds +1 to the final window for inclusive indexing, but for results presentation this is undesirable
+    if (windowIndex == length(chromWindows))
+    {
+        windowEnd <- windowEnd - 1
+    }
+
     # Drop any variants with NA values
     windowDF <- na.omit(windowDF)
     
@@ -306,7 +314,7 @@ for (chromosome in unique(df$chrom))
     # Skip windows with no variant presence
     if (nrow(windowDF) == 0)
     {
-        window.explanation[[window.index]] <- data.frame(chrom=chromosome, start=windowStart, end=windowEnd, BER=0.5)
+        window.explanation[[window.index]] <- data.frame(chrom=chromosome, start=windowStart, end=windowEnd-1, BER=0.5) # -1 to offset inclusive indexing
         window.index <- window.index + 1
         next
     }
@@ -344,7 +352,7 @@ for (chromosome in unique(df$chrom))
         }
         
         # Store window and feature
-        window.explanation[[window.index]] <- data.frame(chrom=chromosome, start=windowStart, end=windowEnd, BER=window.ber)
+        window.explanation[[window.index]] <- data.frame(chrom=chromosome, start=windowStart, end=windowEnd-1, BER=window.ber)
         window.index <- window.index + 1
 
         selected.features[[selected.index]] <- cbind(data.frame(chrom=chromosome, start=feature.pos$start, end=feature.pos$end, BER=window.ber), feature.row)
@@ -355,7 +363,7 @@ for (chromosome in unique(df$chrom))
     # Detect scenario where only 1 variant site exists in a population
     if (sum(colSums(windowDF) > 0) < 2)
     {
-        window.explanation[[window.index]] <- data.frame(chrom=chromosome, start=windowStart, end=windowEnd, BER=0.5)
+        window.explanation[[window.index]] <- data.frame(chrom=chromosome, start=windowStart, end=windowEnd-1, BER=0.5)
         window.index <- window.index + 1
         next
     }
@@ -403,7 +411,7 @@ for (chromosome in unique(df$chrom))
 
     # If performance could not be calculated, skip this window
     if (all(is.na(window.perf))) {
-        window.explanation[[window.index]] <- data.frame(chrom=chromosome, start=windowStart, end=windowEnd, BER=0.5)
+        window.explanation[[window.index]] <- data.frame(chrom=chromosome, start=windowStart, end=windowEnd-1, BER=0.5)
         window.index <- window.index + 1
         next
     }
@@ -423,11 +431,11 @@ for (chromosome in unique(df$chrom))
     # Store window explanatory power if features are found
     if (nrow(window.features) == 0)
     {
-        window.explanation[[window.index]] <- data.frame(chrom=chromosome, start=windowStart, end=windowEnd, BER=0.5)
+        window.explanation[[window.index]] <- data.frame(chrom=chromosome, start=windowStart, end=windowEnd-1, BER=0.5)
         window.index <- window.index + 1
         next
     }
-    window.explanation[[window.index]] <- data.frame(chrom=chromosome, start=windowStart, end=windowEnd, BER=window.ber)
+    window.explanation[[window.index]] <- data.frame(chrom=chromosome, start=windowStart, end=windowEnd-1, BER=window.ber)
     window.index <- window.index + 1
 
     # Set up df for feature encodings and ensure its compatibility with the feature positions

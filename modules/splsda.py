@@ -132,7 +132,9 @@ def recode_vcf(vcfFile, outputFileName, metadataDict, isCNV=False, quiet=False):
     number is below or equal to the median (0) or above the median (1).
     
     The output file is a TSV file with the following format:
-    [chrom, pos, sample1EncodedGT, sample2EncodedGT, ...]
+    [chrom, start, end, sample1EncodedGT, sample2EncodedGT, ...]
+    
+    Start and end give the borders of the variant (1-based and inclusive).
     
     Parameters:
         vcfFile -- a string indicating the location of the input VCF file; can be gzipped
@@ -187,7 +189,7 @@ def recode_vcf(vcfFile, outputFileName, metadataDict, isCNV=False, quiet=False):
                 gtFields = recode_variant(gtIndex, [ sl[9:][i] for i in sampleIndices ])
             
             # Format the output line
-            encodedLine = [sl[0], sl[1], str(int(sl[1]) + windowSize), *gtFields]
+            encodedLine = [sl[0], sl[1], str(int(sl[1]) + windowSize - 1), *gtFields]
             
             # Write to output file
             fileOut.write("\t".join(encodedLine) + "\n")
