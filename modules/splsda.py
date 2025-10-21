@@ -1,7 +1,7 @@
-import shutil, subprocess, gzip
+import shutil, subprocess, re
 from collections import Counter
 
-from .parsing import read_gz_file
+from .parsing import read_gz_file, WriteGzFile
 from .ncls import RangeNCLS
 from .ed import gt_median_adjustment
 from .parsing import vcf_header_to_metadata_validation
@@ -140,7 +140,11 @@ def recode_vcf(vcfFile, outputFileName, metadataDict, isCNV=False, quiet=False):
         isCNV -- (OPTIONAL) a boolean indicating whether the genotypes are for CNVs
                  (True) or SNPs/indels (False); default is False
     '''
-    with read_gz_file(vcfFile) as fileIn, gzip.open(outputFileName, "wt") as fileOut:
+    windowSize = 1 # default value; will be reset if parsing a CNV file
+    windowSizeRegex = re.compile(r"windowSize=(\d+)")
+    
+    # Parse through the file and write the recoded output
+    with read_gz_file(vcfFile) as fileIn, WriteGzFile(outputFileName) as fileOut:
         for line in fileIn:
             sl = line.strip().split("\t")
             
@@ -155,9 +159,17 @@ def recode_vcf(vcfFile, outputFileName, metadataDict, isCNV=False, quiet=False):
                 sampleIndices = [ sl[9:].index(name) for name in foundSampleNames ]
                 
                 # Write the header line to the output file
-                fileOut.write("\t".join(["chrom", "pos"] + [ sl[9:][i] for i in sampleIndices ]) + "\n")
+                fileOut.write("\t".join(["chrom", "start", "end"] + [ sl[9:][i] for i in sampleIndices ]) + "\n")
             
-            # Skip comment lines
+            # Parse the psQTL_prep comment line
+            if line.startswith("##psQTL_prep"):
+                regexHit = windowSizeRegex.search(line)
+                if regexHit is None:
+                    raise ValueError(f"Expected VCF-like header line '{line.strip()}' to have a 'windowSize=(\\d+)' regex match")
+                windowSize = int(regexHit.groups()[0])
+                continue
+            
+            # Skip any other comment lines
             if line.startswith("#"):
                 continue
             
@@ -175,7 +187,7 @@ def recode_vcf(vcfFile, outputFileName, metadataDict, isCNV=False, quiet=False):
                 gtFields = recode_variant(gtIndex, [ sl[9:][i] for i in sampleIndices ])
             
             # Format the output line
-            encodedLine = [sl[0], sl[1], *gtFields]
+            encodedLine = [sl[0], sl[1], str(int(sl[1]) + windowSize), *gtFields]
             
             # Write to output file
             fileOut.write("\t".join(encodedLine) + "\n")

@@ -271,7 +271,7 @@ def smain(args, metadataDict, locations):
     if "depth" in args.inputType:
         depth_splsda(args, metadataDict, locations)
     if "call" in args.inputType and "depth" in args.inputType:
-        integrative_splsda(args, metadataDict, locations)
+        integrative_splsda(args, locations)
 
 def call_splsda(args, metadataDict, locations):
     # Encode variant calls for sPLS-DA analysis
@@ -337,7 +337,7 @@ def depth_splsda(args, metadataDict, locations):
     else:
         print("# 'depth' CNVs already processed for sPLS-DA analysis; skipping ...")
 
-def integrative_splsda(args, metadataDict, locations):
+def integrative_splsda(args, locations):
     # Check if it is possible to run integrative sPLS-DA
     if (not os.path.isfile(locations.variantSplsdaRdataFile) or \
         not os.path.isfile(locations.depthSplsdaRdataFile)):

@@ -13,6 +13,14 @@ fix_numeric_first_char <- function(x) {
   }
 }
 
+rowname_location_split <- function(x) {
+    location.details <- as.data.frame(str_match(x, "^(.+)_(\\d+)_(\\d+)$")[,2:4,drop=FALSE])
+    colnames(location.details) <- c("chrom", "start", "end")
+    location.details$start <- as.numeric(location.details$start)
+    location.details$end <- as.numeric(location.details$end)
+    return (location.details)
+}
+
 unify_accepted_y_values <- function(Y) {
   # Unify all variants of group1
   Y[Y == "bulk1"] <- "group1"
@@ -205,8 +213,8 @@ metadata.table$V1 <- unlist(lapply(metadata.table$V1, fix_numeric_first_char))
 df <- read.table(gzfile(args$v), header=TRUE, sep="\t", na.strings=".")
 maf.cutoff <- ceiling((ncol(df) - 2) * args$MAF)
 
-df <- df[rowSums(df[,! colnames(df) %in% c("chrom", "pos")], na.rm=TRUE)>=maf.cutoff,]
-rownames(df) <- make.names(paste0(df$chrom, "_", df$pos), unique=TRUE)
+df <- df[rowSums(df[,! colnames(df) %in% c("chrom", "start", "end")], na.rm=TRUE)>=maf.cutoff,]
+rownames(df) <- make.names(paste0(df$chrom, "_", df$start, "_", df$end), unique=TRUE)
 
 # Drop any metadata samples not present in VCF
 metadata.table <- metadata.table[metadata.table$V1 %in% colnames(df),,drop=FALSE]
@@ -226,7 +234,7 @@ if (length(union(c("group1", "group2"), Y)) != 2)
 }
 
 # Drop any df values we are not analysing [Can occur if user metadata is a subset of VCF samples]
-df <- df[,c("chrom", "pos", metadata.table$V1)] # this also sorts df and metadata equivalently
+df <- df[,c("chrom", "start", "end", metadata.table$V1)] # this also sorts df and metadata equivalently
 
 # Check that VCF has at least 1 variant
 if (nrow(df) == 0)
@@ -235,7 +243,7 @@ if (nrow(df) == 0)
 }
 
 # Discover incompatibilities between metadata and encoded VCF
-if ((ncol(df)-2) != nrow(metadata.table)) # -2 to account for c("chrom", "pos")
+if ((ncol(df)-3) != nrow(metadata.table)) # -2 to account for c("chrom", "start", "end")
 {
     stop(paste0("Encoded VCF column names (", paste(colnames(df[3:ncol(df)]), collapse=","), ") do not equal metadata sample labels (", paste(metadata.table$V1, collapse=","), "); incompatibility means sPLS-DA analysis cannot continue"))
 }
@@ -248,7 +256,7 @@ selected.index <- 1
 for (chromosome in unique(df$chrom))
 {
   chromDF <- df[df$chrom == chromosome,]
-  chromLength <- max(chromDF$pos)+1 # +1 to ensure we include the last position in the chromosome
+  chromLength <- max(chromDF$start)+1 # +1 to ensure we include the last position in the chromosome
   
   # Determine window start and end positions
   chromWindows <- list()
@@ -257,13 +265,13 @@ for (chromosome in unique(df$chrom))
     windowStartIndex <- 1
     for (windowEndIndex in chunkPoints)
     {
-        windowStart <- chromDF[windowStartIndex,]$pos
+        windowStart <- chromDF[windowStartIndex,]$start
 
         # Adjust the final window end index so we don't go beyond nrow(chromDF)
         if (windowEndIndex > nrow(chromDF)) {
             windowEndIndex <- nrow(chromDF)
         }
-        windowEnd <- chromDF[windowEndIndex,]$pos + 1 # later check is <, need to include this position
+        windowEnd <- chromDF[windowEndIndex,]$start + 1 # later check is <, need to include this position
         
         chromWindows <- append(chromWindows, list(c(windowStart,windowEnd)))
         windowStartIndex <- windowEndIndex
@@ -283,8 +291,8 @@ for (chromosome in unique(df$chrom))
     # Extract variants in window
     windowStart <- startEndPair[1]
     windowEnd <- startEndPair[2]
-    windowDF <- chromDF[chromDF$pos >= windowStart & chromDF$pos < windowEnd,]
-    windowDF <- windowDF[,! colnames(windowDF) %in% c("chrom", "pos"),drop=FALSE]
+    windowDF <- chromDF[chromDF$start >= windowStart & chromDF$start < windowEnd,]
+    windowDF <- windowDF[,! colnames(windowDF) %in% c("chrom", "start", "end"),drop=FALSE]
     
     # Drop any variants with NA values
     windowDF <- na.omit(windowDF)
@@ -308,8 +316,7 @@ for (chromosome in unique(df$chrom))
     {
         # Extract details for this single-feature window
         feature.row <- windowDF[1,]
-        feature.pos <- unlist(strsplit(rownames(feature.row), "_"))
-        feature.pos <- as.numeric(feature.pos[length(feature.pos)])
+        feature.pos <- rowname_location_split(rownames(feature.row))
         lm.df <- data.frame("X" = as.numeric(feature.row), "Y" = Y)
         
         # Run LDA, or skip if complete similarity or segregation exists
@@ -340,7 +347,7 @@ for (chromosome in unique(df$chrom))
         window.explanation[[window.index]] <- data.frame(chrom=chromosome, start=windowStart, end=windowEnd, BER=window.ber)
         window.index <- window.index + 1
 
-        selected.features[[selected.index]] <- cbind(data.frame(chrom=chromosome, start=feature.pos, end=windowEnd, BER=window.ber), feature.row)
+        selected.features[[selected.index]] <- cbind(data.frame(chrom=chromosome, start=feature.pos$start, end=feature.pos$end, BER=window.ber), feature.row)
         selected.index <- selected.index + 1
         next
     }
@@ -434,11 +441,10 @@ for (chromosome in unique(df$chrom))
     for (row.index in 1:nrow(window.features))
     {
         feature.row <- window.features[row.index,]
-        feature.pos <- unlist(strsplit(rownames(feature.row), "_"))
-        feature.pos <- as.numeric(feature.pos[length(feature.pos)])
-
+        feature.pos <- rowname_location_split(rownames(feature.row))
+        
         encodings.row <- encodings.df[row.index,]
-        selected.features[[selected.index]] <- cbind(data.frame(chrom=chromosome, start=feature.pos, end=windowEnd, BER=window.ber), encodings.row)
+        selected.features[[selected.index]] <- cbind(data.frame(chrom=chromosome, start=feature.pos$start, end=feature.pos$end, BER=window.ber), encodings.row)
         selected.index <- selected.index + 1
     }
   }
