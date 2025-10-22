@@ -607,6 +607,3 @@ write.table(window.explanation.adjusted, file=args$ob, sep="\t", row.names=FALSE
 
 # Write R objects to file for later integration
 save(selected.X, Y, feature.details.table, file=args$or)
-
-# Write R objects for debugging purposes
-save(stability.table, splsda.loadings, location.details, window.explanation, selected.features, file=paste0(args$or, ".debug.Rdata"))
