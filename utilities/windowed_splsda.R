@@ -14,7 +14,7 @@ fix_numeric_first_char <- function(x) {
 }
 
 rowname_location_split <- function(x) {
-    location.details <- as.data.frame(str_match(x, "^(.+)_(\\d+)_(\\d+)$")[,2:4,drop=FALSE])
+    location.details <- as.data.frame(str_match(x, "^(.+)_(\\d+)_(\\d+)(\\.\\d+)?$")[,2:4,drop=FALSE])
     colnames(location.details) <- c("chrom", "start", "end")
     location.details$start <- as.numeric(location.details$start)
     location.details$end <- as.numeric(location.details$end)
@@ -442,7 +442,7 @@ for (chromosome in unique(df$chrom))
     encodings.df <- windowDF[rownames(window.features),]
     if (nrow(encodings.df) != nrow(window.features))
     {
-        stop("Error with ordering of encoded and selected features")
+        stop("ERROR: ordering of encoded and selected features do not match")
     }
 
     # Store best selected feature
@@ -486,7 +486,7 @@ colnames(selected.X) <- make.names(paste0(selected.features$chrom, "_", selected
 # Tune sPLS-DA to choose number of genomic features
 if (ncol(selected.X) < 2)
 {
-    print("Only one feature selected, so no tuning of sPLS-DA is performed")
+    print("NOTE: Only one feature was selected, so no tuning of sPLS-DA is necessary")
     select.keepX <- ncol(selected.X) # this will be 1
     tune.splsda.test <- NULL
 } else {
@@ -526,7 +526,7 @@ tryCatch(
         }
     },
     error = function(e) {
-        print(paste0("Warning: stability cannot be estimated due to error \"", conditionMessage(e),'"'))
+        print(paste0("WARNING: stability could not be estimated since \"", conditionMessage(e),'"'))
     }
 )
 
