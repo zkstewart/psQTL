@@ -21,6 +21,10 @@ rowname_location_split <- function(x) {
     return (location.details)
 }
 
+format_numeric_as_string <- function(x) {
+    return (format(x, drop0Trailing=FALSE, trim=TRUE))
+}
+
 unify_accepted_y_values <- function(Y) {
   # Unify all variants of group1
   Y[Y == "bulk1"] <- "group1"
@@ -214,7 +218,7 @@ df <- read.table(gzfile(args$v), header=TRUE, sep="\t", na.strings=".")
 maf.cutoff <- ceiling((ncol(df) - 2) * args$MAF)
 
 df <- df[rowSums(df[,! colnames(df) %in% c("chrom", "start", "end")], na.rm=TRUE)>=maf.cutoff,]
-rownames(df) <- make.names(paste0(df$chrom, "_", df$start, "_", df$end), unique=TRUE)
+rownames(df) <- make.names(paste0(df$chrom, "_", format_numeric_as_string(df$start), "_", format_numeric_as_string(df$end)), unique=TRUE)
 
 # Drop any metadata samples not present in VCF
 metadata.table <- metadata.table[metadata.table$V1 %in% colnames(df),,drop=FALSE]
@@ -481,7 +485,7 @@ selected.df <- selected.df %>%
   mutate(across(everything(), as.numeric)) # convert feature values back into numeric, since it gets changed along the way
 
 selected.X <- t(selected.df)
-colnames(selected.X) <- make.names(paste0(selected.features$chrom, "_", selected.features$start, "_", selected.features$end), unique=TRUE)
+colnames(selected.X) <- make.names(paste0(selected.features$chrom, "_", format_numeric_as_string(selected.features$start), "_", format_numeric_as_string(selected.features$end), unique=TRUE))
 
 # Tune sPLS-DA to choose number of genomic features
 if (ncol(selected.X) < 2)
