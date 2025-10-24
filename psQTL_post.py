@@ -179,6 +179,14 @@ def main():
                          """,
                          default=[])
     ## Style arguments
+    pparser.add_argument("--noGeneNames", dest="noGeneNames",
+                         required=False,
+                         action="store_true",
+                         help="""GENES PLOT: Optionally, provide this flag if you have set
+                         '-p genes' and would like gene models to be shown without their
+                         names being displayed; this could be useful if the gene names become
+                         illegible at the size you are plotting""",
+                         default=False)
     pparser.add_argument("--width", dest="width",
                          type=int,
                          required=False,
@@ -374,6 +382,7 @@ def pmain(args, dataDict):
             coverageSamples = args.coverageSamples if "coverage" in args.plotTypes \
                               else None,
             power=args.power, wmaSize=args.wmaSize, width=args.width, height=args.height)
+        plotter.showGeneNames = not args.noGeneNames
         plotter.plot(args.plotTypes, args.outputFileName)
     elif args.plotStyle == "circos":
         plotter = CircosPlot(args.regions,
