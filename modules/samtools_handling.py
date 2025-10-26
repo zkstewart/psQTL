@@ -50,9 +50,9 @@ def depth_task(ioPair):
     # Format command
     cmd = ["samtools", "depth", "-a", "-q", "13", inputBamFile]
     if outputFileName.endswith(".gz"):
-        cmd.append(["|", "gzip", "-c", ">", outputFileName])
+        cmd += ["|", "gzip", "-c", ">", outputFileName]
     else:
-        cmd.append([">", outputFileName])
+        cmd += [">", outputFileName]
     
     # Run samtools depth
     run_depth = subprocess.Popen(" ".join(cmd), shell=True,
