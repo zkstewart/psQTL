@@ -485,7 +485,7 @@ selected.df <- selected.df %>%
   mutate(across(everything(), as.numeric)) # convert feature values back into numeric, since it gets changed along the way
 
 selected.X <- t(selected.df)
-colnames(selected.X) <- make.names(paste0(selected.features$chrom, "_", format_numeric_as_string(selected.features$start), "_", format_numeric_as_string(selected.features$end), unique=TRUE))
+colnames(selected.X) <- make.names(paste0(selected.features$chrom, "_", format_numeric_as_string(selected.features$start), "_", format_numeric_as_string(selected.features$end)), unique=TRUE)
 
 # Tune sPLS-DA to choose number of genomic features
 if (ncol(selected.X) < 2)
