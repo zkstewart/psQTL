@@ -6,13 +6,15 @@ from collections import Counter
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from modules.parsing import parse_metadata, vcf_header_to_metadata_validation, parse_vcf_genotypes, \
-    parse_vcf_stats, parse_samtools_depth_tsv, parse_binned_tsv, read_gz_file
+    parse_vcf_stats, parse_samtools_depth_tsv, parse_binned_tsv, read_gz_file, parse_exclusions_tsv
 from modules.ncls import WindowedNCLS
 from modules.ed import parse_vcf_for_ed, gt_median_adjustment, filter_impossible_genotypes, \
-    calculate_allele_frequency_ed, calculate_genotype_frequency_ed, calculate_inheritance_ed
+    calculate_allele_frequency_ed, calculate_genotype_frequency_ed, calculate_inheritance_ed, \
+    parse_ed_as_dict, convert_dict_to_windowed_ncls
 from modules.depth import get_median_value, convert_depth_to_alleles, call_cnvs_from_depth
 from modules.samtools_handling import depth_to_histoDict
-from modules.splsda import recode_variant, recode_cnv, recode_vcf
+from modules.splsda import recode_variant, recode_cnv, recode_vcf, \
+    parse_selected_to_windowed_ncls, parse_integrated_to_windowed_ncls, parse_ber_to_windowed_ncls
 from modules.gff3 import GFF3Graph
 from modules.plot import Plot
 
@@ -2415,6 +2417,112 @@ class TestPlot(unittest.TestCase):
         self.assertTrue(len(xLine) == 2, f"Expected 2 xLine values but got {len(xLine)}")
         self.assertTrue(all(xLine == xLineTruth), f"Expected xLine to be {xLineTruth} but got {xLine}")
         self.assertTrue(all(yLine == yLineTruth), f"Expected yLine to be {yLineTruth} but got {yLine}")
+
+class TestExclusions(unittest.TestCase):
+    def test_exclusion_parser(self):
+        "Test whether the parser function is operating correctly"
+        # Arrange
+        exclusionsTsvFile = os.path.join(dataDir, "exclusions.test1.bed")
+        trueStarts = [2, 4, 6, 8, 10]
+        trueEnds = [3, 5, 7, 9, 11]
+        
+        # Act
+        exclusions = parse_exclusions_tsv(exclusionsTsvFile)
+        
+        # Assert
+        self.assertEqual(exclusions.ranges["chr1"]["starts"], trueStarts)
+        self.assertEqual(exclusions.ranges["chr1"]["ends"], trueEnds)
+    
+    def test_exclusion_rangencls(self):
+        "Test whether range finding works as expected for RangeNCLS"
+        # Arrange
+        exclusionsTsvFile = os.path.join(dataDir, "exclusions.test1.bed")
+        exclusions = parse_exclusions_tsv(exclusionsTsvFile)
+        trueRange1 = [(2, 3, 0)]
+        trueRange2 = []
+        trueRange3 = [(4, 5, 0)]
+        
+        # Act
+        range1 = list(exclusions.find_overlap("chr1", 2, 2))
+        range2 = list(exclusions.find_overlap("chr1", 3, 3))
+        range3 = list(exclusions.find_overlap("chr1", 4, 5))
+        
+        # Assert
+        self.assertEqual(range1, trueRange1)
+        self.assertEqual(range2, trueRange2)
+        self.assertEqual(range3, trueRange3)
+    
+    def test_exclusion_convert_dict_to_windowed_ncls(self):
+        "Test whether convert_dict_to_windowed_ncls handles exclusions correctly"
+        # Arrange
+        callAllelesEdFile = os.path.join(dataDir, "psQTL_call.alleles_ed.tsv")
+        edDict = parse_ed_as_dict(callAllelesEdFile)
+        
+        exclusionsTsvFile = os.path.join(dataDir, "exclusions.test1.bed")
+        exclusions = parse_exclusions_tsv(exclusionsTsvFile)
+        
+        trueValues = [(1, 2, 0.1), (3, 4, 0.3), (5, 6, 0.5), (7, 8, 0.7), (9, 10, 0.9)]
+        
+        # Act
+        windowedNcls = convert_dict_to_windowed_ncls(edDict, windowSize=1, exclusionsNCLS=exclusions)
+        allValues = list(windowedNcls.find_all("chr1"))
+        
+        # Assert
+        self.assertEqual(allValues, trueValues)
+
+    def test_exclusion_parse_selected_to_windowed_ncls(self):
+        "Test whether parse_selected_to_windowed_ncls handles exclusions correctly"
+        # Arrange
+        callSelectedFile1 = os.path.join(dataDir, "psQTL_call.selected.test1.tsv")
+        
+        exclusionsTsvFile = os.path.join(dataDir, "exclusions.test1.bed")
+        exclusions = parse_exclusions_tsv(exclusionsTsvFile)
+        
+        trueValues = [(1, 2, 1.0), (3, 4, 1.0), (5, 6, 1.0), (7, 8, 1.0), (9, 10, 1.0)]
+        
+        # Act
+        windowedNcls = parse_selected_to_windowed_ncls(callSelectedFile1, exclusionsNCLS=exclusions)
+        allValues = list(windowedNcls.find_all("chr1"))
+        
+        # Assert
+        self.assertEqual(allValues, trueValues)
+
+    def test_exclusion_parse_integrated_to_windowed_ncls(self):
+        "Test whether parse_integrated_to_windowed_ncls handles exclusions correctly"
+        # Arrange
+        integrativeSelectedFile1 = os.path.join(dataDir, "psQTL_integrative.selected.test1.tsv")
+        
+        exclusionsTsvFile = os.path.join(dataDir, "exclusions.test1.bed")
+        exclusions = parse_exclusions_tsv(exclusionsTsvFile)
+        
+        trueCallValues = [(1, 2, 1.0), (3, 4, 1.0), (5, 6, 1.0), (7, 8, 1.0), (9, 10, 1.0)]
+        trueDepthValues = []
+        
+        # Act
+        callWindowedNcls, depthWindowedNcls = parse_integrated_to_windowed_ncls(integrativeSelectedFile1, exclusionsNCLS=exclusions)
+        callValues = list(callWindowedNcls.find_all("chr1"))
+        depthValues = list(depthWindowedNcls.find_all("chr1"))
+        
+        # Assert
+        self.assertEqual(callValues, trueCallValues)
+        self.assertEqual(depthValues, trueDepthValues)
+
+    def test_exclusion_parse_ber_to_windowed_ncls(self):
+        "Test whether parse_integrated_to_windowed_ncls handles exclusions correctly"
+        # Arrange
+        depthBerFile1 = os.path.join(dataDir, "psQTL_depth.BER.test1.tsv")
+        
+        exclusionsTsvFile = os.path.join(dataDir, "exclusions.test1.bed")
+        exclusions = parse_exclusions_tsv(exclusionsTsvFile)
+        
+        trueValues = [(1, 2, 0.8), (3, 4, 0.4), (5, 6, 0.0), (7, 8, 0.4), (9, 10, 0.8)]
+        
+        # Act
+        windowedNcls = parse_ber_to_windowed_ncls(depthBerFile1, exclusionsNCLS=exclusions)
+        allValues = list(windowedNcls.find_all("chr1"))
+        
+        # Assert
+        self.assertEqual(allValues, trueValues)
 
 if __name__ == '__main__':
     unittest.main()

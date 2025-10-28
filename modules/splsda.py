@@ -347,10 +347,12 @@ def parse_selected_to_windowed_ncls(selectedFileName, exclusionsNCLS=None):
     rangeNCLS.build()
     return rangeNCLS
 
-def parse_integrated_to_windowed_ncls(selectedFileName):
+def parse_integrated_to_windowed_ncls(selectedFileName, exclusionsNCLS=None):
     '''
     Parameters:
         selectedFileName -- a file name indicating the location of the selected variants file
+        exclusionsNCLS -- (OPTIONAL); a RangeNCLS object indexing ranges within which data points
+                          should be eliminated
     Returns:
         nclsList -- a list of two WindowedNCLS objects:
             callWindowedNCLS -- a WindowedNCLS object containing statistical values indexed by chromosome
@@ -386,6 +388,11 @@ def parse_integrated_to_windowed_ncls(selectedFileName):
                 abs_loading = float(abs_loading)
             except:
                 raise ValueError(f"abs_loading '{abs_loading}' is not a float in file '{selectedFileName}'")
+            
+            # Skip if we are excluding this position
+            if exclusionsNCLS != None:
+                if exclusionsNCLS.is_overlapping(chrom, start, end):
+                    continue
             
             # Compute the stability*abs_loading value
             statProduct = stability * abs_loading

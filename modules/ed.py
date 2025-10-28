@@ -677,9 +677,12 @@ def convert_dict_to_windowed_ncls(statDict, windowSize=1, exclusionsNCLS=None):
             filteredValues = [
                 (position, stat)
                 for position, stat in zip(value[0], value[1])
-                if not exclusionsNCLS.is_overlapping(chrom, position, position+windowSize)
+                if not exclusionsNCLS.is_overlapping(chrom, position, position+windowSize-1) # -1 to make inclusion/indexing difference compatible
             ]
-            positions, statsValues = map(np.array, zip(*filteredValues))
+            if filteredValues != []:
+                positions, statsValues = map(np.array, zip(*filteredValues))
+            else:
+                continue # nothing remains to index on this chromosome
         else:
             positions = np.array(value[0])
             statsValues = np.array(value[1])

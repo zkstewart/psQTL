@@ -168,6 +168,18 @@ class RangeNCLS:
                 for windowStart, windowEnd, valueIndex in self.ncls[chrom].find_overlap(start if start >= 0 else 0, end+1) # end+1 for inclusive end
             )
     
+    def find_all(self, chrom):
+        '''
+        Parameters:
+            chrom -- a string indicating the chromosome name
+        Returns:
+            results -- an iterator of tuples containing the start position, end position,
+                       and stat value
+        '''
+        if not chrom in self.ncls:
+            return iter(())
+        return self.find_overlap(chrom, 0, self.longestContig+1)
+    
     def is_overlapping(self, chrom, start, end=None):
         '''
         Parameters:
