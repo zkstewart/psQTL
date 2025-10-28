@@ -5,6 +5,14 @@ loadRData <- function(fileName){
     mget(ls()[ls() != "fileName"])
 }
 
+rowname_location_split <- function(x) {
+    location.details <- as.data.frame(str_match(x, "^(.+)_(\\d+)_(\\d+)(\\.\\d+)?$")[,2:4,drop=FALSE])
+    colnames(location.details) <- c("chrom", "start", "end")
+    location.details$start <- as.numeric(location.details$start)
+    location.details$end <- as.numeric(location.details$end)
+    return (location.details)
+}
+
 if (!requireNamespace("argparser", quietly=TRUE)) {
   install.packages("argparser")
 }
@@ -398,13 +406,8 @@ final.mbsplsda <- block.splsda(splsda.X, Y, keepX = select.keepX,
                                max.iter = args$maxiters)
 tryCatch(
     {
-        if (mixomicsVersion[2] <= 30) {
         perf.final.mbsplsda <- perf(final.mbsplsda,
                                     validation = "loo")
-        } else {
-        perf.final.mbsplsda <- perf(final.mbsplsda,
-                                    validation = "loo")
-        }
     },
     error = function(e) {
         print(paste0("Warning: stability cannot be estimated due to error \"", conditionMessage(e),'"'))
@@ -501,8 +504,8 @@ feature.details.table$direction <- ifelse(feature.details.table$value.var > 0, "
 feature.details.table$value.var <- abs(feature.details.table$value.var)
 
 # Split out the locations of the feature
-location.details <- str_match(rownames(feature.details.table), "^(.+)_(\\d+)_(\\d+)$")
-feature.details.table[c("chrom", "start", "end")] <- location.details[,2:4]
+location.details <- rowname_location_split(rownames(feature.details.table))
+feature.details.table[c("chrom", "start", "end")] <- location.details
 
 # Sort and rename table columns and rows
 feature.details.table <- feature.details.table[,c("chrom", "start", "end", "type", "Freq", "value.var", "direction")]
@@ -513,7 +516,14 @@ feature.details.table <- feature.details.table[order(feature.details.table$stabi
 write.table(feature.details.table, file=args$os, sep="\t", row.names=FALSE, quote=FALSE)
 
 # Produce an additional output to see what class sPLS-DA predicts each sample as belonging to
-mbsplsda.pred <- predict(final.mbsplsda, splsda.X)
+mbsplsda.pred <- tryCatch(
+    {
+        predict(final.mbsplsda, splsda.X)
+    },
+    error = function(e) {
+        predict(final.mbsplsda, splsda.X, dist=c("max.dist", "centroid.dist")) # mahalanobis.dist can give Lapack routine dgesv: system is exactly singular: U[1,1] = 0
+    }
+)
 mbsplsda.pred <- as.data.frame(mbsplsda.pred$WeightedPredict[,,])
 mbsplsda.pred$predicted_group <- ifelse(mbsplsda.pred$group1 >= mbsplsda.pred$group2, "group1", "group2")
 mbsplsda.pred$true_group <- Y

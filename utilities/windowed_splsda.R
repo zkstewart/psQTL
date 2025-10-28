@@ -593,8 +593,8 @@ stability.table <- stability.table[rownames(splsda.loadings),,drop=FALSE]
 feature.details.table <- cbind(stability.table, splsda.loadings)
 
 # Split out the locations of the feature
-location.details <- str_match(rownames(feature.details.table), "^(.+)_(\\d+)_(\\d+)$")
-feature.details.table[c("chrom", "start", "end")] <- location.details[,2:4]
+location.details <- rowname_location_split(rownames(feature.details.table))
+feature.details.table[c("chrom", "start", "end")] <- location.details
 
 # Sort and rename table columns
 feature.details.table <- feature.details.table[,c("chrom", "start", "end", "Freq", "comp1", "direction")]
