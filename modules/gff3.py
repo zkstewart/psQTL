@@ -3,7 +3,7 @@
 # repository in the author's GitHub account. It applies a different logic to
 # parsing GFF3 files which should be much more flexible and robust.
 
-import re, sys, os
+import re, os
 import pandas as pd
 from collections import Counter
 from ncls import NCLS

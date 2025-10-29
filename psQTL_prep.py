@@ -9,6 +9,7 @@ from Bio import SeqIO
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from modules.validation import validate_prep_args, validate_uncached
+from modules.parsing import read_gz_file
 from modules.parameters import ParameterCache, VcfCache, DepthCache, MetadataCache
 from modules.samtools_handling import validate_samtools_exists, run_samtools_depth, run_samtools_faidx, \
                                       bin_samtools_depth
@@ -240,8 +241,9 @@ def dmain(args, locations):
     run_samtools_depth(depthIO, args.threads)
     
     # Parse the genome FASTA file to get contig lengths
-    genomeRecords = SeqIO.parse(open(args.genomeFasta, 'r'), "fasta")
-    lengthsDict = { record.id:len(record) for record in genomeRecords }
+    with read_gz_file(args.genomeFasta) as fileIn:
+        genomeRecords = SeqIO.parse(fileIn, "fasta")
+        lengthsDict = { record.id:len(record) for record in genomeRecords }
     
     # Determine which depth files need to be binned
     binIO = []
@@ -253,7 +255,7 @@ def dmain(args, locations):
             raise FileNotFoundError(f"Depth file '{depthFile}' not found!")
         
         # Format the binned file name for this depth file
-        binFile = os.path.join(locations.depthDir, f"{bamPrefix}.binned.{args.windowSize}.tsv")
+        binFile = os.path.join(locations.depthDir, f"{bamPrefix}.binned.{args.windowSize}{locations.depthSuffix}")
         
         # Skip if the binned file already exists
         if os.path.isfile(binFile) and os.path.isfile(binFile + ".ok"):
@@ -266,7 +268,7 @@ def dmain(args, locations):
     # Get all sample prefixes and their associated bin file
     samplePairs = []
     for bamPrefix in bamPrefixes:
-        binFile = os.path.join(locations.depthDir, f"{bamPrefix}.binned.{args.windowSize}.tsv")
+        binFile = os.path.join(locations.depthDir, f"{bamPrefix}.binned.{args.windowSize}{locations.depthSuffix}")
         
         # Error out if bin file is missing
         if not os.path.isfile(binFile):

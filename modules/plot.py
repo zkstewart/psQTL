@@ -1,6 +1,5 @@
 import math, re
 import numpy as np
-import pandas as pd
 import matplotlib.pyplot as plt
 
 from Bio.SeqFeature import SeqFeature, SimpleLocation, ExactPosition
@@ -168,6 +167,9 @@ class Plot:
         self.height = height
         self.coverageSamples = coverageSamples
         
+        # Defaults not set during object init
+        self.showGeneNames = True
+        
         # Figure-related parameters (not to be set by user)
         self.fig = None
         self.axs = None
@@ -185,8 +187,8 @@ class Plot:
         if value is None:
             self._callED = None
             return
-        if not hasattr(value, "isWindowedNCLS") or not value.isWindowedNCLS:
-            raise TypeError("callED must be a WindowedNCLS object")
+        if (not hasattr(value, "isWindowedNCLS") or not value.isWindowedNCLS) and (not hasattr(value, "isRangeNCLS") or not value.isRangeNCLS):
+            raise TypeError("callED must be a WindowedNCLS or RangeNCLS object")
         self._callED = value
     
     @property
@@ -198,8 +200,8 @@ class Plot:
         if value is None:
             self._depthED = None
             return
-        if not hasattr(value, "isWindowedNCLS") or not value.isWindowedNCLS:
-            raise TypeError("depthED must be a WindowedNCLS object")
+        if (not hasattr(value, "isWindowedNCLS") or not value.isWindowedNCLS) and (not hasattr(value, "isRangeNCLS") or not value.isRangeNCLS):
+            raise TypeError("depthED must be a WindowedNCLS or RangeNCLS object")
         self._depthED = value
     
     @property
@@ -216,8 +218,8 @@ class Plot:
         if not len(value) == 2:
             raise ValueError("callSPLSDA must be a list or tuple of length 2")
         for i, val in enumerate(value):
-            if not hasattr(val, "isWindowedNCLS") or not val.isWindowedNCLS:
-                raise TypeError(f"callSPLSDA[{i}] must be a WindowedNCLS object")
+            if (not hasattr(val, "isWindowedNCLS") or not val.isWindowedNCLS) and (not hasattr(val, "isRangeNCLS") or not val.isRangeNCLS):
+                raise TypeError(f"callSPLSDA[{i}] must be a WindowedNCLS or RangeNCLS object")
         self._callSPLSDA = value
     
     @property
@@ -234,8 +236,8 @@ class Plot:
         if not len(value) == 2:
             raise ValueError("depthSPLSDA must be a list or tuple of length 2")
         for i, val in enumerate(value):
-            if not hasattr(val, "isWindowedNCLS") or not val.isWindowedNCLS:
-                raise TypeError(f"depthSPLSDA[{i}] must be a WindowedNCLS object")
+            if (not hasattr(val, "isWindowedNCLS") or not val.isWindowedNCLS) and (not hasattr(val, "isRangeNCLS") or not val.isRangeNCLS):
+                raise TypeError(f"depthSPLSDA[{i}] must be a WindowedNCLS or RangeNCLS object")
         self._depthSPLSDA = value
     
     @property
@@ -252,8 +254,8 @@ class Plot:
         if not len(value) == 2:
             raise ValueError("integratedSPLSDA must be a list or tuple of length 2")
         for i, val in enumerate(value):
-            if not hasattr(val, "isWindowedNCLS") or not val.isWindowedNCLS:
-                raise TypeError(f"integratedSPLSDA[{i}] must be a WindowedNCLS object")
+            if (not hasattr(val, "isWindowedNCLS") or not val.isWindowedNCLS) and (not hasattr(val, "isRangeNCLS") or not val.isRangeNCLS):
+                raise TypeError(f"integratedSPLSDA[{i}] must be a WindowedNCLS or RangeNCLS object")
         self._integratedSPLSDA = value
     
     @property
@@ -271,8 +273,8 @@ class Plot:
             raise ValueError("coverageNCLSDict must have keys 'group1' and 'group2'")
         for group, sampleDict in value.items():
             for sampleID, sampleValue in sampleDict.items():
-                if not hasattr(sampleValue, "isWindowedNCLS") or not sampleValue.isWindowedNCLS:
-                    raise TypeError("coverageNCLSDict must index WindowedNCLS objects")
+                if (not hasattr(sampleValue, "isWindowedNCLS") or not sampleValue.isWindowedNCLS) and (not hasattr(sampleValue, "isRangeNCLS") or not sampleValue.isRangeNCLS):
+                    raise TypeError("coverageNCLSDict must index WindowedNCLS or RangeNCLS objects")
         self._coverageNCLSDict = value
     
     @property
@@ -366,6 +368,17 @@ class Plot:
             raise ValueError(f"wmaSize must be >= 1")
         
         self._wmaSize = value
+    
+    @property
+    def showGeneNames(self):
+        return self._showGeneNames
+    
+    @showGeneNames.setter
+    def showGeneNames(self, value):
+        if not isinstance(value, bool):
+            raise TypeError("showGeneNames must be boolean")
+        
+        self._showGeneNames = value
     
     @property
     def ncol(self):
@@ -1144,31 +1157,11 @@ class HorizontalPlot(Plot):
                 ARROW_SIZE = arrowDataCoords.x1 - arrowDataCoords.x0
                 
                 # Plot gene name
-                geneName = mrnaFeature.ID
-                namePosition = mrnaFeature.end + ARROW_SIZE if (mrnaFeature.end + ARROW_SIZE) < end \
-                    else end + ARROW_SIZE # prevent text from going off the plot
-                
-                textBox = self.axs[self.rowNum, colNum].text(
-                    namePosition, 
-                    laneNum + HorizontalPlot.SPACING + (1-HorizontalPlot.SPACING)/2, # y position
-                    geneName, # text
-                    horizontalalignment="left", verticalalignment="center", # alignment
-                    fontsize=8,
-                    zorder=4 # above everything else
-                )
-                bb = textBox.get_window_extent(renderer = self.fig.canvas.renderer)
-                bb_datacoords = bb.transformed(transf)
-                
-                # Store the rightmost x value for this lane
-                lane.append(bb_datacoords.x1)
-                
-                # Reposition gene name and arrow if necessary
-                if reverse:
-                    # Reposition the name
-                    textBox.remove()
+                if self.showGeneNames:
+                    geneName = mrnaFeature.ID
+                    namePosition = mrnaFeature.end + ARROW_SIZE if (mrnaFeature.end + ARROW_SIZE) < end \
+                        else end + ARROW_SIZE # prevent text from going off the plot
                     
-                    namePosition = mrnaFeature.start - ARROW_SIZE if (mrnaFeature.start - ARROW_SIZE) > start \
-                        else start - ARROW_SIZE # prevent text from going off the plot
                     textBox = self.axs[self.rowNum, colNum].text(
                         namePosition,
                         laneNum + HorizontalPlot.SPACING + (1-HorizontalPlot.SPACING)/2, # y position
@@ -1177,6 +1170,31 @@ class HorizontalPlot(Plot):
                         fontsize=8,
                         zorder=4 # above everything else
                     )
+                    bb = textBox.get_window_extent(renderer = self.fig.canvas.renderer)
+                    bb_datacoords = bb.transformed(transf)
+                
+                # Store the rightmost x value for this lane
+                if self.showGeneNames:
+                    lane.append(bb_datacoords.x1)
+                else:
+                    lane.append(mrnaFeature.end + ARROW_SIZE)
+                
+                # Reposition gene name and arrow if necessary
+                if reverse:
+                    # Reposition the name
+                    if self.showGeneNames:
+                        textBox.remove()
+                        
+                        namePosition = mrnaFeature.start - ARROW_SIZE if (mrnaFeature.start - ARROW_SIZE) > start \
+                            else start - ARROW_SIZE # prevent text from going off the plot
+                        textBox = self.axs[self.rowNum, colNum].text(
+                            namePosition,
+                            laneNum + HorizontalPlot.SPACING + (1-HorizontalPlot.SPACING)/2, # y position
+                            geneName, # text
+                            horizontalalignment="left", verticalalignment="center", # alignment
+                            fontsize=8,
+                            zorder=4 # above everything else
+                        )
                     
                     # Reposition the arrow
                     arrowAnnot.remove()

@@ -4,7 +4,7 @@
 # 'proc'ess it to calculate Euclidean distance values of variants or CNVs among groups.
 # These results can then be used as input to psQTL_post.py to plot and tabulate relevant details.
 
-import os, argparse, sys, gzip
+import os, argparse, sys
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from modules.validation import validate_proc_args, validate_c, validate_d, validate_s
@@ -271,7 +271,7 @@ def smain(args, metadataDict, locations):
     if "depth" in args.inputType:
         depth_splsda(args, metadataDict, locations)
     if "call" in args.inputType and "depth" in args.inputType:
-        integrative_splsda(args, metadataDict, locations)
+        integrative_splsda(args, locations)
 
 def call_splsda(args, metadataDict, locations):
     # Encode variant calls for sPLS-DA analysis
@@ -337,7 +337,7 @@ def depth_splsda(args, metadataDict, locations):
     else:
         print("# 'depth' CNVs already processed for sPLS-DA analysis; skipping ...")
 
-def integrative_splsda(args, metadataDict, locations):
+def integrative_splsda(args, locations):
     # Check if it is possible to run integrative sPLS-DA
     if (not os.path.isfile(locations.variantSplsdaRdataFile) or \
         not os.path.isfile(locations.depthSplsdaRdataFile)):

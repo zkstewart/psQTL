@@ -1,0 +1,11 @@
+CHROM	POSI	variant	group1_alleles	group1_alleles_possible	group2_alleles	group2_alleles_possible	euclideanDist
+chr1	1	snp	20	20	20	20	0.1
+chr1	2	snp	20	20	20	20	0.2
+chr1	3	snp	20	20	20	20	0.3
+chr1	4	snp	20	20	20	20	0.4
+chr1	5	snp	20	20	20	20	0.5
+chr1	6	snp	20	20	20	20	0.6
+chr1	7	snp	20	20	20	20	0.7
+chr1	8	snp	20	20	20	20	0.8
+chr1	9	snp	20	20	20	20	0.9
+chr1	10	indel	20	20	20	20	1

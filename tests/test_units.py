@@ -1,18 +1,20 @@
 #! python3
 
-import os, sys, unittest, time, math, shutil, subprocess
+import os, sys, unittest, shutil, subprocess
 import numpy as np
 from collections import Counter
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from modules.parsing import parse_metadata, vcf_header_to_metadata_validation, parse_vcf_genotypes, \
-    parse_vcf_stats, parse_samtools_depth_tsv, parse_binned_tsv, read_gz_file
+    parse_vcf_stats, parse_samtools_depth_tsv, parse_binned_tsv, read_gz_file, parse_exclusions_tsv
 from modules.ncls import WindowedNCLS
 from modules.ed import parse_vcf_for_ed, gt_median_adjustment, filter_impossible_genotypes, \
-    calculate_allele_frequency_ed, calculate_genotype_frequency_ed, calculate_inheritance_ed
+    calculate_allele_frequency_ed, calculate_genotype_frequency_ed, calculate_inheritance_ed, \
+    parse_ed_as_dict, convert_dict_to_windowed_ncls
 from modules.depth import get_median_value, convert_depth_to_alleles, call_cnvs_from_depth
 from modules.samtools_handling import depth_to_histoDict
-from modules.splsda import recode_variant, recode_cnv, recode_vcf
+from modules.splsda import recode_variant, recode_cnv, recode_vcf, \
+    parse_selected_to_windowed_ncls, parse_integrated_to_windowed_ncls, parse_ber_to_windowed_ncls
 from modules.gff3 import GFF3Graph
 from modules.plot import Plot
 
@@ -963,7 +965,7 @@ class TestSPLSDA(unittest.TestCase):
         vcfFile = os.path.join(dataDir, "deletions.1.vcf")
         
         numLines = 11
-        numHeaderColumns = 54
+        numHeaderColumns = 55
         
         # Arrange: cleanup any previous work directory
         if os.path.exists(workDir):
@@ -996,7 +998,7 @@ class TestSPLSDA(unittest.TestCase):
         vcfFile = os.path.join(dataDir, "deletions.1.vcf")
         
         numLines = 11
-        numHeaderColumns = 53 # 1 less than the full metadata
+        numHeaderColumns = 54 # 1 less than the full metadata
         
         # Arrange: cleanup any previous work directory
         if os.path.exists(workDir):
@@ -1028,7 +1030,7 @@ class TestSPLSDA(unittest.TestCase):
         vcfFile = os.path.join(dataDir, "deletions.2.vcf")
         
         numLines = 11
-        numHeaderColumns = 54
+        numHeaderColumns = 55
         
         # Arrange: cleanup any previous work directory
         if os.path.exists(workDir):
@@ -1087,10 +1089,10 @@ class TestMain(unittest.TestCase):
         gff3File = os.path.join(dataDir, "fulltest.1.gff3")
         
         edTruth = "chr1\t10\tsnp\t42\t42\t98\t98\t1.0678755470980512" # 1.0967370483709717 if genotype inheritance is used
-        berTruth = "chr1\t0\t0.0714285714285715\n"
-        selectedTruth = "chr1\t10\t1\t1\tleft\n"
-        recodeTruth = ['chrom\tpos\tbulk1_1\tbulk1_10\tbulk1_11\tbulk1_12\tbulk1_13\tbulk1_14\tbulk1_15\tbulk1_16\tbulk1_17\tbulk1_18\tbulk1_19\tbulk1_2\tbulk1_20\tbulk1_21\tbulk1_3\tbulk1_4\tbulk1_5\tbulk1_6\tbulk1_7\tbulk1_8\tbulk1_9\tbulk2_1\tbulk2_10\tbulk2_11\tbulk2_12\tbulk2_13\tbulk2_14\tbulk2_15\tbulk2_16\tbulk2_17\tbulk2_18\tbulk2_19\tbulk2_2\tbulk2_20\tbulk2_21\tbulk2_22\tbulk2_23\tbulk2_24\tbulk2_25\tbulk2_26\tbulk2_27\tbulk2_28\tbulk2_29\tbulk2_3\tbulk2_30\tbulk2_31\tbulk2_32\tbulk2_33\tbulk2_34\tbulk2_35\tbulk2_36\tbulk2_37\tbulk2_38\tbulk2_39\tbulk2_4\tbulk2_40\tbulk2_41\tbulk2_42\tbulk2_43\tbulk2_44\tbulk2_45\tbulk2_46\tbulk2_47\tbulk2_48\tbulk2_49\tbulk2_5\tbulk2_6\tbulk2_7\tbulk2_8\tbulk2_9',
-                       'chr1\t10\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t1\t1\t2\t2\t2\t1\t2\t2\t1\t0\t2\t1\t1\t2\t1\t1\t0\t1\t0\t1\t0\t0\t0\t0\t0']
+        berTruth = "chr1\t1\t10\t0.0714285714285715\n"
+        selectedTruth = "chr1\t10\t10\t1\t1\tleft\n"
+        recodeTruth = ['chrom\tstart\tend\tbulk1_1\tbulk1_10\tbulk1_11\tbulk1_12\tbulk1_13\tbulk1_14\tbulk1_15\tbulk1_16\tbulk1_17\tbulk1_18\tbulk1_19\tbulk1_2\tbulk1_20\tbulk1_21\tbulk1_3\tbulk1_4\tbulk1_5\tbulk1_6\tbulk1_7\tbulk1_8\tbulk1_9\tbulk2_1\tbulk2_10\tbulk2_11\tbulk2_12\tbulk2_13\tbulk2_14\tbulk2_15\tbulk2_16\tbulk2_17\tbulk2_18\tbulk2_19\tbulk2_2\tbulk2_20\tbulk2_21\tbulk2_22\tbulk2_23\tbulk2_24\tbulk2_25\tbulk2_26\tbulk2_27\tbulk2_28\tbulk2_29\tbulk2_3\tbulk2_30\tbulk2_31\tbulk2_32\tbulk2_33\tbulk2_34\tbulk2_35\tbulk2_36\tbulk2_37\tbulk2_38\tbulk2_39\tbulk2_4\tbulk2_40\tbulk2_41\tbulk2_42\tbulk2_43\tbulk2_44\tbulk2_45\tbulk2_46\tbulk2_47\tbulk2_48\tbulk2_49\tbulk2_5\tbulk2_6\tbulk2_7\tbulk2_8\tbulk2_9',
+                       'chr1\t10\t10\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t1\t1\t2\t2\t2\t1\t2\t2\t1\t0\t2\t1\t1\t2\t1\t1\t0\t1\t0\t1\t0\t0\t0\t0\t0']
         
         # Arrange: cleanup any previous work directory
         if os.path.exists(workDir):
@@ -1160,10 +1162,10 @@ class TestMain(unittest.TestCase):
         genomeFile = os.path.join(dataDir, "genome.fasta")
         
         edTruth = "chr1\t10\tsnp\t0\t42\t20\t98\t0"
-        berTruth = "chr1\t0\t0.0714285714285715\n"
-        selectedTruth = "chr1\t10\t1\t1\tleft\n"
-        recodeTruth = ['chrom\tpos\tbulk1_1\tbulk1_10\tbulk1_11\tbulk1_12\tbulk1_13\tbulk1_14\tbulk1_15\tbulk1_16\tbulk1_17\tbulk1_18\tbulk1_19\tbulk1_2\tbulk1_20\tbulk1_21\tbulk1_3\tbulk1_4\tbulk1_5\tbulk1_6\tbulk1_7\tbulk1_8\tbulk1_9\tbulk2_1\tbulk2_10\tbulk2_11\tbulk2_12\tbulk2_13\tbulk2_14\tbulk2_15\tbulk2_16\tbulk2_17\tbulk2_18\tbulk2_19\tbulk2_2\tbulk2_20\tbulk2_21\tbulk2_22\tbulk2_23\tbulk2_24\tbulk2_25\tbulk2_26\tbulk2_27\tbulk2_28\tbulk2_29\tbulk2_3\tbulk2_30\tbulk2_31\tbulk2_32\tbulk2_33\tbulk2_34\tbulk2_35\tbulk2_36\tbulk2_37\tbulk2_38\tbulk2_39\tbulk2_4\tbulk2_40\tbulk2_41\tbulk2_42\tbulk2_43\tbulk2_44\tbulk2_45\tbulk2_46\tbulk2_47\tbulk2_48\tbulk2_49\tbulk2_5\tbulk2_6\tbulk2_7\tbulk2_8\tbulk2_9',
-                       'chr1\t10\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t1\t1\t2\t2\t2\t1\t2\t2\t1\t0\t2\t1\t1\t2\t1\t1\t0\t1\t0\t1\t0\t0\t0\t0\t0']
+        berTruth = "chr1\t1\t10\t0.0714285714285715\n"
+        selectedTruth = "chr1\t10\t10\t1\t1\tleft\n"
+        recodeTruth = ['chrom\tstart\tend\tbulk1_1\tbulk1_10\tbulk1_11\tbulk1_12\tbulk1_13\tbulk1_14\tbulk1_15\tbulk1_16\tbulk1_17\tbulk1_18\tbulk1_19\tbulk1_2\tbulk1_20\tbulk1_21\tbulk1_3\tbulk1_4\tbulk1_5\tbulk1_6\tbulk1_7\tbulk1_8\tbulk1_9\tbulk2_1\tbulk2_10\tbulk2_11\tbulk2_12\tbulk2_13\tbulk2_14\tbulk2_15\tbulk2_16\tbulk2_17\tbulk2_18\tbulk2_19\tbulk2_2\tbulk2_20\tbulk2_21\tbulk2_22\tbulk2_23\tbulk2_24\tbulk2_25\tbulk2_26\tbulk2_27\tbulk2_28\tbulk2_29\tbulk2_3\tbulk2_30\tbulk2_31\tbulk2_32\tbulk2_33\tbulk2_34\tbulk2_35\tbulk2_36\tbulk2_37\tbulk2_38\tbulk2_39\tbulk2_4\tbulk2_40\tbulk2_41\tbulk2_42\tbulk2_43\tbulk2_44\tbulk2_45\tbulk2_46\tbulk2_47\tbulk2_48\tbulk2_49\tbulk2_5\tbulk2_6\tbulk2_7\tbulk2_8\tbulk2_9',
+                       'chr1\t10\t10\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t1\t1\t2\t2\t2\t1\t2\t2\t1\t0\t2\t1\t1\t2\t1\t1\t0\t1\t0\t1\t0\t0\t0\t0\t0']
         
         # Arrange: cleanup any previous work directory
         if os.path.exists(workDir):
@@ -1236,10 +1238,10 @@ class TestMain(unittest.TestCase):
         genomeFile = os.path.join(dataDir, "genome.fasta")
         
         edTruth = "chr1\t10\tsnp\t42\t42\t58\t58\t1.4142135623730951"
-        berTruth = "chr1\t0\t0\n"
-        selectedTruth = "chr1\t10\t1\t1\tleft\n"
-        recodeTruth = ['chrom\tpos\tbulk1_1\tbulk1_10\tbulk1_11\tbulk1_12\tbulk1_13\tbulk1_14\tbulk1_15\tbulk1_16\tbulk1_17\tbulk1_18\tbulk1_19\tbulk1_2\tbulk1_20\tbulk1_21\tbulk1_3\tbulk1_4\tbulk1_5\tbulk1_6\tbulk1_7\tbulk1_8\tbulk1_9\tbulk2_1\tbulk2_10\tbulk2_11\tbulk2_12\tbulk2_13\tbulk2_14\tbulk2_15\tbulk2_16\tbulk2_17\tbulk2_18\tbulk2_19\tbulk2_2\tbulk2_20\tbulk2_21\tbulk2_22\tbulk2_23\tbulk2_24\tbulk2_25\tbulk2_26\tbulk2_27\tbulk2_28\tbulk2_29\tbulk2_3\tbulk2_4\tbulk2_5\tbulk2_6\tbulk2_7\tbulk2_8\tbulk2_9',
-                       'chr1\t10\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0']
+        berTruth = "chr1\t1\t10\t0\n"
+        selectedTruth = "chr1\t10\t10\t1\t1\tleft\n"
+        recodeTruth = ['chrom\tstart\tend\tbulk1_1\tbulk1_10\tbulk1_11\tbulk1_12\tbulk1_13\tbulk1_14\tbulk1_15\tbulk1_16\tbulk1_17\tbulk1_18\tbulk1_19\tbulk1_2\tbulk1_20\tbulk1_21\tbulk1_3\tbulk1_4\tbulk1_5\tbulk1_6\tbulk1_7\tbulk1_8\tbulk1_9\tbulk2_1\tbulk2_10\tbulk2_11\tbulk2_12\tbulk2_13\tbulk2_14\tbulk2_15\tbulk2_16\tbulk2_17\tbulk2_18\tbulk2_19\tbulk2_2\tbulk2_20\tbulk2_21\tbulk2_22\tbulk2_23\tbulk2_24\tbulk2_25\tbulk2_26\tbulk2_27\tbulk2_28\tbulk2_29\tbulk2_3\tbulk2_4\tbulk2_5\tbulk2_6\tbulk2_7\tbulk2_8\tbulk2_9',
+                       'chr1\t10\t10\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0']
         
         # Arrange: cleanup any previous work directory
         if os.path.exists(workDir):
@@ -1312,10 +1314,10 @@ class TestMain(unittest.TestCase):
         genomeFile = os.path.join(dataDir, "genome.fasta")
         
         edTruth = "chr1\t10\tsnp\t0\t42\t0\t58\t0"
-        berTruth = "chr1\t0\t0\n"
-        selectedTruth = "chr1\t10\t1\t1\tleft\n"
-        recodeTruth = ['chrom\tpos\tbulk1_1\tbulk1_10\tbulk1_11\tbulk1_12\tbulk1_13\tbulk1_14\tbulk1_15\tbulk1_16\tbulk1_17\tbulk1_18\tbulk1_19\tbulk1_2\tbulk1_20\tbulk1_21\tbulk1_3\tbulk1_4\tbulk1_5\tbulk1_6\tbulk1_7\tbulk1_8\tbulk1_9\tbulk2_1\tbulk2_10\tbulk2_11\tbulk2_12\tbulk2_13\tbulk2_14\tbulk2_15\tbulk2_16\tbulk2_17\tbulk2_18\tbulk2_19\tbulk2_2\tbulk2_20\tbulk2_21\tbulk2_22\tbulk2_23\tbulk2_24\tbulk2_25\tbulk2_26\tbulk2_27\tbulk2_28\tbulk2_29\tbulk2_3\tbulk2_4\tbulk2_5\tbulk2_6\tbulk2_7\tbulk2_8\tbulk2_9',
-                       'chr1\t10\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0']
+        berTruth = "chr1\t1\t10\t0\n"
+        selectedTruth = "chr1\t10\t10\t1\t1\tleft\n"
+        recodeTruth = ['chrom\tstart\tend\tbulk1_1\tbulk1_10\tbulk1_11\tbulk1_12\tbulk1_13\tbulk1_14\tbulk1_15\tbulk1_16\tbulk1_17\tbulk1_18\tbulk1_19\tbulk1_2\tbulk1_20\tbulk1_21\tbulk1_3\tbulk1_4\tbulk1_5\tbulk1_6\tbulk1_7\tbulk1_8\tbulk1_9\tbulk2_1\tbulk2_10\tbulk2_11\tbulk2_12\tbulk2_13\tbulk2_14\tbulk2_15\tbulk2_16\tbulk2_17\tbulk2_18\tbulk2_19\tbulk2_2\tbulk2_20\tbulk2_21\tbulk2_22\tbulk2_23\tbulk2_24\tbulk2_25\tbulk2_26\tbulk2_27\tbulk2_28\tbulk2_29\tbulk2_3\tbulk2_4\tbulk2_5\tbulk2_6\tbulk2_7\tbulk2_8\tbulk2_9',
+                       'chr1\t10\t10\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t2\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0']
         
         # Arrange: cleanup any previous work directory
         if os.path.exists(workDir):
@@ -1388,10 +1390,10 @@ class TestMain(unittest.TestCase):
         genomeFile = os.path.join(dataDir, "genome.fasta")
         
         edTruth = "chr1\t10\tsnp\t84\t84\t196\t196\t1.0678755470980512" # twice as many alleles, same ED as diploid version
-        berTruth = "chr1\t0\t0.0714285714285715\n"
-        selectedTruth = "chr1\t10\t1\t1\tleft\n"
-        recodeTruth = ['chrom\tpos\tbulk1_1\tbulk1_10\tbulk1_11\tbulk1_12\tbulk1_13\tbulk1_14\tbulk1_15\tbulk1_16\tbulk1_17\tbulk1_18\tbulk1_19\tbulk1_2\tbulk1_20\tbulk1_21\tbulk1_3\tbulk1_4\tbulk1_5\tbulk1_6\tbulk1_7\tbulk1_8\tbulk1_9\tbulk2_1\tbulk2_10\tbulk2_11\tbulk2_12\tbulk2_13\tbulk2_14\tbulk2_15\tbulk2_16\tbulk2_17\tbulk2_18\tbulk2_19\tbulk2_2\tbulk2_20\tbulk2_21\tbulk2_22\tbulk2_23\tbulk2_24\tbulk2_25\tbulk2_26\tbulk2_27\tbulk2_28\tbulk2_29\tbulk2_3\tbulk2_30\tbulk2_31\tbulk2_32\tbulk2_33\tbulk2_34\tbulk2_35\tbulk2_36\tbulk2_37\tbulk2_38\tbulk2_39\tbulk2_4\tbulk2_40\tbulk2_41\tbulk2_42\tbulk2_43\tbulk2_44\tbulk2_45\tbulk2_46\tbulk2_47\tbulk2_48\tbulk2_49\tbulk2_5\tbulk2_6\tbulk2_7\tbulk2_8\tbulk2_9',
-                       'chr1\t10\t4\t4\t4\t4\t4\t4\t4\t4\t4\t4\t4\t4\t4\t4\t4\t4\t4\t4\t4\t4\t4\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t2\t2\t4\t4\t4\t2\t4\t4\t2\t0\t4\t2\t2\t4\t2\t2\t0\t2\t0\t2\t0\t0\t0\t0\t0']
+        berTruth = "chr1\t1\t10\t0.0714285714285715\n"
+        selectedTruth = "chr1\t10\t10\t1\t1\tleft\n"
+        recodeTruth = ['chrom\tstart\tend\tbulk1_1\tbulk1_10\tbulk1_11\tbulk1_12\tbulk1_13\tbulk1_14\tbulk1_15\tbulk1_16\tbulk1_17\tbulk1_18\tbulk1_19\tbulk1_2\tbulk1_20\tbulk1_21\tbulk1_3\tbulk1_4\tbulk1_5\tbulk1_6\tbulk1_7\tbulk1_8\tbulk1_9\tbulk2_1\tbulk2_10\tbulk2_11\tbulk2_12\tbulk2_13\tbulk2_14\tbulk2_15\tbulk2_16\tbulk2_17\tbulk2_18\tbulk2_19\tbulk2_2\tbulk2_20\tbulk2_21\tbulk2_22\tbulk2_23\tbulk2_24\tbulk2_25\tbulk2_26\tbulk2_27\tbulk2_28\tbulk2_29\tbulk2_3\tbulk2_30\tbulk2_31\tbulk2_32\tbulk2_33\tbulk2_34\tbulk2_35\tbulk2_36\tbulk2_37\tbulk2_38\tbulk2_39\tbulk2_4\tbulk2_40\tbulk2_41\tbulk2_42\tbulk2_43\tbulk2_44\tbulk2_45\tbulk2_46\tbulk2_47\tbulk2_48\tbulk2_49\tbulk2_5\tbulk2_6\tbulk2_7\tbulk2_8\tbulk2_9',
+                       'chr1\t10\t10\t4\t4\t4\t4\t4\t4\t4\t4\t4\t4\t4\t4\t4\t4\t4\t4\t4\t4\t4\t4\t4\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t2\t2\t4\t4\t4\t2\t4\t4\t2\t0\t4\t2\t2\t4\t2\t2\t0\t2\t0\t2\t0\t0\t0\t0\t0']
         
         # Arrange: cleanup any previous work directory
         if os.path.exists(workDir):
@@ -1464,10 +1466,10 @@ class TestMain(unittest.TestCase):
         genomeFile = os.path.join(dataDir, "genome.fasta")
         
         edTruth = "chr1\t10\tsnp\t0\t84\t40\t196\t0"
-        berTruth = "chr1\t0\t0.0714285714285715\n"
-        selectedTruth = "chr1\t10\t1\t1\tleft\n"
-        recodeTruth = ['chrom\tpos\tbulk1_1\tbulk1_10\tbulk1_11\tbulk1_12\tbulk1_13\tbulk1_14\tbulk1_15\tbulk1_16\tbulk1_17\tbulk1_18\tbulk1_19\tbulk1_2\tbulk1_20\tbulk1_21\tbulk1_3\tbulk1_4\tbulk1_5\tbulk1_6\tbulk1_7\tbulk1_8\tbulk1_9\tbulk2_1\tbulk2_10\tbulk2_11\tbulk2_12\tbulk2_13\tbulk2_14\tbulk2_15\tbulk2_16\tbulk2_17\tbulk2_18\tbulk2_19\tbulk2_2\tbulk2_20\tbulk2_21\tbulk2_22\tbulk2_23\tbulk2_24\tbulk2_25\tbulk2_26\tbulk2_27\tbulk2_28\tbulk2_29\tbulk2_3\tbulk2_30\tbulk2_31\tbulk2_32\tbulk2_33\tbulk2_34\tbulk2_35\tbulk2_36\tbulk2_37\tbulk2_38\tbulk2_39\tbulk2_4\tbulk2_40\tbulk2_41\tbulk2_42\tbulk2_43\tbulk2_44\tbulk2_45\tbulk2_46\tbulk2_47\tbulk2_48\tbulk2_49\tbulk2_5\tbulk2_6\tbulk2_7\tbulk2_8\tbulk2_9',
-                       'chr1\t10\t4\t4\t4\t4\t4\t4\t4\t4\t4\t4\t4\t4\t4\t4\t4\t4\t4\t4\t4\t4\t4\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t2\t2\t4\t4\t4\t2\t4\t4\t2\t0\t4\t2\t2\t4\t2\t2\t0\t2\t0\t2\t0\t0\t0\t0\t0']
+        berTruth = "chr1\t1\t10\t0.0714285714285715\n"
+        selectedTruth = "chr1\t10\t10\t1\t1\tleft\n"
+        recodeTruth = ['chrom\tstart\tend\tbulk1_1\tbulk1_10\tbulk1_11\tbulk1_12\tbulk1_13\tbulk1_14\tbulk1_15\tbulk1_16\tbulk1_17\tbulk1_18\tbulk1_19\tbulk1_2\tbulk1_20\tbulk1_21\tbulk1_3\tbulk1_4\tbulk1_5\tbulk1_6\tbulk1_7\tbulk1_8\tbulk1_9\tbulk2_1\tbulk2_10\tbulk2_11\tbulk2_12\tbulk2_13\tbulk2_14\tbulk2_15\tbulk2_16\tbulk2_17\tbulk2_18\tbulk2_19\tbulk2_2\tbulk2_20\tbulk2_21\tbulk2_22\tbulk2_23\tbulk2_24\tbulk2_25\tbulk2_26\tbulk2_27\tbulk2_28\tbulk2_29\tbulk2_3\tbulk2_30\tbulk2_31\tbulk2_32\tbulk2_33\tbulk2_34\tbulk2_35\tbulk2_36\tbulk2_37\tbulk2_38\tbulk2_39\tbulk2_4\tbulk2_40\tbulk2_41\tbulk2_42\tbulk2_43\tbulk2_44\tbulk2_45\tbulk2_46\tbulk2_47\tbulk2_48\tbulk2_49\tbulk2_5\tbulk2_6\tbulk2_7\tbulk2_8\tbulk2_9',
+                       'chr1\t10\t10\t4\t4\t4\t4\t4\t4\t4\t4\t4\t4\t4\t4\t4\t4\t4\t4\t4\t4\t4\t4\t4\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t2\t2\t4\t4\t4\t2\t4\t4\t2\t0\t4\t2\t2\t4\t2\t2\t0\t2\t0\t2\t0\t0\t0\t0\t0']
         
         # Arrange: cleanup any previous work directory
         if os.path.exists(workDir):
@@ -2415,6 +2417,112 @@ class TestPlot(unittest.TestCase):
         self.assertTrue(len(xLine) == 2, f"Expected 2 xLine values but got {len(xLine)}")
         self.assertTrue(all(xLine == xLineTruth), f"Expected xLine to be {xLineTruth} but got {xLine}")
         self.assertTrue(all(yLine == yLineTruth), f"Expected yLine to be {yLineTruth} but got {yLine}")
+
+class TestExclusions(unittest.TestCase):
+    def test_exclusion_parser(self):
+        "Test whether the parser function is operating correctly"
+        # Arrange
+        exclusionsTsvFile = os.path.join(dataDir, "exclusions.test1.bed")
+        trueStarts = [2, 4, 6, 8, 10]
+        trueEnds = [3, 5, 7, 9, 11]
+        
+        # Act
+        exclusions = parse_exclusions_tsv(exclusionsTsvFile)
+        
+        # Assert
+        self.assertEqual(exclusions.ranges["chr1"]["starts"], trueStarts)
+        self.assertEqual(exclusions.ranges["chr1"]["ends"], trueEnds)
+    
+    def test_exclusion_rangencls(self):
+        "Test whether range finding works as expected for RangeNCLS"
+        # Arrange
+        exclusionsTsvFile = os.path.join(dataDir, "exclusions.test1.bed")
+        exclusions = parse_exclusions_tsv(exclusionsTsvFile)
+        trueRange1 = [(2, 3, 0)]
+        trueRange2 = []
+        trueRange3 = [(4, 5, 0)]
+        
+        # Act
+        range1 = list(exclusions.find_overlap("chr1", 2, 2))
+        range2 = list(exclusions.find_overlap("chr1", 3, 3))
+        range3 = list(exclusions.find_overlap("chr1", 4, 5))
+        
+        # Assert
+        self.assertEqual(range1, trueRange1)
+        self.assertEqual(range2, trueRange2)
+        self.assertEqual(range3, trueRange3)
+    
+    def test_exclusion_convert_dict_to_windowed_ncls(self):
+        "Test whether convert_dict_to_windowed_ncls handles exclusions correctly"
+        # Arrange
+        callAllelesEdFile = os.path.join(dataDir, "psQTL_call.alleles_ed.tsv")
+        edDict = parse_ed_as_dict(callAllelesEdFile)
+        
+        exclusionsTsvFile = os.path.join(dataDir, "exclusions.test1.bed")
+        exclusions = parse_exclusions_tsv(exclusionsTsvFile)
+        
+        trueValues = [(1, 2, 0.1), (3, 4, 0.3), (5, 6, 0.5), (7, 8, 0.7), (9, 10, 0.9)]
+        
+        # Act
+        windowedNcls = convert_dict_to_windowed_ncls(edDict, windowSize=1, exclusionsNCLS=exclusions)
+        allValues = list(windowedNcls.find_all("chr1"))
+        
+        # Assert
+        self.assertEqual(allValues, trueValues)
+
+    def test_exclusion_parse_selected_to_windowed_ncls(self):
+        "Test whether parse_selected_to_windowed_ncls handles exclusions correctly"
+        # Arrange
+        callSelectedFile1 = os.path.join(dataDir, "psQTL_call.selected.test1.tsv")
+        
+        exclusionsTsvFile = os.path.join(dataDir, "exclusions.test1.bed")
+        exclusions = parse_exclusions_tsv(exclusionsTsvFile)
+        
+        trueValues = [(1, 2, 1.0), (3, 4, 1.0), (5, 6, 1.0), (7, 8, 1.0), (9, 10, 1.0)]
+        
+        # Act
+        windowedNcls = parse_selected_to_windowed_ncls(callSelectedFile1, exclusionsNCLS=exclusions)
+        allValues = list(windowedNcls.find_all("chr1"))
+        
+        # Assert
+        self.assertEqual(allValues, trueValues)
+
+    def test_exclusion_parse_integrated_to_windowed_ncls(self):
+        "Test whether parse_integrated_to_windowed_ncls handles exclusions correctly"
+        # Arrange
+        integrativeSelectedFile1 = os.path.join(dataDir, "psQTL_integrative.selected.test1.tsv")
+        
+        exclusionsTsvFile = os.path.join(dataDir, "exclusions.test1.bed")
+        exclusions = parse_exclusions_tsv(exclusionsTsvFile)
+        
+        trueCallValues = [(1, 2, 1.0), (3, 4, 1.0), (5, 6, 1.0), (7, 8, 1.0), (9, 10, 1.0)]
+        trueDepthValues = []
+        
+        # Act
+        callWindowedNcls, depthWindowedNcls = parse_integrated_to_windowed_ncls(integrativeSelectedFile1, exclusionsNCLS=exclusions)
+        callValues = list(callWindowedNcls.find_all("chr1"))
+        depthValues = list(depthWindowedNcls.find_all("chr1"))
+        
+        # Assert
+        self.assertEqual(callValues, trueCallValues)
+        self.assertEqual(depthValues, trueDepthValues)
+
+    def test_exclusion_parse_ber_to_windowed_ncls(self):
+        "Test whether parse_integrated_to_windowed_ncls handles exclusions correctly"
+        # Arrange
+        depthBerFile1 = os.path.join(dataDir, "psQTL_depth.BER.test1.tsv")
+        
+        exclusionsTsvFile = os.path.join(dataDir, "exclusions.test1.bed")
+        exclusions = parse_exclusions_tsv(exclusionsTsvFile)
+        
+        trueValues = [(1, 2, 0.8), (3, 4, 0.4), (5, 6, 0.0), (7, 8, 0.4), (9, 10, 0.8)]
+        
+        # Act
+        windowedNcls = parse_ber_to_windowed_ncls(depthBerFile1, exclusionsNCLS=exclusions)
+        allValues = list(windowedNcls.find_all("chr1"))
+        
+        # Assert
+        self.assertEqual(allValues, trueValues)
 
 if __name__ == '__main__':
     unittest.main()

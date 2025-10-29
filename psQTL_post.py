@@ -6,13 +6,13 @@
 # can report on genes that are proximal to or contained within potential QTLs.
 
 import os, argparse, sys, pickle
-import numpy as np
-import matplotlib.pyplot as plt
 from Bio import SeqIO
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from modules.validation import validate_post_args, validate_regions, validate_depth_files, \
                                validate_p, validate_r
+from modules.parsing import read_gz_file, parse_exclusions_tsv
+from modules.ncls import RangeNCLS
 from modules.depth import parse_bins_as_dict, normalise_coverage_dict, convert_dict_to_depthncls
 from modules.ed import parse_ed_as_dict, convert_dict_to_windowed_ncls
 from modules.splsda import parse_selected_to_windowed_ncls, parse_ber_to_windowed_ncls, \
@@ -39,8 +39,8 @@ def raise_to_power(edDict, power):
 def validate_window_size(windowSize):
     if windowSize == None:
         raise ValueError("Window size was not cached from previous psQTL_prep.py analysis, nor could it " +
-                            "be derived from the provided data files; please provide the window size to " + 
-                            "the --windowSize argument as part of 'psQTL_prep.py initialise'")
+                         "be derived from the provided data files; please provide the window size to " + 
+                          "the --windowSize argument as part of 'psQTL_prep.py initialise'")
 
 def main():
     usage = """%(prog)s processes the output of psQTL_proc.py to either 1) plot segregation
@@ -88,6 +88,12 @@ def main():
                    with chr:start-end format (e.g., 'chr1:1000000-2000000').
                    """,
                    default=[])
+    p.add_argument("--exclude", dest="exclusionsTsv",
+                   required=False,
+                   help="""Optionally, specify a headerless 3-column TSV format file
+                   (chrom start end) indicating genomic regions to exclude from any
+                   plotted or reported outputs.""",
+                   default=None)
     p.add_argument("--missing", dest="missingFilter",
                    type=float,
                    required=False,
@@ -173,6 +179,14 @@ def main():
                          """,
                          default=[])
     ## Style arguments
+    pparser.add_argument("--noGeneNames", dest="noGeneNames",
+                         required=False,
+                         action="store_true",
+                         help="""GENES PLOT: Optionally, provide this flag if you have set
+                         '-p genes' and would like gene models to be shown without their
+                         names being displayed; this could be useful if the gene names become
+                         illegible at the size you are plotting""",
+                         default=False)
     pparser.add_argument("--width", dest="width",
                          type=int,
                          required=False,
@@ -234,8 +248,9 @@ def main():
         validate_r(args)
     
     # Get contig lengths from genome FASTA
-    genomeRecords = SeqIO.parse(open(args.genomeFasta, 'r'), "fasta")
-    lengthsDict = { record.id:len(record) for record in genomeRecords }
+    with read_gz_file(args.genomeFasta) as fileIn:
+        genomeRecords = SeqIO.parse(fileIn, "fasta")
+        lengthsDict = { record.id:len(record) for record in genomeRecords }
     if lengthsDict == {}:
         raise ValueError(f"No contigs found in genome FASTA '{args.genomeFasta}'; is it actually a FASTA file?")
     
@@ -243,6 +258,12 @@ def main():
     args.regions = validate_regions(args.regions, args.mode, args.plotStyle if args.mode == "plot" else None, lengthsDict)
     if args.mode == "plot" and args.highlights != []:
         args.highlights = validate_regions(args.highlights, args.mode, args.plotStyle, lengthsDict, "--highlights")
+    
+    # Parse and validate any exclusions
+    if args.exclusionsTsv != None:
+        args.exclusions = parse_exclusions_tsv(args.exclusionsTsv)
+    else:
+        args.exclusions = RangeNCLS() # empty NCLS object
     
     # Parse 'call' data if necessary
     dataDict = {}
@@ -266,12 +287,15 @@ def main():
             
             # Convert dictionary to Euclidean distance NCLS data structure
             "WindowedNCLS cannot be pickled so we need to do it like file->dict->WindowedNCLS"
-            dataDict["call"]["ed"] = convert_dict_to_windowed_ncls(dataDict["call"]["ed"], 1) # windowSize = 1
+            dataDict["call"]["ed"] = convert_dict_to_windowed_ncls(dataDict["call"]["ed"],
+                                                                   windowSize=1,
+                                                                   exclusionsNCLS=args.exclusions)
         
         # Parse 'call' sPLS-DA data
         if "splsda" in args.measurementType:
             # Parse the Sparse Partial Least Squares Discriminant Analysis data
-            dataDict["call"]["selected"] = parse_selected_to_windowed_ncls(locations.variantSplsdaSelectedFile)
+            dataDict["call"]["selected"] = parse_selected_to_windowed_ncls(locations.variantSplsdaSelectedFile,
+                                                                           exclusionsNCLS=args.exclusions)
             dataDict["call"]["ber"] = parse_ber_to_windowed_ncls(locations.variantSplsdaBerFile)
     
     # Parse 'depth' data if necessary
@@ -297,21 +321,21 @@ def main():
             
             # Convert dictionary to Euclidean distance NCLS data structure
             validate_window_size(args.windowSize) # validate before we parse to WindowedNCLS
-            dataDict["depth"]["ed"] = convert_dict_to_windowed_ncls(dataDict["depth"]["ed"], args.windowSize)
+            dataDict["depth"]["ed"] = convert_dict_to_windowed_ncls(dataDict["depth"]["ed"],
+                                                                    windowSize=args.windowSize,
+                                                                    exclusionsNCLS=args.exclusions)
         
         # Parse 'depth' sPLS-DA data
         if "splsda" in args.measurementType:
-            validate_window_size(args.windowSize) # validate before we parse to WindowedNCLS
             dataDict["depth"]["selected"] = parse_selected_to_windowed_ncls(locations.depthSplsdaSelectedFile,
-                                                                            windowSize=args.windowSize)
+                                                                            exclusionsNCLS=args.exclusions)
             dataDict["depth"]["ber"] = parse_ber_to_windowed_ncls(locations.depthSplsdaBerFile)
     
     # Parse integrated sPLS-DA results if they exist
     if "call" in args.inputType and "depth" in args.inputType and "splsda" in args.measurementType:
         if os.path.isfile(locations.integrativeSplsdaSelectedFile):
-            validate_window_size(args.windowSize) # validate before we parse depth features to WindowedNCLS
             dataDict["call"]["integrated"], dataDict["depth"]["integrated"] = parse_integrated_to_windowed_ncls(
-                locations.integrativeSplsdaSelectedFile, args.windowSize)
+                locations.integrativeSplsdaSelectedFile)
     
     # Parse depth data if necessary
     if args.mode == "plot" and "coverage" in args.plotTypes and "depth" in args.inputType:
@@ -322,14 +346,14 @@ def main():
     
     # Split into mode-specific functions
     if args.mode == "plot":
-        pmain(args, locations, dataDict)
+        pmain(args, dataDict)
     elif args.mode == "report":
-        rmain(args, locations, dataDict)
+        rmain(args, dataDict)
     
     # Print completion flag if we reach this point
     print("Program completed successfully!")
 
-def pmain(args, locations, dataDict):
+def pmain(args, dataDict):
     # Establish plotting object
     if args.plotStyle == "horizontal":
         plotter = HorizontalPlot(args.regions,
@@ -358,6 +382,7 @@ def pmain(args, locations, dataDict):
             coverageSamples = args.coverageSamples if "coverage" in args.plotTypes \
                               else None,
             power=args.power, wmaSize=args.wmaSize, width=args.width, height=args.height)
+        plotter.showGeneNames = not args.noGeneNames
         plotter.plot(args.plotTypes, args.outputFileName)
     elif args.plotStyle == "circos":
         plotter = CircosPlot(args.regions,
@@ -390,7 +415,7 @@ def pmain(args, locations, dataDict):
         plotter.plot(args.plotTypes, args.outputFileName)
     print("Plotting complete!")
 
-def rmain(args, locations, dataDict):
+def rmain(args, dataDict):
     if args.reportType == "genes":
         if "call" in args.inputType:
             if "ed" in args.measurementType:

@@ -1,5 +1,5 @@
 import numpy as np
-from math import sqrt, ceil
+from math import sqrt
 from statistics import mean
 from collections import Counter
 from itertools import combinations
@@ -652,7 +652,7 @@ def parse_ed_as_dict(edFile, missingFilter=0.5):
                 edDict[chrom][1].append(euclideanDistance)
     return edDict
 
-def convert_dict_to_windowed_ncls(statDict, windowSize=1):
+def convert_dict_to_windowed_ncls(statDict, windowSize=1, exclusionsNCLS=None):
     '''
     Parameters:
         statDict -- a dictionary with structure like:
@@ -665,13 +665,27 @@ def convert_dict_to_windowed_ncls(statDict, windowSize=1):
                       when generating the depth file that led to the statistics file. Default is 0
                       (no window size) which is intended for use with variant calls, whereas
                       depth CNVs should use an actual window size.
+        exclusionsNCLS -- OPTIONAL; a RangeNCLS object indexing ranges within which data points
+                          should be eliminated
     Returns:
         windowedNCLS -- a WindowedNCLS object containing statistical values indexed by chromosome
                         and position
     '''
     windowedNCLS = WindowedNCLS(windowSize)
     for chrom, value in statDict.items():
-        positions = np.array(value[0])
-        statsValues = np.array(value[1])
+        if exclusionsNCLS != None:
+            filteredValues = [
+                (position, stat)
+                for position, stat in zip(value[0], value[1])
+                if not exclusionsNCLS.is_overlapping(chrom, position, position+windowSize-1) # -1 to make inclusion/indexing difference compatible
+            ]
+            if filteredValues != []:
+                positions, statsValues = map(np.array, zip(*filteredValues))
+            else:
+                continue # nothing remains to index on this chromosome
+        else:
+            positions = np.array(value[0])
+            statsValues = np.array(value[1])
+        
         windowedNCLS.add(chrom, positions, statsValues)
     return windowedNCLS

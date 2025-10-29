@@ -1,8 +1,8 @@
-import os, gzip, sys
+import os, sys
 import pandas as pd
 import numpy as np
 
-from .parsing import parse_binned_tsv
+from .parsing import parse_binned_tsv, read_gz_file, WriteGzFile
 from .ncls import WindowedNCLS
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -191,10 +191,10 @@ def call_cnvs_from_depth(samplePairs, outputFileName, windowSize, ploidy=2):
     
     # Write to output file
     todaysDate = pd.Timestamp.now().strftime("%d-%m-%Y")
-    with gzip.open(outputFileName, "wt") as fileOut:
+    with WriteGzFile(outputFileName) as fileOut:
         fileOut.write("##fileformat=VCF-like\n")
         fileOut.write("##FORMAT=<ID=GT,Number=1,Type=String,Description=\"Sums to number of median-normalised allele copies\">\n")
-        fileOut.write(f"##psQTL_prep;module=depth, version={__version__}, windowSize={windowSize}; DD-MM-YYYY={todaysDate}\n")
+        fileOut.write(f"##psQTL_prep;module=depth, version={__version__}, windowSize={windowSize}; ploidy={ploidy}; DD-MM-YYYY={todaysDate}\n")
         exploded_df.to_csv(fileOut, sep="\t", index=False)
 
 def parse_bins_as_dict(depthFileDict):
@@ -231,7 +231,7 @@ def parse_bins_as_dict(depthFileDict):
         for sampleID, depthFile in depthFiles:
             coverageDict[group][sampleID] = {}
             # Parse binned depth file
-            with open(depthFile, "r") as fileIn:
+            with read_gz_file(depthFile) as fileIn:
                 for line in fileIn:
                     # Extract relevant details
                     contigID, pos, coverage = line.strip().split("\t")

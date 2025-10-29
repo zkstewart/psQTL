@@ -1,4 +1,3 @@
-import math
 from .gff3 import GFF3Graph
 
 def is_overlapping(start1, end1, start2, end2):

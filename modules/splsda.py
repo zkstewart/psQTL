@@ -1,9 +1,8 @@
-import os, shutil, subprocess, gzip
-import numpy as np
+import shutil, subprocess, re
 from collections import Counter
 
-from .parsing import read_gz_file
-from .ncls import WindowedNCLS
+from .parsing import read_gz_file, WriteGzFile
+from .ncls import RangeNCLS
 from .ed import gt_median_adjustment
 from .parsing import vcf_header_to_metadata_validation
 
@@ -133,7 +132,9 @@ def recode_vcf(vcfFile, outputFileName, metadataDict, isCNV=False, quiet=False):
     number is below or equal to the median (0) or above the median (1).
     
     The output file is a TSV file with the following format:
-    [chrom, pos, sample1EncodedGT, sample2EncodedGT, ...]
+    [chrom, start, end, sample1EncodedGT, sample2EncodedGT, ...]
+    
+    Start and end give the borders of the variant (1-based and inclusive).
     
     Parameters:
         vcfFile -- a string indicating the location of the input VCF file; can be gzipped
@@ -141,7 +142,11 @@ def recode_vcf(vcfFile, outputFileName, metadataDict, isCNV=False, quiet=False):
         isCNV -- (OPTIONAL) a boolean indicating whether the genotypes are for CNVs
                  (True) or SNPs/indels (False); default is False
     '''
-    with read_gz_file(vcfFile) as fileIn, gzip.open(outputFileName, "wt") as fileOut:
+    windowSize = 1 # default value; will be reset if parsing a CNV file
+    windowSizeRegex = re.compile(r"windowSize=(\d+)")
+    
+    # Parse through the file and write the recoded output
+    with read_gz_file(vcfFile) as fileIn, WriteGzFile(outputFileName) as fileOut:
         for line in fileIn:
             sl = line.strip().split("\t")
             
@@ -156,9 +161,17 @@ def recode_vcf(vcfFile, outputFileName, metadataDict, isCNV=False, quiet=False):
                 sampleIndices = [ sl[9:].index(name) for name in foundSampleNames ]
                 
                 # Write the header line to the output file
-                fileOut.write("\t".join(["chrom", "pos"] + [ sl[9:][i] for i in sampleIndices ]) + "\n")
+                fileOut.write("\t".join(["chrom", "start", "end"] + [ sl[9:][i] for i in sampleIndices ]) + "\n")
             
-            # Skip comment lines
+            # Parse the psQTL_prep comment line
+            if line.startswith("##psQTL_prep"):
+                regexHit = windowSizeRegex.search(line)
+                if regexHit is None:
+                    raise ValueError(f"Expected VCF-like header line '{line.strip()}' to have a 'windowSize=(\\d+)' regex match")
+                windowSize = int(regexHit.groups()[0])
+                continue
+            
+            # Skip any other comment lines
             if line.startswith("#"):
                 continue
             
@@ -176,7 +189,7 @@ def recode_vcf(vcfFile, outputFileName, metadataDict, isCNV=False, quiet=False):
                 gtFields = recode_variant(gtIndex, [ sl[9:][i] for i in sampleIndices ])
             
             # Format the output line
-            encodedLine = [sl[0], sl[1], *gtFields]
+            encodedLine = [sl[0], sl[1], str(int(sl[1]) + windowSize - 1), *gtFields]
             
             # Write to output file
             fileOut.write("\t".join(encodedLine) + "\n")
@@ -227,8 +240,17 @@ def run_windowed_splsda(metadataFile, encodedVcfFile, outputVariants, outputBER,
         return None
     else:
         errorMsg = rerr.decode("utf-8").rstrip("\r\n ")
-        raise Exception(("run_windowed_splsda encountered an unhandled situation when processing " + 
-                         f"'{encodedVcfFile}'; have a look at the stderr to make sense of this:\n'{errorMsg}'"))
+        if "Y variable must have exactly two unique values" in errorMsg:
+            raise ValueError(f"Metadata seems to not have two groups; see original error message:\n{errorMsg}")
+        elif "Y variable is expected to only have" in errorMsg:
+            raise ValueError(f"Metadata seems to have unrecognised group labels; see original error message:\n{errorMsg}")
+        elif "has no variants" in errorMsg:
+            raise ValueError(f"There seem to be no variants available for sPLS-DA; see original error message:\n{errorMsg}")
+        elif "Error with ordering of encoded and selected features" in errorMsg:
+            raise Exception(f"Unexpected internal logic error in sPLS-DA code; see original error message:\n{errorMsg}")
+        else:
+            raise Exception(("run_windowed_splsda encountered an unrecoverable problem when processing " + 
+                             f"'{encodedVcfFile}'; have a look at the stderr to make sense of this:\n'{errorMsg}'"))
 
 def run_integrative_splsda(callRdataFile, depthRdataFile, outputSelected, outputPredictions,
                            scriptLocation, threads=1, nrepeat=10, maxiters=1000):
@@ -262,24 +284,31 @@ def run_integrative_splsda(callRdataFile, depthRdataFile, outputSelected, output
         return None
     else:
         errorMsg = rerr.decode("utf-8").rstrip("\r\n ")
-        raise Exception(("run_integrative_splsda encountered an unhandled situation when processing " + 
-                         f"'{callRdataFile}' and '{depthRdataFile}'; have a look at the stderr to " + 
-                         f"make sense of this:\n'{errorMsg}'"))
+        if "Integrative sPLS-DA is not possible or necessary" in errorMsg:
+            print(f"# Note: {errorMsg}; this does not constitute an error, and program operations will continue sans integrative predictions")
+        elif "X sample names do not match across datasets" in errorMsg:
+            raise Exception(f"'call' and 'depth' result sample names do not match (are you using combining results somehow?); see original error message:\n{errorMsg}")
+        elif "Y variables do not match across datasets" in errorMsg:
+            raise Exception(f"'call' and 'depth' result metadata do not match (are you using combining results somehow?); see original error message:\n{errorMsg}")
+        else:
+            raise Exception(("run_integrative_splsda encountered an unhandled situation when processing " + 
+                             f"'{callRdataFile}' and '{depthRdataFile}'; have a look at the stderr to " + 
+                             f"make sense of this:\n'{errorMsg}'"))
 
-def parse_selected_to_windowed_ncls(selectedFileName, windowSize=1):
+def parse_selected_to_windowed_ncls(selectedFileName, exclusionsNCLS=None):
     '''
     Parameters:
         selectedFileName -- a file name indicating the location of the selected variants file
-        windowSize -- (OPTIONAL) an integer indicating the size of the windows that CNVs were predicted with;
-                      if 1, the file is not windowed (as seen in call variants); default is 1
+        exclusionsNCLS -- (OPTIONAL); a RangeNCLS object indexing ranges within which data points
+                          should be eliminated
     Returns:
-        windowedNCLS -- a WindowedNCLS object containing statistical values indexed by chromosome
-                        and position
+        rangeNCLS -- a RangeNCLS object containing statistical values indexed
+                     by chromosome, start, and end position
     '''
-    EXPECTED_HEADER = ["chrom", "pos", "stability", "abs_loading", "direction"]
+    EXPECTED_HEADER = ["chrom", "start", "end", "stability", "abs_loading", "direction"]
     
     # Parse the selected file
-    statDict = {}
+    rangeNCLS = RangeNCLS()
     with open(selectedFileName, "r") as fileIn:
         # Read and validate the header
         header = fileIn.readline().strip().split("\t")
@@ -289,11 +318,12 @@ def parse_selected_to_windowed_ncls(selectedFileName, windowSize=1):
         # Store each line in the windowedNCLS object
         for line in fileIn:
             # Parse relevant details
-            chrom, pos, stability, abs_loading, direction = line.strip().split("\t")
+            chrom, start, end, stability, abs_loading, direction = line.strip().split("\t")
             try:
-                pos = int(float(pos))
+                start = int(float(start))
+                end = int(float(end))
             except:
-                raise ValueError(f"Position '{pos}' is not an integer in file '{selectedFileName}'")
+                raise ValueError(f"Start '{start}' and/or end '{end}' is not an integer in file '{selectedFileName}'")
             try:
                 stability = float(stability)
             except:
@@ -303,29 +333,26 @@ def parse_selected_to_windowed_ncls(selectedFileName, windowSize=1):
             except:
                 raise ValueError(f"abs_loading '{abs_loading}' is not a float in file '{selectedFileName}'")
             
+            # Skip if we are excluding this position
+            if exclusionsNCLS != None:
+                if exclusionsNCLS.is_overlapping(chrom, start, end):
+                    continue
+            
             # Compute the stability*abs_loading value
             statProduct = stability * abs_loading
             
-            # Store the values in the dictionary
-            if chrom not in statDict:
-                statDict[chrom] = [[], []]
-            statDict[chrom][0].append(pos)
-            statDict[chrom][1].append(statProduct)
+            # Store the values in the RangeNCLS object
+            rangeNCLS.add(chrom, start, end, statProduct)
     
-    # Convert the dictionary to a WindowedNCLS object
-    windowedNCLS = WindowedNCLS(windowSize=windowSize)
-    for chrom, value in statDict.items():
-        positions = np.array(value[0])
-        statsValues = np.array(value[1])
-        windowedNCLS.add(chrom, positions, statsValues)
-    
-    return windowedNCLS
+    rangeNCLS.build()
+    return rangeNCLS
 
-def parse_integrated_to_windowed_ncls(selectedFileName, windowSize):
+def parse_integrated_to_windowed_ncls(selectedFileName, exclusionsNCLS=None):
     '''
     Parameters:
         selectedFileName -- a file name indicating the location of the selected variants file
-        windowSize -- an integer indicating the size of the windows that CNVs were predicted with
+        exclusionsNCLS -- (OPTIONAL); a RangeNCLS object indexing ranges within which data points
+                          should be eliminated
     Returns:
         nclsList -- a list of two WindowedNCLS objects:
             callWindowedNCLS -- a WindowedNCLS object containing statistical values indexed by chromosome
@@ -333,10 +360,11 @@ def parse_integrated_to_windowed_ncls(selectedFileName, windowSize):
             depthWindowedNCLS -- a WindowedNCLS object containing statistical values indexed by chromosome
                                 and position specifically for depth variants that were selected
     '''
-    EXPECTED_HEADER = ["chrom", "pos", "type", "stability", "abs_loading", "direction"]
+    EXPECTED_HEADER = ["chrom", "start", "end", "type", "stability", "abs_loading", "direction"]
     
     # Parse the selected file
-    featureDict = {}
+    callRangeNCLS = RangeNCLS()
+    depthRangeNCLS = RangeNCLS()
     with open(selectedFileName, "r") as fileIn:
         # Read and validate the header
         header = fileIn.readline().strip().split("\t")
@@ -346,11 +374,12 @@ def parse_integrated_to_windowed_ncls(selectedFileName, windowSize):
         # Store each line in the windowedNCLS object
         for line in fileIn:
             # Parse relevant details
-            chrom, pos, featuretype, stability, abs_loading, direction = line.strip().split("\t")
+            chrom, start, end, featuretype, stability, abs_loading, direction = line.strip().split("\t")
             try:
-                pos = int(float(pos))
+                start = int(float(start))
+                end = int(float(end))
             except:
-                raise ValueError(f"Position '{pos}' is not an integer in file '{selectedFileName}'")
+                raise ValueError(f"Start '{start}' and/or end '{end}' is not an integer in file '{selectedFileName}'")
             try:
                 stability = float(stability)
             except:
@@ -360,97 +389,71 @@ def parse_integrated_to_windowed_ncls(selectedFileName, windowSize):
             except:
                 raise ValueError(f"abs_loading '{abs_loading}' is not a float in file '{selectedFileName}'")
             
+            # Skip if we are excluding this position
+            if exclusionsNCLS != None:
+                if exclusionsNCLS.is_overlapping(chrom, start, end):
+                    continue
+            
             # Compute the stability*abs_loading value
             statProduct = stability * abs_loading
             
-            # Store the values in the dictionary
-            featureDict.setdefault(featuretype, {})
-            
-            if chrom not in featureDict[featuretype]:
-                featureDict[featuretype][chrom] = [[], []]
-            featureDict[featuretype][chrom][0].append(pos)
-            featureDict[featuretype][chrom][1].append(statProduct)
+            # Store the values in the RangeNCLS object
+            if featuretype == "call":
+                callRangeNCLS.add(chrom, start, end, statProduct)
+            else:
+                depthRangeNCLS.add(chrom, start, end, statProduct)
     
-    # Convert the dictionary to a WindowedNCLS object
-    nclsList = []
-    for featuretype in ["call", "depth"]: # ensure ordering; we always have at least one of each type
-        # Create a WindowedNCLS object for the feature type
-        if featuretype == "call":
-            windowedNCLS = WindowedNCLS(windowSize=1)
-        else:
-            windowedNCLS = WindowedNCLS(windowSize=windowSize)
-        
-        # Populate the WindowedNCLS object with the parsed data
-        statDict = featureDict[featuretype]
-        for chrom, value in statDict.items():
-            positions = np.array(value[0])
-            statsValues = np.array(value[1])
-            windowedNCLS.add(chrom, positions, statsValues)
-        nclsList.append(windowedNCLS)
-    
-    return nclsList
+    callRangeNCLS.build()
+    depthRangeNCLS.build()
+    return callRangeNCLS, depthRangeNCLS
 
-def parse_ber_to_windowed_ncls(berFileName, balancedAccuracy=True):
+def parse_ber_to_windowed_ncls(berFileName, balancedAccuracy=True, exclusionsNCLS=None):
     '''
     Parameters:
         berFileName -- a file name indicating the location of the BER windows file
         balancedAccuracy -- (OPTIONAL); a boolean indicating whether to convert the
                             BER to balanced accuracy (default is True)
+        exclusionsNCLS -- (OPTIONAL); a RangeNCLS object indexing ranges within which data points
+                          should be eliminated
     Returns:
-        windowedNCLS -- a WindowedNCLS object containing statistical values indexed
-                        by chromosome and position
+        rangeNCLS -- a RangeNCLS object containing statistical values indexed
+                     by chromosome, start, and end position
     '''
-    EXPECTED_HEADER = ["chrom", "pos", "BER"]
+    EXPECTED_HEADER = ["chrom", "start", "end", "BER"]
     
     # Parse the selected file
-    statDict = {}
+    rangeNCLS = RangeNCLS()
     with open(berFileName, "r") as fileIn:
         # Read and validate the header
         header = fileIn.readline().strip().split("\t")
         if header != EXPECTED_HEADER:
             raise ValueError(f"Invalid header in file '{berFileName}', should be: {EXPECTED_HEADER}")
         
-        # Store each line in the windowedNCLS object
-        windowSize = None
-        prevPos = None
+        # Store each line in the RangeNCLS object
         for line in fileIn:
             # Parse relevant details
-            chrom, pos, ber = line.strip().split("\t")
+            chrom, start, end, ber = line.strip().split("\t")
             try:
-                pos = int(float(pos))
+                start = int(float(start))
+                end = int(float(end))
             except:
-                raise ValueError(f"Position '{pos}' is not an integer in file '{berFileName}'")
+                raise ValueError(f"Start '{start}' and/or end '{end}' is not an integer in file '{berFileName}'")
             try:
                 ber = float(ber)
             except:
                 raise ValueError(f"BER '{ber}' is not a float in file '{berFileName}'")
             
+            # Skip if we are excluding this position
+            if exclusionsNCLS != None:
+                if exclusionsNCLS.is_overlapping(chrom, start, end):
+                    continue
+            
             # Convert BER to balanced accuracy if needed
             if balancedAccuracy:
                 ber = 1 - (ber*2)
             
-            # Derive our window size (if not set yet)
-            if windowSize == None:
-                if prevPos == None:
-                    prevPos = pos
-                else:
-                    windowSize = pos - prevPos
-            
-            # Store the values in the dictionary
-            if chrom not in statDict:
-                statDict[chrom] = [[], []]
-            statDict[chrom][0].append(pos)
-            statDict[chrom][1].append(ber)
-        
-        # If windowSize could not be derived from the file, set to 1 (this happens if only 1 BER value is present)
-        if windowSize == None:
-            windowSize = 1
+            # Store the values in the RangeNCLS object
+            rangeNCLS.add(chrom, start, end, ber)
     
-    # Convert the dictionary to a WindowedNCLS object
-    windowedNCLS = WindowedNCLS(windowSize=windowSize)
-    for chrom, value in statDict.items():
-        positions = np.array(value[0])
-        statsValues = np.array(value[1])
-        windowedNCLS.add(chrom, positions, statsValues)
-    
-    return windowedNCLS
+    rangeNCLS.build()
+    return rangeNCLS

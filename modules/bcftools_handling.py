@@ -1,6 +1,5 @@
 import os, shutil, subprocess
 import concurrent.futures
-from itertools import repeat
 
 from .parsing import read_gz_file
 
@@ -197,7 +196,10 @@ def call_task(bamListFile, genomeFasta, contigID, outputFileName):
         return None
     else:
         errorMsg = callerr.decode("utf-8").rstrip("\r\n ")
-        raise Exception(errorMsg)
+        if "not retrieve index file for" in errorMsg or "fail to load index for" in errorMsg:
+            raise FileNotFoundError(f"BAM file is likely to be missing an index; see original error message\n{errorMsg}")
+        else:
+            raise Exception(errorMsg)
 
 def run_bcftools_call(bamListFile, genomeFasta, outputDirectory, threads):
     '''
