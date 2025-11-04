@@ -7,7 +7,7 @@ from collections import Counter
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from modules.parsing import parse_metadata, vcf_header_to_metadata_validation, parse_vcf_genotypes, \
     parse_vcf_stats, parse_samtools_depth_tsv, parse_binned_tsv, read_gz_file, parse_exclusions_tsv
-from modules.ncls import WindowedNCLS
+from modules.nclswrappers import WindowedNCLS
 from modules.ed import parse_vcf_for_ed, gt_median_adjustment, filter_impossible_genotypes, \
     calculate_allele_frequency_ed, calculate_genotype_frequency_ed, calculate_inheritance_ed, \
     parse_ed_as_dict, convert_dict_to_windowed_ncls

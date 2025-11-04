@@ -3,12 +3,13 @@
 # repository in the author's GitHub account. It applies a different logic to
 # parsing GFF3 files which should be much more flexible and robust.
 
-import re, os
+import os, sys, re
 import pandas as pd
 from collections import Counter
 from ncls import NCLS
 
-from .parsing import read_gz_file
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+from parsing import read_gz_file
 
 class GFF3Feature:
     IMMUTABLE = ["ID", "ftype"] # these attributes should never change once set

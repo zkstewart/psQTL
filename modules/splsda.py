@@ -1,10 +1,11 @@
-import shutil, subprocess, re
+import os, sys, shutil, subprocess, re
 from collections import Counter
 
-from .parsing import read_gz_file, WriteGzFile
-from .ncls import RangeNCLS
-from .ed import gt_median_adjustment
-from .parsing import vcf_header_to_metadata_validation
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+from parsing import read_gz_file, WriteGzFile
+from nclswrappers import RangeNCLS
+from ed import gt_median_adjustment
+from parsing import vcf_header_to_metadata_validation
 
 def validate_r_exists():
     if not shutil.which("R"):

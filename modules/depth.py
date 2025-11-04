@@ -2,8 +2,9 @@ import os, sys
 import pandas as pd
 import numpy as np
 
-from .parsing import parse_binned_tsv, read_gz_file, WriteGzFile
-from .ncls import WindowedNCLS
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+from parsing import parse_binned_tsv, read_gz_file, WriteGzFile
+from nclswrappers import WindowedNCLS
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from _version import __version__

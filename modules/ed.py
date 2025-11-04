@@ -1,11 +1,13 @@
+import os, sys
 import numpy as np
 from math import sqrt
 from statistics import mean
 from collections import Counter
 from itertools import combinations
 
-from .parsing import read_gz_file, vcf_header_to_metadata_validation, parse_vcf_genotypes
-from .ncls import WindowedNCLS
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+from parsing import read_gz_file, vcf_header_to_metadata_validation, parse_vcf_genotypes
+from nclswrappers import WindowedNCLS
 
 def gt_median_adjustment(genotypeLists):
     '''

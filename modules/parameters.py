@@ -1,6 +1,7 @@
-import os, json
+import os, sys, json
 
-from .parsing import parse_vcf_stats, parse_metadata
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+from parsing import parse_vcf_stats, parse_metadata
 
 class ParameterCache:
     def __init__(self, workingDirectory):

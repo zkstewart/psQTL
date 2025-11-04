@@ -12,7 +12,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from modules.validation import validate_post_args, validate_regions, validate_depth_files, \
                                validate_p, validate_r
 from modules.parsing import read_gz_file, parse_exclusions_tsv
-from modules.ncls import RangeNCLS
+from modules.nclswrappers import RangeNCLS
 from modules.depth import parse_bins_as_dict, normalise_coverage_dict, convert_dict_to_depthncls
 from modules.ed import parse_ed_as_dict, convert_dict_to_windowed_ncls
 from modules.splsda import parse_selected_to_windowed_ncls, parse_ber_to_windowed_ncls, \

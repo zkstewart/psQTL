@@ -1,4 +1,7 @@
-from .gff3 import GFF3Graph
+import os, sys
+
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+from gff3 import GFF3Graph
 
 def is_overlapping(start1, end1, start2, end2):
     '''

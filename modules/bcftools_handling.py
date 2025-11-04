@@ -1,7 +1,8 @@
-import os, shutil, subprocess
+import os, sys, shutil, subprocess
 import concurrent.futures
 
-from .parsing import read_gz_file
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+from parsing import read_gz_file
 
 # Validation functions
 def validate_bcftools_exists():

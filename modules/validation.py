@@ -1,10 +1,11 @@
-import os, re
+import os, sys, re
 
-from .locations import Locations
-from .parameters import ParameterCache
-from .parsing import parse_metadata
-from .gff3 import GFF3Graph
-from .plot import NUM_SAMPLE_LINES
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+from locations import Locations
+from parameters import ParameterCache
+from parsing import parse_metadata
+from gff3 import GFF3Graph
+from plot import NUM_SAMPLE_LINES
 
 def validate_prep_args(args):
     # Validate working directory

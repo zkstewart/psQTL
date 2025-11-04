@@ -1,7 +1,8 @@
-import gzip, codecs
+import os, sys, gzip, codecs
 from contextlib import contextmanager
 
-from .ncls import RangeNCLS
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+from nclswrappers import RangeNCLS
 
 class WriteGzFile:
     def __init__(self, filename):

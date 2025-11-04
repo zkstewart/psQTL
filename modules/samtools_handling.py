@@ -1,8 +1,9 @@
-import shutil, subprocess, math
+import os, sys, shutil, subprocess, math
 import concurrent.futures
 import numpy as np
 
-from .parsing import parse_samtools_depth_tsv, WriteGzFile
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+from parsing import parse_samtools_depth_tsv, WriteGzFile
 
 # Validation functions
 def validate_samtools_exists():

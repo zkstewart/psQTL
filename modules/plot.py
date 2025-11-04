@@ -1,4 +1,4 @@
-import math, re
+import os, sys, math, re
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -7,8 +7,9 @@ from pycirclize import Circos
 from matplotlib.patches import Patch
 from matplotlib.lines import Line2D
 
-from .gff3 import GFF3Graph
-from .reporting import is_overlapping
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+from gff3 import GFF3Graph
+from reporting import is_overlapping
 
 SAMPLE_AESTHETICS = [["#000000", "dotted"], ["#002D7E", "dashed"], ["#ECE45A", "dashdot"]]
 LINESCATTER_COLOURS = [["#2166ac", "#b2182b"], # blue to red, for ED measurements

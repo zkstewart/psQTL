@@ -1,4 +1,7 @@
-from .parsing import read_gz_file, vcf_header_to_metadata_validation, parse_vcf_genotypes
+import os, sys
+
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+from parsing import read_gz_file, vcf_header_to_metadata_validation, parse_vcf_genotypes
 
 def filter_vcf(vcfFile, outputFileName, metadataDict, groupMissing=0.25, qualThreshold=30.0):
     '''
