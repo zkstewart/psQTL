@@ -210,8 +210,21 @@ if (mixomicsVersion[2] < 30) {
 }
 
 # Parse metadata file
-metadata.table <- read.table(file=args$m, header=FALSE, sep="\t", stringsAsFactors=FALSE)
+metadata.table <- read.table(file=args$m, header=FALSE, stringsAsFactors=FALSE) # don't set 'sep=', try to parse it flexibly
 metadata.table$V1 <- unlist(lapply(metadata.table$V1, fix_numeric_first_char))
+
+# Detect malformatted metadata file
+if (ncol(metadata.table) != 2)
+{
+    stop(paste0("Metadata file '", args$m, "' should have 2 columns, but found ", ncol(metadata.table), " columns instead"))
+}
+
+# Strip any junk and Excel quotes
+metadata.table$V1 <- str_remove_all(metadata.table$V1, "[\\t,\"' ]")
+metadata.table$V2 <- str_remove_all(metadata.table$V2, "[\\t,\"' ]")
+
+# Make group labels lowercase
+metadata.table$V2 <- tolower(metadata.table$V2)
 
 # Read in encoded values
 df <- read.table(gzfile(args$v), header=TRUE, sep="\t", na.strings=".")
@@ -221,7 +234,21 @@ df <- df[rowSums(df[,! colnames(df) %in% c("chrom", "start", "end")], na.rm=TRUE
 rownames(df) <- make.names(paste0(df$chrom, "_", format_numeric_as_string(df$start), "_", format_numeric_as_string(df$end)), unique=TRUE)
 
 # Drop any metadata samples not present in VCF
+original.metadata.samples <- metadata.table$V1
 metadata.table <- metadata.table[metadata.table$V1 %in% colnames(df),,drop=FALSE]
+
+# Detect incompatible metadata and VCF
+if (nrow(metadata.table) < 2)
+{
+  stop(
+    paste0("Detected incompatibility between metadata file '", args$m, "' and encoded VCF file '", args$v, "'.\n", 
+           "Specifically, filtering metadata to remove any samples not found within the encoded VCF file results in too few samples for segregant analysis. ",
+           "This implies that the metadata sample labels are malformed or not from the same experiment as your VCF file. You should check them for compatibility.\n",
+           "Metadata sample labels == '", paste(original.metadata.samples, collapse=", ") , "'\n",
+           "VCF sample labels == '", paste(colnames(df), collapse=", ") , "'"
+           )
+  )
+}
 
 # Extract and unify Y variable values to 'group1' and 'group2'
 Y <- metadata.table$V2
@@ -230,11 +257,11 @@ Y <- unify_accepted_y_values(Y)
 # Discover issues with Y variable
 if (length(unique(Y)) != 2)
 {
-    stop(paste0("Y variable must have exactly two unique values, but found ", length(unique(Y)), " unique values: ", paste(unique(Y), collapse=", ")))
+    stop(paste0("Y variable (i.e., metadata labels in '", args$m, "') must have exactly two unique values, but found ", length(unique(Y)), " unique values: ", paste(unique(Y), collapse=", ")))
 }
 if (length(union(c("group1", "group2"), Y)) != 2)
 {
-    stop(paste0("Y variable is expected to only have 'group1' and 'group2' values, but found : ", paste(unique(Y), collapse=", ")))
+    stop(paste0("Y variable (i.e., metadata labels in '", args$m, "') is expected to only have 'group1' and 'group2' values, but found : ", paste(unique(Y), collapse=", ")))
 }
 
 # Drop any df values we are not analysing [Can occur if user metadata is a subset of VCF samples]
