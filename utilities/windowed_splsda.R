@@ -1,5 +1,8 @@
 #!/usr/bin/env Rscript
 
+options(warning.length = 8000)
+RESERVED_WORDS = c("if","else","repeat","while","function","for","in","next","break","TRUE","FALSE","NULL","Inf","NaN","NA","NA_integer_","NA_real_","NA_complex_","NA_character_")
+
 if (!requireNamespace("argparser", quietly=TRUE)) {
   install.packages("argparser")
 }
@@ -11,6 +14,15 @@ fix_numeric_first_char <- function(x) {
   } else {
     return (x)
   }
+}
+
+fix_illegal_chars <- function(x) {
+  x <- gsub("-", ".", x)
+  x <- gsub(" ", ".", x)
+  if (x %in% RESERVED_WORDS) {
+    x <- paste0(x, ".")
+  }
+  return (x)
 }
 
 rowname_location_split <- function(x) {
@@ -212,6 +224,7 @@ if (mixomicsVersion[2] < 30) {
 # Parse metadata file
 metadata.table <- read.table(file=args$m, header=FALSE, stringsAsFactors=FALSE) # don't set 'sep=', try to parse it flexibly
 metadata.table$V1 <- unlist(lapply(metadata.table$V1, fix_numeric_first_char))
+metadata.table$V1 <- unlist(lapply(metadata.table$V1, fix_illegal_chars))
 
 # Detect malformatted metadata file
 if (ncol(metadata.table) != 2)
@@ -244,8 +257,9 @@ if (nrow(metadata.table) < 2)
     paste0("Detected incompatibility between metadata file '", args$m, "' and encoded VCF file '", args$v, "'.\n", 
            "Specifically, filtering metadata to remove any samples not found within the encoded VCF file results in too few samples for segregant analysis. ",
            "This implies that the metadata sample labels are malformed or not from the same experiment as your VCF file. You should check them for compatibility.\n",
-           "Metadata sample labels == '", paste(original.metadata.samples, collapse=", ") , "'\n",
-           "VCF sample labels == '", paste(colnames(df), collapse=", ") , "'"
+           "Metadata sample labels == '", paste(original.metadata.samples, collapse=", "), "'\n",
+           "Metadata sample labels after filtering == '", paste(metadata.table$V1, collapse=", "), "'\n",
+           "VCF sample labels == '", paste(colnames(df), collapse=", "), "'"
            )
   )
 }
@@ -274,9 +288,17 @@ if (nrow(df) == 0)
 }
 
 # Discover incompatibilities between metadata and encoded VCF
-if ((ncol(df)-3) != nrow(metadata.table)) # -2 to account for c("chrom", "start", "end")
+if ((ncol(df)-3) != nrow(metadata.table)) # -3 to account for c("chrom", "start", "end")
 {
-    stop(paste0("Encoded VCF column names (", paste(colnames(df[3:ncol(df)]), collapse=","), ") do not equal metadata sample labels (", paste(metadata.table$V1, collapse=","), "); incompatibility means sPLS-DA analysis cannot continue"))
+    stop(
+        paste0("Detected incompatibility between metadata file '", args$m, "' and encoded VCF file '", args$v, "'.\n", 
+               "Specifically, encoded VCF column names do not equal metadata sample labels. ",
+               "This implies that the metadata sample labels are malformed or not from the same experiment as your VCF file. You should check them for compatibility.\n",
+               "Original metadata sample labels == '", paste(original.metadata.samples, collapse=", "), "'\n",
+               "Metadata sample labels after filtering == '", paste(metadata.table$V1, collapse=", "), "'\n",
+               "VCF sample labels == '", paste(colnames(df[4:ncol(df)]), collapse=", "), "'"
+            )
+    )
 }
 
 # Iterate over chromosomes and windows to run PLS-DA
