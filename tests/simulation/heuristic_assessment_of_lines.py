@@ -5,27 +5,14 @@
 # These data features should contribute to visual clarity when identifying the QTL
 # at the known, simulated location.
 
-import os
+import os, argparse, math
 
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 
-from scipy.optimize import curve_fit
+import concurrent.futures
 from PIL import Image
-
-# File location constants
-RAW_FILE = "qtl_test.tsv"
-SUMMARY_FILE = "qtl_summary.tsv"
-PARENT_DIR = os.getcwd()
-PLOTS_DIR = "param_plots"
-
-# Metric constants
-SNP_SPACING = 1000 # 1Kbp per SNP position
-CHECK1_THRESHOLD = 2
-CHECK2_RADIUS = 50 # 50 Kbp since using an index on the y list returns the position at y*SNP_SPACING
-CHECK3_RADIUS = 500000 # 500 Kbp
-CHECK4_THRESHOLD = 0.5
 
 # Image constants
 NUM_ROWS = 2
@@ -33,248 +20,289 @@ NUM_COLS = 6
 IMG_WIDTH = 518
 IMG_HEIGHT = 524
 
-# Functions for heuristic metrics
-def heuristic_1(y, centreY):
-    if centreY > (y[0] * CHECK1_THRESHOLD) and centreY > (y[-1] * CHECK1_THRESHOLD):
-        return True
-    else:
-        return False
+# Heuristic assessment constants
+WEAK_RSQ = 0.25
+MID_RSQ = 0.5
+STRONG_RSQ = 0.75
 
-def heuristic_2(y, centrePeak):
-    if centrePeak == max(y):
-        return True
-    else:
-        return False
-
-def isOverlapping(start1, end1, start2, end2):
-    """Does the range (start1, end1) overlap with (start2, end2)?"""
-    return end1 >= start2 and end2 >= start1
-
-def heuristic_3(y, centreIndex, centrePeak):
-    maxPositions = [i*SNP_SPACING for i, j in enumerate(y) if j == centrePeak] # i*SNP_SPACING gives the x position
-    centrePosition = centreIndex*SNP_SPACING
-    if any([ isOverlapping(xCoord, xCoord, centrePosition-CHECK3_RADIUS, centrePosition+CHECK3_RADIUS) for xCoord in maxPositions ]):
-        return False
-    else:
-        return True
-
-def heuristic_4(centreY):
-    if centreY > CHECK4_THRESHOLD:
-        return True
-    else:
-        return False
-
-# Functions for R^2 metric
-def quadratic_func(x, a, b, c):
-    return a*x**2 + b*x + c
-
-def constrained_fit(x, y):
-    # Establish weights to force the curve to go down to 0 at the start and end
-    y[[0, -1]] = 0 # set first and last points artificially to 0
-    sigma = np.ones(len(x))
-    sigma[[0, -1]] = 0.0001 # weight first and last points heavily to force curve fitting through these points
+def validate_args(args):
+    # Validate numeric args
+    if args.threads < 1:
+        raise ValueError("-t must be a positive integer")
     
-    # Fit the curve
-    popt, pcov = curve_fit(quadratic_func, x, y,
-                           p0=(-0.01, 0, -0.01), # initial a, b, c values
-                           sigma=sigma, # ensure line goes through y=0 at start and end
-                           bounds=([-1, -1, -np.inf], [0, 1, np.inf])) # make sure a is negative
+    # Create output locations
+    if not os.path.exists(args.plotsDirectory):
+        os.makedirs(args.plotsDirectory, exist_ok=True)
+        print(f"# Created '{os.path.abspath(args.plotsDirectory)}' as part of argument validation")
+
+# Functions for parallel processing of R^2 metric
+def calc_r_squared(y, ypred):
+    '''
+    Calculates R-squared for a line/curve fitting.
     
-    # Calculate R^2
-    residuals = y - quadratic_func(x, *popt)
+    Parameters:
+        y -- a numpy array of measured data values
+        ypred -- a numpy array of predicted data values
+    '''
+    residuals = y - ypred
     ss_res = np.sum(residuals**2)
     ss_tot = np.sum((y - np.mean(y))**2)
     r_squared = 1 - (ss_res / ss_tot)
-    
-    return x, y, popt, r_squared
+    return r_squared
 
-def unconstrained_fit(x, y):
-    # Fit the curve
-    popt, pcov = curve_fit(quadratic_func, x, y,
-                           p0=(-0.01, 0, -0.01), # initial a, b, c values
-                           bounds=([-1, -1, -np.inf], [0, 1, np.inf])) # make sure a is negative
+def triangle_fit(x, y):
+    '''
+    Fits a triangle shape to the x (chromosome position) and y (ED^4) data points. This is
+    done as 1) a triangle with points at the minimum y value (left and right) with the maximum
+    at the centre. It is also done as 2) the same concept but with a plateau at a local minimum
+    on the left and right borders.
     
-    # Calculate R^2
-    residuals = y - quadratic_func(x, *popt)
-    ss_res = np.sum(residuals**2)
-    ss_tot = np.sum((y - np.mean(y))**2)
-    r_squared = 1 - (ss_res / ss_tot)
+    The goal is to find a distinct and noticeable peak in the statistics occurring at the site
+    where the simulated QTL exists i.e., in the centre of the chromosome. A simple line is
+    used to avoid potential overfitting, and to conform to an intuitive sense of how a QTL
+    should manifest visually. This trend is measured with R-squared.
     
-    return x, y, popt, r_squared
-
-def triangle_fit(x, y, centreIndex):
+    Parameters:
+        x -- a numpy array of integer coordinates, indicating the location of SNPs
+        y -- a numpy array of numeric values for the ED^4 segregation of the SNPs
+    '''
     # Get the triangle points
     minY = np.min(y)
     maxY = np.max(y)
+    midY = (minY + maxY) / 2
+    
+    centreIndex = len(x) / 2
+    quarterIndex = centreIndex / 2
     
     # Handle flat lines
-    if minY == maxY:
+    if (minY+0.1) >= maxY: # we need a noticeable difference between min and max for QTL detection
         maxY += 0.1
     
-    # Obtain the triangle data points
-    slopeUp = np.linspace(minY, maxY, num=centreIndex)
-    slopeDown = np.linspace(maxY, minY, num=centreIndex)
-    triangleY = np.concatenate((slopeUp, slopeDown))
+    # Triangle 1: full range peak (^)
+    slopeUp = np.linspace(minY, maxY, num=math.floor(centreIndex))
+    slopeDown = np.linspace(maxY, minY, num=math.ceil(centreIndex))
+    fullTriangleY = np.concatenate((slopeUp, slopeDown))
+    fullRsquared = calc_r_squared(y, fullTriangleY)
     
-    # Calculate R^2
-    residuals = y - triangleY
-    ss_res = np.sum(residuals**2)
-    ss_tot = np.sum((y - np.mean(y))**2)
-    r_squared = 1 - (ss_res / ss_tot)
+    # Triangle 2: subrange peak (_^_)
+    leftFlatIndex = 0
+    while leftFlatIndex < quarterIndex: # only plateau up to 1/4 into the 'plot'
+        if y[leftFlatIndex] > midY:
+            break
+        leftFlatIndex += 1 # check the next position in this quadrant
     
-    return triangleY, r_squared
+    if leftFlatIndex != 0: # this is 0 if the starting position is >= midY
+        leftAvgY = np.mean(y[0:leftFlatIndex])
+    else:
+        leftAvgY = minY
+    slopeUp = np.concatenate((
+        np.array([ leftAvgY for _ in range(leftFlatIndex)]), # plateau
+        np.linspace(leftAvgY, maxY, num=math.floor(centreIndex) - leftFlatIndex) # peak (incline)
+    ))
+    
+    rightFlatIndex = len(x)-1
+    while rightFlatIndex > (math.ceil(centreIndex) + quarterIndex): # only plateau for the last 1/4 of the 'plot'
+        if y[rightFlatIndex] > midY:
+            break
+        rightFlatIndex -= 1 # crawl back into this quadrant
+    
+    if rightFlatIndex != len(x)-1: # this is the final index if the ending position is >= midY
+        rightAvgY = np.mean(y[rightFlatIndex:])
+    else:
+        rightAvgY = minY
+    slopeDown = np.concatenate((
+        np.linspace(maxY, rightAvgY, num=rightFlatIndex - math.floor(centreIndex)), # peak (decline)
+        np.array([ rightAvgY for _ in range(len(x) - rightFlatIndex)]) # plateau
+    ))
+    
+    subrangeTriangleY = np.concatenate((slopeUp, slopeDown))
+    subrangeRsquared = calc_r_squared(y, subrangeTriangleY)
+    
+    # Return the best R^2 value
+    if (fullRsquared >= subrangeRsquared) or pd.isna(subrangeRsquared):
+        return fullTriangleY, fullRsquared
+    else:
+        return subrangeTriangleY, subrangeRsquared
 
-def plot_fit(x, y, popt):
-    plt.plot(x, quadratic_func(x, *popt), 'g--',
-                label='fit: a=%5.3f, b=%5.3f, c=%5.3f' % tuple(popt))
-    plt.scatter(x, y, label='data')
-    plt.xlabel('x')
-    plt.ylabel('y')
-    plt.title('Curve Fit')
-    plt.legend()
-    plt.show()
+def fit_process_handler(lineFileName):
+    '''
+    Multiprocessing function to handle a line file and output the R-squared value obtained
+    through simple line fitting.
+    
+    Parameters:
+        lineFileName -- a string indicating the location of text file listing line plot data.
+    '''
+    # Parse data from line file
+    x, y = [], []
+    with open(lineFileName, "r") as fileIn:
+        for line in fileIn:
+            if not line.startswith("contigID"): # skip header
+                contigID, position, ed, smoothedEd = line.strip().split("\t")
+                position = int(position)
+                smoothedEd = float(smoothedEd)
+                x.append(position)
+                y.append(smoothedEd)
+    
+    # Fit a triangle to the data and obtain the R^2 value
+    x = np.array(x)
+    y = np.array(y)
+    try:
+        triangleY, r_squared = triangle_fit(x, y)
+    except ValueError:
+        raise ValueError(f"Error when running triangle_fit() for '{lineFileName}'")
+    return r_squared
 
 def plot_triangle_fit(x, y, triangleY):
-    plt.plot(x, triangleY, 'g--')
-    plt.scatter(x, y, label='data')
-    plt.xlabel('x')
-    plt.ylabel('y')
+    '''
+    Method left in for manual testing and visualisation of how the line fits
+    the ED^4 curve.
+    '''
+    plt.plot(x, triangleY, "g--")
+    plt.scatter(x, y, label="SNP segregation")
+    plt.xlabel("Chromosome position")
+    plt.ylabel("$ED^4$")
     plt.title('Curve Fit')
     plt.legend()
     plt.show()
 
-####
-
-# Locate files containing plot data
-fileGroups = {}
-for root, dirs, files in os.walk(os.getcwd()):
-    if len(files) == 1 and files[0] == "chr1.0-10000000.call_line.tsv":
-        callLineFile = os.path.join(root, files[0])
-        params = os.path.dirname(root).split("/", maxsplit=8)[-1].replace("/", "_")
-        fileGroups.setdefault(params, [])
-        seed = root.split("/")[-5]
-        fileGroups[params].append([callLineFile, seed])
-
-# Assess each parameter set
-if not os.path.exists(RAW_FILE):
-    header = ["pop_size", "pop_balance", "phenotype_error", "seed", "centre_exceeds_edges", "centre_is_peak",
-              "centre_is_only_peak", "centre_exceeds_cutoff", "r_squared"]
-    with open(RAW_FILE, "w") as fileOut:
-        fileOut.write("\t".join(header) + "\n")
-        for params, files in fileGroups.items():
-            for file, seed in files:
-                # Parse data from call line file
-                x, y = [], []
-                with open(file, "r") as fileIn:
-                    for line in fileIn:
-                        if not line.startswith("contigID"):
-                            contigID, position, ed, smoothedEd = line.strip().split("\t")
-                            position = int(position)
-                            smoothedEd = float(smoothedEd)
-                            
-                            x.append(position)
-                            y.append(smoothedEd)
-                
-                # Run heuristic assessments
-                centreIndex = len(x) // 2
-                centreY = y[centreIndex]
-                centrePeak = max(y[centreIndex - CHECK2_RADIUS:centreIndex + CHECK2_RADIUS])
-                
-                check1 = heuristic_1(y, centreY) # centre exceeds the edges
-                check2 = heuristic_2(y, centrePeak) # centre is a peak
-                check3 = heuristic_3(y, centreIndex, centrePeak) # centre is the only peak
-                check4 = heuristic_4(centreY) # centre ED exceeds a cutoff
-                
-                # Fit a curve to the data and check the R^2 value
-                x = np.array(x)
-                y = np.array(y)
-                #x, y, popt, r_squared = unconstrained_fit(x, y)
-                #x, y, popt, r_squared = constrained_fit(x, y)
-                #plot_fit(x, y, popt)
-                triangleY, r_squared = triangle_fit(x, y, centreIndex)
-                #plot_triangle_fit(x, y, triangleY)
-                
-                # Output results
-                fileOut.write("\t".join(params.split("_")))
-                fileOut.write(f"\t{seed}\t{check1}\t{check2}\t{check3}\t{check4}\t{r_squared}\n")
-
-# Assess results
-WEAK = 0.25
-MID = 0.5
-STRONG = 0.75
-
-df = pd.read_csv(RAW_FILE, sep="\t")
-pops = sorted(df["pop_size"].unique())
-balances = sorted(df["pop_balance"].unique())
-errors = sorted(df["phenotype_error"].unique())
-
-toCheck = {}
-with open(SUMMARY_FILE, "w") as fileOut:
-    fileOut.write("pop_size\tpop_balance\tphenotype_error\tnone\tweak\tmid\tstrong\n")
-    for pop_size in pops:
-        for pop_balance in balances:
-            for phenotype_error in errors:
-                paramString = f"{pop_size}_{pop_balance}_{phenotype_error}"
-                
-                # Parse out individual simulation result values
-                paramsDf = df[(df["pop_size"] == int(pop_size)) & (df["pop_balance"] == float(pop_balance)) & (df["phenotype_error"] == float(phenotype_error))]
-                if len(paramsDf) == 0:
-                    continue
-                
-                # Calculate strength values
-                noSignal = sum(paramsDf["r_squared"] < WEAK)
-                weakSignal = sum((paramsDf["r_squared"] >= WEAK) & (paramsDf["r_squared"] < MID))
-                midSignal = sum((paramsDf["r_squared"] >= MID) & (paramsDf["r_squared"] < STRONG))
-                strongSignal = sum(paramsDf["r_squared"] >= STRONG)
-                
-                # Output summarised line
-                fileOut.write(f"{pop_size}\t{pop_balance}\t{phenotype_error}\t{noSignal}\t{weakSignal}\t{midSignal}\t{strongSignal}\n")
-                
-                # Get a range of simulations from this param combination with different R^2 values
-                toCheck[paramString] = {}
-                lastCutoff = -1
-                for cutoff in range(0, 11, 1):
-                    cutoff = cutoff*0.1
-                    found = paramsDf[(paramsDf["r_squared"] <= cutoff) & (paramsDf["r_squared"] > lastCutoff)]
+def main():
+    usage = """%(prog)s assesses the results of auto_psqtl_runner.py
+    to roughly assess whether the simulated data analysis gave results that could
+    enable QTL identification. This script was made for use in psQTL
+    validation as depicted in the publication associated with this software.
+    
+    Note that this script assumes the simulation results are nested within
+    the directory this script is being called from ($PWD).
+    """
+    p = argparse.ArgumentParser(description=usage)
+    p.add_argument("-t", dest="threads",
+                   required=True,
+                   type=int,
+                   help="""Specify the number of threads to use with parallel steps;
+                   actual threads used is -t+1 for the file output writing thread""")
+    p.add_argument("--raw", dest="rawFileName",
+                   required=False,
+                   help="Output file name for each raw (replicated) result",
+                   default="qtl_test.tsv")
+    p.add_argument("--summary", dest="summaryFileName",
+                   required=False,
+                   help="Output file name for summarised results for parameter combinations",
+                   default="qtl_summary.tsv")
+    p.add_argument("--plots", dest="plotsDirectory",
+                   required=False,
+                   help="Directory to write summarised results for parameter combinations",
+                   default="param_plots")
+    
+    args = p.parse_args()
+    validate_args(args)
+    
+    # Locate files containing plot data
+    fileGroups = {}
+    for root, dirs, files in os.walk(os.getcwd()):
+        if len(files) == 1 and files[0] == "chr1.0-10000000.call_line.tsv":
+            callLineFile = os.path.join(root, files[0])
+            params = os.path.dirname(root).split("/", maxsplit=8)[-1].replace("/", "_")
+            fileGroups.setdefault(params, [])
+            seed = root.split("/")[-5]
+            fileGroups[params].append([callLineFile, seed])
+    
+    # Parallel processing for R^2 measure
+    if not os.path.exists(args.rawFileName):
+        with open(args.rawFileName, "w") as fileOut:
+            header = ["pop_size", "pop_balance", "phenotype_error", "seed", "r_squared"]
+            fileOut.write("\t".join(header) + "\n")
+            
+            with concurrent.futures.ProcessPoolExecutor(max_workers=args.threads) as executor:
+                for params, files in fileGroups.items():
+                    paramsString = "\t".join(params.split("_"))
                     
+                    callLineFiles, seeds = map(list, zip(*files)) # pythonic unzip
+                    rSquaredList = executor.map(fit_process_handler, callLineFiles)
+                    for r_squared, seed in zip(rSquaredList, seeds):
+                        fileOut.write(f"{paramsString}\t{seed}\t{r_squared}\n")
+    
+    # Summarise results
+    df = pd.read_csv(args.rawFileName, sep="\t")
+    pops = sorted(df["pop_size"].unique())
+    balances = sorted(df["pop_balance"].unique())
+    errors = sorted(df["phenotype_error"].unique())
+    
+    toPlot = {} # dict to retain exemplar plots for manual visualisation of R^2 cutoff points
+    with open(args.summaryFileName, "w") as fileOut:
+        fileOut.write("pop_size\tpop_balance\tphenotype_error\tnone\tweak\tmid\tstrong\n")
+        for pop_size in pops:
+            for pop_balance in balances:
+                for phenotype_error in errors:
+                    paramString = f"{pop_size}_{pop_balance}_{phenotype_error}"
+                    
+                    # Parse out simulation results for this param combination
+                    paramsDf = df[(df["pop_size"] == int(pop_size)) & (df["pop_balance"] == float(pop_balance)) & (df["phenotype_error"] == float(phenotype_error))]
+                    if len(paramsDf) == 0:
+                        continue
+                    
+                    # Calculate signal strength values
+                    noSignal = sum((paramsDf["r_squared"] < WEAK_RSQ) | (pd.isna(paramsDf["r_squared"])))
+                    weakSignal = sum((paramsDf["r_squared"] >= WEAK_RSQ) & (paramsDf["r_squared"] < MID_RSQ))
+                    midSignal = sum((paramsDf["r_squared"] >= MID_RSQ) & (paramsDf["r_squared"] < STRONG_RSQ))
+                    strongSignal = sum(paramsDf["r_squared"] >= STRONG_RSQ)
+                    
+                    # Output summarised line
+                    fileOut.write(f"{pop_size}\t{pop_balance}\t{phenotype_error}\t{noSignal}\t{weakSignal}\t{midSignal}\t{strongSignal}\n")
+                    
+                    # Get a range of simulations from this param combination with different R^2 values
+                    "This lets us visualise the distribution of R^2 values and validate that the results make sense"
+                    toPlot[paramString] = {}
+                    found = paramsDf[pd.isna(paramsDf["r_squared"])]
                     if len(found) == 0:
-                        toCheck[paramString]["{:.1f}".format(lastCutoff)] = None
+                        toPlot[paramString]["nan"] = None
                     else:
-                        toCheck[paramString]["{:.1f}".format(lastCutoff)] = found.iloc[0]["seed"]
+                        toPlot[paramString]["nan"] = found.iloc[0]["seed"]
                     
-                    lastCutoff = cutoff
-
-# Visualise plots
-os.makedirs(PLOTS_DIR, exist_ok=True)
-for paramKey, cutoffDict in toCheck.items():
-    pop_size, pop_balance, phenotype_error = paramKey.split("_")
+                    lastCutoff = -math.inf
+                    for cutoff in range(0, 11, 1):
+                        cutoff = cutoff*0.1
+                        found = paramsDf[(paramsDf["r_squared"] <= cutoff) & (paramsDf["r_squared"] > lastCutoff)]
+                        
+                        if len(found) == 0:
+                            toPlot[paramString]["{:.1f}".format(lastCutoff)] = None
+                        else:
+                            toPlot[paramString]["{:.1f}".format(lastCutoff)] = found.iloc[0]["seed"]
+                        
+                        lastCutoff = cutoff
+    
+    # Visualise plots for manual assessment of R^2 measurement cutoffs
+    for paramKey, cutoffDict in toPlot.items():
+        pop_size, pop_balance, phenotype_error = paramKey.split("_")
         
-    # Obtain images for this parameter combination
-    paramImages = []
-    for cutoff, seed in cutoffDict.items():
-        if seed == None:
-            cutoffImage = Image.new('RGB', (IMG_WIDTH, IMG_HEIGHT))
-        else:
-            imageFile = os.path.join(PARENT_DIR, seed, pop_size, pop_balance, phenotype_error, f"{seed}_{paramKey}.png")
-            cutoffImage = Image.open(imageFile)
-        paramImages.append(cutoffImage)
-    
-    # Join all plots together into a grid
-    concatImage = Image.new('RGB', (IMG_WIDTH*NUM_COLS, IMG_HEIGHT*NUM_ROWS))
-    
-    x_offset = 0
-    y_offset = 0
-    ongoingCount = 0
-    for image in paramImages:
-        concatImage.paste(image, (x_offset, y_offset))
-        x_offset += IMG_WIDTH
+        # Obtain images for this parameter combination
+        paramImages = []
+        for cutoff, seed in cutoffDict.items():
+            if seed == None: # i.e., if no replicate obtained an R^2 within this cutoff range
+                cutoffImage = Image.new("RGB", (IMG_WIDTH, IMG_HEIGHT)) # this will be a blank/black square
+            else:
+                imageFile = os.path.join(os.getcwd(), seed, pop_size, pop_balance, phenotype_error, f"{seed}_{paramKey}.png")
+                cutoffImage = Image.open(imageFile)
+            paramImages.append(cutoffImage)
         
-        ongoingCount += 1
-        if ongoingCount % NUM_COLS == 0:
-            x_offset = 0
-            y_offset += IMG_HEIGHT
+        # Join all plots together into a grid
+        concatImage = Image.new("RGB", (IMG_WIDTH*NUM_COLS, IMG_HEIGHT*NUM_ROWS))
+        
+        x_offset = 0
+        y_offset = 0
+        ongoingCount = 0
+        for image in paramImages:
+            concatImage.paste(image, (x_offset, y_offset))
+            x_offset += IMG_WIDTH
+            
+            ongoingCount += 1
+            if ongoingCount % NUM_COLS == 0:
+                x_offset = 0
+                y_offset += IMG_HEIGHT
+        
+        # Output concatenated plot
+        concatImage.save(os.path.join(args.plotsDirectory, f"{paramKey}.png"))
     
-    # Output concatenated plot
-    concatImage.save(os.path.join(PLOTS_DIR, f"{paramKey}.png"))
+    print("Program completed successfully!")
 
-print("Program completed successfully!")
+if __name__ == "__main__":
+    main()
