@@ -7,18 +7,20 @@
 
 import os, argparse, math
 
+import concurrent.futures
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 
-import concurrent.futures
 from PIL import Image
+import matplotlib.ticker as ticker
 
 # Image constants
 NUM_ROWS = 2
 NUM_COLS = 6
 IMG_WIDTH = 518
 IMG_HEIGHT = 524
+plt.style.use("ggplot")
 
 # Heuristic assessment constants
 WEAK_RSQ = 0.25
@@ -31,10 +33,13 @@ def validate_args(args):
         raise ValueError("-t must be a positive integer")
     
     # Create output locations
-    if not os.path.exists(args.plotsDirectory):
-        os.makedirs(args.plotsDirectory, exist_ok=True)
-        print(f"# Created '{os.path.abspath(args.plotsDirectory)}' as part of argument validation")
-
+    if not os.path.exists(args.validationPlotsDirectory):
+        os.makedirs(args.validationPlotsDirectory, exist_ok=True)
+        print(f"# Created '{os.path.abspath(args.validationPlotsDirectory)}' as part of argument validation")
+    if not os.path.exists(args.resultPlotsDirectory):
+        os.makedirs(args.resultPlotsDirectory, exist_ok=True)
+        print(f"# Created '{os.path.abspath(args.resultPlotsDirectory)}' as part of argument validation")
+    
 # Functions for parallel processing of R^2 metric
 def calc_r_squared(y, ypred):
     '''
@@ -75,8 +80,12 @@ def triangle_fit(x, y):
     quarterIndex = centreIndex / 2
     
     # Handle flat lines
-    if (minY+0.1) >= maxY: # we need a noticeable difference between min and max for QTL detection
-        maxY += 0.1
+    diffY = max(maxY*0.1, minY*0.50) # account for flat lines by enforcing some difference between min and max
+    if diffY < 1e-3:
+        diffY = 1e-3 # mitigate issues with extremely low ED^4 values
+    
+    if (minY+diffY) >= maxY: # we need a noticeable difference between min and max for QTL detection
+        maxY += diffY
     
     # Triangle 1: full range peak (^)
     slopeUp = np.linspace(minY, maxY, num=math.floor(centreIndex))
@@ -188,7 +197,11 @@ def main():
                    required=False,
                    help="Output file name for summarised results for parameter combinations",
                    default="qtl_summary.tsv")
-    p.add_argument("--plots", dest="plotsDirectory",
+    p.add_argument("--vplots", dest="validationPlotsDirectory",
+                   required=False,
+                   help="Directory to write validations plots",
+                   default="param_plots")
+    p.add_argument("--rplots", dest="resultPlotsDirectory",
                    required=False,
                    help="Directory to write summarised results for parameter combinations",
                    default="param_plots")
@@ -270,7 +283,7 @@ def main():
                         
                         lastCutoff = cutoff
     
-    # Visualise plots for manual assessment of R^2 measurement cutoffs
+    # Create plots for manual assessment of R^2 measurement cutoffs
     for paramKey, cutoffDict in toPlot.items():
         pop_size, pop_balance, phenotype_error = paramKey.split("_")
         
@@ -286,7 +299,6 @@ def main():
         
         # Join all plots together into a grid
         concatImage = Image.new("RGB", (IMG_WIDTH*NUM_COLS, IMG_HEIGHT*NUM_ROWS))
-        
         x_offset = 0
         y_offset = 0
         ongoingCount = 0
@@ -300,7 +312,52 @@ def main():
                 y_offset += IMG_HEIGHT
         
         # Output concatenated plot
-        concatImage.save(os.path.join(args.plotsDirectory, f"{paramKey}.png"))
+        concatImage.save(os.path.join(args.validationPlotsDirectory, f"{paramKey}.png"))
+    
+    # Create plot for depiction of overall parameter results
+    df = pd.read_csv(args.summaryFileName, sep="\t")
+    pops = sorted(df["pop_size"].unique())
+    balances = sorted(df["pop_balance"].unique(), reverse=True)
+    errors = sorted(df["phenotype_error"].unique())
+    
+    for fignum, phenotype_error in enumerate(errors):
+        paramsDf = df[(df["phenotype_error"] == phenotype_error)]
+        
+        # Establish the matplotlib figure and axes
+        fig, ax = plt.subplots(nrows=5, ncols=1, tight_layout=True)
+        fig.supxlabel("Population Size")
+        fig.supylabel("Proportion", x=0)
+        fig.suptitle("Phenotype Error: {:.0f}%".format(phenotype_error*100))
+        
+        # Plot the stacked data for each balance interval
+        for i, pop_balance in enumerate(balances):
+            plotDf = paramsDf[(paramsDf["pop_balance"] == pop_balance)]
+            if len(plotDf) == 0:
+                continue
+            ax[i].stackplot(plotDf["pop_size"],
+                            (plotDf["strong"], plotDf["mid"], plotDf["weak"], plotDf["none"]),
+                            labels=["Strong", "Mid", "Weak", "None"])
+            ax[i].margins(0,0) # fill all of the rectangular space
+            
+            # Set y axis aesthetics
+            ax[i].set_yticks([0, 250, 500, 750, 1000])
+            
+            ax[i].yaxis.set_minor_locator(ticker.FixedLocator([0, 250, 500, 750, 1000]))
+            ax[i].yaxis.set_major_locator(ticker.FixedLocator([0, 500, 1000]))
+            ax[i].yaxis.set_major_formatter(ticker.FuncFormatter(lambda x, pos: f"{x/10:.0f}%"))
+            
+            # Set x axis aesthetics
+            ax[i].set_xlim(10, 200)
+            if i < (len(balances) - 1):
+                ax[i].set_xticklabels([]) # only show tick labels on final (bottom) plot
+        
+        #handles, labels = ax[0].get_legend_handles_labels() # turn this on to manually obtain a legend to reformat in PDF editor
+        #fig.legend(handles, labels, loc="center right", bbox_to_anchor=(1, 0.5))
+        
+        # Save the figure
+        outputFileName = os.path.join(args.resultPlotsDirectory, f"{fignum}.pdf")
+        fig.savefig(outputFileName, dpi=300, pad_inches=1.5)
+    
     
     print("Program completed successfully!")
 
