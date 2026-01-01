@@ -14,7 +14,10 @@ from chromax import Simulator
 from chromax.sample_data import genetic_map, genome
 
 def random_sample(arr: np.array, size: int = 1) -> np.array:
-    return arr[np.random.choice(len(arr), size=size, replace=False)]
+    if size < 1:
+        return []
+    else:
+        return arr[np.random.choice(len(arr), size=size, replace=False)]
 
 def generate_dummy_genome(genomeLength=10000000):
     MULTILINE_LEN = 80
@@ -148,26 +151,19 @@ def main():
         if (numBulk1 * phePct % 1 != 0) or (numBulk2 * phePct % 1 != 0):
             continue
         
-        # Randomly select individuals for each bulk
-        bulk1 = random_sample(goodF1, numBulk1)
-        bulk2 = random_sample(badF1, numBulk2)
-        
-        # Generate phenotype error
+        # Identify the number of samples to have errors in each bulk
         numBulk1Error = int(numBulk1 * phePct)
         numBulk2Error = int(numBulk2 * phePct)
         
-        # Introduce phenotype error
-        if numBulk1Error > 0:
-            index = numBulk1 - numBulk1Error
-            bulk1, bulk1Error = bulk1[:index], bulk1[index:]
-        if numBulk2Error > 0:
-            index = numBulk2 - numBulk2Error
-            bulk2, bulk2Error = bulk2[:index], bulk2[index:]
-        
-        if numBulk2Error > 0:
-            bulk1 = np.concatenate((bulk1, bulk2Error))
-        if numBulk1Error > 0:
-            bulk2 = np.concatenate((bulk2, bulk1Error))
+        # Randomly select individuals for each bulk with phenotype error modeling
+        bulk1 =  np.concatenate((
+            random_sample(goodF1, numBulk1-numBulk1Error),
+            random_sample(badF1, numBulk1Error),
+        ))
+        bulk2 =  np.concatenate((
+            random_sample(badF1, numBulk2-numBulk2Error),
+            random_sample(goodF1, numBulk2Error),
+        ))
         
         # Format metadata
         metadata = []
