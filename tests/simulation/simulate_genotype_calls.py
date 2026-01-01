@@ -129,13 +129,14 @@ def main():
     populationSize = range(10, 210, 10)
     populationBalance = [ x/100 for x in range(10, 60, 10) ]
     phenotypeErrorPct = [ x/100 for x in range(0, 55, 5) ]
+    errorSymmetry = [ "bulk1", "both", "bulk2" ]
     
     # Generate all combinations of variables
-    productList = list(product(populationSize, populationBalance, phenotypeErrorPct))
+    productList = list(product(populationSize, populationBalance, phenotypeErrorPct, errorSymmetry))
     
     # Generate genotype calls for each QTL 'zone'
     numThings = 0
-    for size, balance, phePct in productList:
+    for size, balance, phePct, symmetry in productList:
         # Determine bulk1 (good) size
         numBulk1 = size * balance
         
@@ -156,14 +157,21 @@ def main():
         numBulk2Error = int(numBulk2 * phePct)
         
         # Randomly select individuals for each bulk with phenotype error modeling
-        bulk1 =  np.concatenate((
-            random_sample(goodF1, numBulk1-numBulk1Error),
-            random_sample(badF1, numBulk1Error),
-        ))
-        bulk2 =  np.concatenate((
-            random_sample(badF1, numBulk2-numBulk2Error),
-            random_sample(goodF1, numBulk2Error),
-        ))
+        if symmetry in ["bulk1", "both"]:
+            bulk1 =  np.concatenate((
+                random_sample(goodF1, numBulk1-numBulk1Error),
+                random_sample(badF1, numBulk1Error),
+            ))
+        else:
+            bulk1 = random_sample(goodF1, numBulk1)
+        
+        if symmetry in ["bulk2", "both"]:
+            bulk2 =  np.concatenate((
+                random_sample(badF1, numBulk2-numBulk2Error),
+                random_sample(goodF1, numBulk2Error),
+            ))
+        else:
+            bulk2 = random_sample(badF1, numBulk2)
         
         # Format metadata
         metadata = []
@@ -206,7 +214,10 @@ def main():
         balanceOutDir = os.path.join(popOutDir, str(balance))
         os.makedirs(balanceOutDir, exist_ok=True)
         
-        finalOutDir = os.path.join(balanceOutDir, str(phePct))
+        errorOutDir = os.path.join(balanceOutDir, str(phePct))
+        os.makedirs(errorOutDir, exist_ok=True)
+        
+        finalOutDir = os.path.join(errorOutDir, symmetry)
         os.makedirs(finalOutDir, exist_ok=True)
         
         metadataFile = os.path.join(finalOutDir, "metadata.txt")
