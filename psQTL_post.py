@@ -1,4 +1,4 @@
-#! python3
+#!/usr/bin/env python3
 # psQTL_post.py
 # Represents step 3 of the psQTL pipeline, which is to 'post'-process the data
 # generated from psQTL_proc.py. It can plot segregation statistics with a plug-and-play

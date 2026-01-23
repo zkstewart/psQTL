@@ -1,4 +1,4 @@
-#! python3
+#!/usr/bin/env python3
 # psQTL_proc.py
 # Represents step 2 in the psQTL pipeline, where the user can take a VCF or VCF-like file and
 # 'proc'ess it to calculate Euclidean distance values of variants or CNVs among groups.

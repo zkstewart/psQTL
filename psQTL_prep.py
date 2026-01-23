@@ -1,4 +1,4 @@
-#! python3
+#!/usr/bin/env python3
 # psQTL_prep.py
 # Represents step 1 in the psQTL pipeline, where the user can initialise a working directory,
 # view the metadata of an analysis directory, call variants, and calculate depth files for samples.
