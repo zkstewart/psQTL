@@ -1,4 +1,4 @@
-#! python3
+#!/usr/bin/env python3
 
 import os, sys, unittest, shutil, subprocess
 import numpy as np
@@ -19,9 +19,9 @@ from modules.gff3 import GFF3Graph
 from modules.plot import Plot
 
 # Specify data locations
-dataDir = os.path.join(os.getcwd(), "data")
-metadataFile = os.path.join(dataDir, "metadata.tsv")
 baseDir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+dataDir = os.path.join(baseDir, "tests", "data")
+metadataFile = os.path.join(dataDir, "metadata.tsv")
 
 MAXIMAL_SEGREGATION = 1.4142135623730951 # sqrt(2)
 
