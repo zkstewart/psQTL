@@ -428,7 +428,7 @@ for (chromosome in unique(df$chrom))
     window.plsda <- plsda(X, Y,
                           ncomp = 1,
                           scale = FALSE,
-                          max.iter = args$maxiters)
+                          max.iter = ifelse(ncol(X) > 2, args$maxiters, 1))
     
     # Assess model performance
     window.perf <- tryCatch(
