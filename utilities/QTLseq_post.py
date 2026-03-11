@@ -10,7 +10,7 @@ from pycirclize.parser import Gff
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from modules.plot import HorizontalPlot, CircosPlot
-from modules.gff3 import GFF3
+from modules.gff3 import GFF3Graph
 from modules.validation import validate_regions
 from modules.parsing import read_gz_file
 from modules.ed import convert_dict_to_windowed_ncls
@@ -78,7 +78,7 @@ def validate_args(args):
             raise FileNotFoundError(f"--annotation file '{args.annotationGFF3}' is not a file!")
         else:
             if args.plotStyle == "horizontal":
-                args.gff3Obj = GFF3(args.annotationGFF3) # parsing now to raise errors early
+                args.gff3Obj = GFF3Graph(args.annotationGFF3) # parsing now to raise errors early
                 args.gff3Obj.create_ncls_index("gene")
             elif args.plotStyle == "circos":
                 parser = Gff(args.annotationGFF3)
@@ -216,7 +216,7 @@ def main():
         raise ValueError(f"No contigs found in genome FASTA '{args.genomeFasta}'; is it actually a FASTA file?")
     
     # Validate and impute regions
-    args.regions = validate_regions(args, lengthsDict)
+    args.regions = validate_regions(args.regions, "plot", args.plotStyle, lengthsDict)
     
     # Parse input file into NCLS data structure
     deltaDict = parse_qtlseq_as_dict(args.inputFile)
