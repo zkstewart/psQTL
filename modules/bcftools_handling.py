@@ -166,7 +166,7 @@ def run_bgzip(vcfFile):
                          f"'{vcfFile}'; have a look at the stderr to make sense of this:\n'{errorMsg}'"))
 
 # Threaded operations
-def call_task(bamListFile, genomeFasta, contigID, outputFileName):
+def call_task(bamListFile, genomeFasta, contigID, outputFileName, useReadGroups=False):
     '''
     Partner function for run_bcftools_call. Will pipeline bcftools mpileup->call to
     call variants on a single BAM file.
@@ -180,8 +180,10 @@ def call_task(bamListFile, genomeFasta, contigID, outputFileName):
     # Format command
     cmd = ["bcftools", "mpileup", "-Ou", "-f", genomeFasta,
            "-r", contigID, "--bam-list", bamListFile,
-           "-q", "10", "-Q", "20", "-a", "AD",
-           "|",
+           "-q", "10", "-Q", "20", "-a", "AD"]
+    if not useReadGroups:
+        cmd.append("--ignore-RG")
+    cmd += ["|",
            "bcftools", "call", "-m", "-v",
            "-Oz", "-o", outputFileName]
     
@@ -202,7 +204,7 @@ def call_task(bamListFile, genomeFasta, contigID, outputFileName):
         else:
             raise Exception(errorMsg)
 
-def run_bcftools_call(bamListFile, genomeFasta, outputDirectory, threads):
+def run_bcftools_call(bamListFile, genomeFasta, outputDirectory, threads, useReadGroups=False):
     '''
     Will run bcftools mpileup->call on a list of BAM files in parallel.
     
@@ -240,7 +242,7 @@ def run_bcftools_call(bamListFile, genomeFasta, outputDirectory, threads):
     futures = []
     with concurrent.futures.ProcessPoolExecutor(max_workers=threads) as executor:
         for contigID, outputFileName in zip(contigsToProcess, outputFileNames):
-            futures.append(executor.submit(call_task, bamListFile, genomeFasta, contigID, outputFileName))
+            futures.append(executor.submit(call_task, bamListFile, genomeFasta, contigID, outputFileName, useReadGroups))
     for f in futures:
         try:
             result = f.result()

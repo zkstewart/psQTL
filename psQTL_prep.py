@@ -173,6 +173,15 @@ def main():
                          help="""Optionally, specify the number of threads to use for bcftools
                          variant calling (default: 1)""",
                          default=1)
+    cparser.add_argument("--useReadGroups", dest="useReadGroups",
+                         required=False,
+                         action="store_true",
+                         help="""Optionally, provide this flag if you would like to call variants
+                         with respect to any read groups embedded within your BAM files. Be warned that
+                         this may introduce a metadata mismatch between 'call' and 'depth' results.
+                         Ideally, you should ensure that each BAM file represents a single sample's read
+                         alignments prior to use of psQTL.""",
+                         default=False)
     
     # View-subparser arguments
     # N/A
@@ -337,7 +346,8 @@ def cmain(args, locations):
             bamlistFile.write(f"{bamFile}\n")
     
     # Run bcftools mpileup->call on each contig
-    run_bcftools_call(locations.bamListFile, args.genomeFasta, locations.callDir, args.threads) # handles skipping internally
+    run_bcftools_call(locations.bamListFile, args.genomeFasta, locations.callDir,
+                      args.threads, useReadGroups=args.useReadGroups) # handles skipping internally
     
     # Index each VCF file
     for vcfFile in [ os.path.join(locations.callDir, f) for f in os.listdir(locations.callDir) ]:
