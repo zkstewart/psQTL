@@ -280,8 +280,6 @@ def calculate_inheritance_ed(g1Gt, g2Gt, parentsGT):
             Salleles = sorted(gt, key=lambda x: Palleles[x])
             
             # Assign sample alleles to most likely parent alleles
-            isValidSample = True
-            parentAssigned = { parent: 0 for parent in sampleColumns } # how many alleles have been assigned to each parent
             for Sallele in Salleles: # for each sample allele
                 # Detect progeny mismatch with parent genotype
                 count = Palleles[Sallele]
@@ -605,7 +603,6 @@ def parse_ed_as_dict(edFile, missingFilter=0.5):
     
     # Parse the ED file
     edDict = {}
-    starts, ends = [], []
     with read_gz_file(edFile) as fileIn:
         firstLine = True
         for line in fileIn:
