@@ -54,16 +54,13 @@ def run_samtools_header(inputFile):
                                   stderr = subprocess.PIPE)
     headout, headerr = run_header.communicate()
     
-    # Check for errors
+    # Return the header string or raise error
     if run_header.returncode == 0:
-        return None
+        return headout
     else:
         errorMsg = headerr.decode("utf-8").rstrip("\r\n ")
         raise Exception(("run_samtools_header encountered an unhandled situation when processing " + 
                          f"'{inputFile}'; have a look at the stderr to make sense of this:\n'{errorMsg}'"))
-    
-    # Return the header string
-    return headout
 
 # Threaded operations
 def depth_task(ioPair):
