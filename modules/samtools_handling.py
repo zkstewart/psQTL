@@ -52,7 +52,7 @@ def run_samtools_header(inputFile):
     run_header = subprocess.Popen(" ".join(cmd), shell=True,
                                   stdout = subprocess.DEVNULL,
                                   stderr = subprocess.PIPE)
-    headout, headerr = run_faidx.communicate()
+    headout, headerr = run_header.communicate()
     
     # Check for errors
     if run_header.returncode == 0:
@@ -235,7 +235,7 @@ def get_readgroup_from_bam(bamFile):
                 "--useReadGroups if each input file represents an " +
                 "individual sample")
     
-    header = run_samtools_header(inputFile)
+    header = run_samtools_header(bamFile)
     pairs = []
     for line in header.replace("\r", "").split("\n"):
         if line.startswith("@RG"):
