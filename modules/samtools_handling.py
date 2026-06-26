@@ -50,7 +50,7 @@ def run_samtools_header(inputFile):
     
     # Run samtools depth
     run_header = subprocess.Popen(" ".join(cmd), shell=True,
-                                  stdout = subprocess.DEVNULL,
+                                  stdout = subprocess.PIPE,
                                   stderr = subprocess.PIPE)
     headout, headerr = run_header.communicate()
     
