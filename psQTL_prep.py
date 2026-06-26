@@ -364,7 +364,7 @@ def cmain(args, locations):
                               f"pertains to sample '{sampleID}'. " + warningTail)
                     readgroupFile.write(f"{readgroupID} {bamFile} {sampleID}\n")
             else:
-                sampleID = bamFile.rsplit(args.bamSuffix, maxsplit=1)[0]
+                sampleID = os.path.basename(bamFile).rsplit(args.bamSuffix, maxsplit=1)[0]
                 if not (sampleID in metadataDict["group1"] or sampleID in metadataDict["group2"]):
                     print(f"# WARNING: The file name of '{bamFile}' leads to us specifying its readgroup " +
                           f"sample ID as '{sampleID}'. " + warningTail)
