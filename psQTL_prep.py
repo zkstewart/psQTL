@@ -323,12 +323,12 @@ def cmain(args, locations):
     
     # Validate that the ploidy number is supported
     if args.ploidyNum != 2:
-        raise ValueError(f"'psQTL_prep.py call' currently only supports diploid samples (--ploidy 2); " +
-                            "you are suggested to call polyploid variants using a different tool, " +
-                            "then use 'psQTL_prep.py initialise --fvcf' to import your VCF file " +
-                            "into the psQTL working directory. All downstream psQTL commands " +
-                            "will work with polyploid samples, it is only variant calling " +
-                            "that is not supported at this time.")
+        raise ValueError("'psQTL_prep.py call' currently only supports diploid samples (--ploidy 2); " +
+                         "you are suggested to call polyploid variants using a different tool, " +
+                         "then use 'psQTL_prep.py initialise --fvcf' to import your VCF file " +
+                         "into the psQTL working directory. All downstream psQTL commands " +
+                         "will work with polyploid samples, it is only variant calling " +
+                         "that is not supported at this time.")
     
     # Validate that necessary parameters arguments are provided
     if args.bamFiles == None or args.bamFiles == []:
