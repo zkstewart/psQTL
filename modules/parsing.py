@@ -93,15 +93,13 @@ def parse_metadata(metadataFile):
             except ValueError:
                 raise ValueError(f"Metadata file does not have two columns; offending line is '{l}'")
             
-            # Validate that the population is one of the expected values
-            if not pop in ACCEPTED_GROUP1 + ACCEPTED_GROUP2:
-                raise ValueError(f"'{pop}' is not in the expected format for denoting groups; offending line is '{l}'")
-            
             # Unify the population names
             if pop in ACCEPTED_GROUP1:
                 pop = 'group1'
             elif pop in ACCEPTED_GROUP2:
                 pop = 'group2'
+            else:
+                raise ValueError(f"'{pop}' is not in the expected format for denoting groups; offending line is '{l}'")
             
             # Validate that the sample is non-redundant
             if sample in foundSamples:

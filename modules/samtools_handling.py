@@ -1,4 +1,4 @@
-import os, sys, shutil, subprocess, math
+import os, sys, shutil, subprocess, math, re
 import concurrent.futures
 import numpy as np
 
@@ -37,6 +37,30 @@ def run_samtools_faidx(fastaFile):
         errorMsg = faidxerr.decode("utf-8").rstrip("\r\n ")
         raise Exception(("run_samtools_faidx encountered an unhandled situation when processing " + 
                          f"'{fastaFile}'; have a look at the stderr to make sense of this:\n'{errorMsg}'"))
+
+def run_samtools_header(inputFile):
+    '''
+    Obtains the header from a SAM/BAM file.
+    
+    Parameters:
+        inputFile -- the input SAM/BAM file.
+    '''
+    # Format command
+    cmd = ["samtools", "view", "-H", inputFile]
+    
+    # Run samtools depth
+    run_header = subprocess.Popen(" ".join(cmd), shell=True,
+                                  stdout = subprocess.PIPE,
+                                  stderr = subprocess.PIPE)
+    headout, headerr = run_header.communicate()
+    
+    # Return the header string or raise error
+    if run_header.returncode == 0:
+        return headout.decode("utf-8").rstrip("\r\n ")
+    else:
+        errorMsg = headerr.decode("utf-8").rstrip("\r\n ")
+        raise Exception(("run_samtools_header encountered an unhandled situation when processing " + 
+                         f"'{inputFile}'; have a look at the stderr to make sense of this:\n'{errorMsg}'"))
 
 # Threaded operations
 def depth_task(ioPair):
@@ -176,3 +200,57 @@ def bin_samtools_depth(ioList, lengthsDict, threads, binSize):
             result = f.result()
         except Exception as e:
             raise Exception(f"bin_samtools_depth encountered the following error:\n{e}")
+
+def get_readgroup_from_bam(bamFile):
+    '''
+    Function to grab formatted readgroup(s) out of a BAM file. Note that
+    BAMs can contain more than one readgroup, and that read group can be
+    non-unique across files. Hence, this function aims for maximum
+    explicitness to mitigate the risk of incorrectly handling existing
+    readgroup specification.
+    
+    (Technically also suitable for SAM files, but this function is not
+    used for that purpose in the scope of psQTL)
+    
+    Parameters:
+        bamFile -- the input BAM file.
+    Returns:
+        pairs -- a list of lists with format like:
+                 [
+                     [rg1, sm1],
+                     [rg2, sm2], # same file, different readgroup
+                     [rg3, sm2], # different read group, same sample
+                     ...
+                 ]
+    '''
+    idRegex = re.compile(r"\sID:(.+?)(\s|$)")
+    smRegex = re.compile(r"\sSM:(.+?)(\s|$)")
+    errorMsg = ("For '{0}', the readgroup line ({1}) " +
+                "appears to lack a readgroup ID which would start " +
+                "with '{2}':'. Try to ensure that your input BAM files " +
+                "have a valid readgroup format, or omit the use of " +
+                "--useReadGroups if each input file represents an " +
+                "individual sample")
+    
+    header = run_samtools_header(bamFile)
+    pairs = []
+    for line in header.replace("\r", "").split("\n"):
+        if line.startswith("@RG"):
+            try:
+                readgroupID = idRegex.search(line).group(1)
+            except:
+                raise ValueError(errorMsg.format(bamFile, line, "ID"))
+            
+            try:
+                sampleID = smRegex.search(line).group(1)
+            except:
+                raise ValueError(errorMsg.format(bamFile, line, "SM"))
+            
+            pairs.append([readgroupID, sampleID])
+    
+    if len(pairs) > 0:
+        return pairs
+    else:
+        raise ValueError(f"Failed to locate a readgroup within '{bamFile}'; " +
+                        "you should not specify --useReadGroups unless all " +
+                        "BAM files are preconfigured with a readgroup.")
