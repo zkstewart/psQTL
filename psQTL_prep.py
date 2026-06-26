@@ -9,10 +9,10 @@ from Bio import SeqIO
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from modules.validation import validate_prep_args, validate_uncached
-from modules.parsing import read_gz_file
+from modules.parsing import read_gz_file, parse_metadata
 from modules.parameters import ParameterCache, VcfCache, DepthCache, MetadataCache
 from modules.samtools_handling import validate_samtools_exists, run_samtools_depth, run_samtools_faidx, \
-                                      bin_samtools_depth
+                                      bin_samtools_depth, get_readgroup_from_bam
 from modules.bcftools_handling import validate_bcftools_exists, validate_vt_exists, \
                                       run_bcftools_call, run_bcftools_index, run_normalisation, \
                                       run_bcftools_concat, run_bcftools_filter
@@ -335,6 +335,11 @@ def cmain(args, locations):
         raise ValueError("--bam files not yet provided for variant calling!")
     if args.qualFilter == None:
         raise ValueError("--qual not yet provided for variant calling!")
+    if args.metadataFile == None:
+        raise ValueError("--meta not yet provided for variant calling!")
+    
+    # Parse metadata file
+    metadataDict = parse_metadata(args.metadataFile)
     
     # Index the reference genome (if necessary)
     if not os.path.isfile(args.genomeFasta + ".fai"):
@@ -345,9 +350,29 @@ def cmain(args, locations):
         for bamFile in args.bamFiles:
             bamlistFile.write(f"{bamFile}\n")
     
+    # Create a readgroup file
+    warningTail = ("This sample is not recognised within your metadata. If this is expected, you can " +
+                   "ignore this warning. Otherwise, you may encounter later problems relating to this.")
+    
+    with open(locations.readgroupFile, "w") as readgroupFile: # allowed to overwrite existing files
+        for bamFile in args.bamFiles:
+            if args.useReadGroups:
+                readgroupPairs = get_readgroup_from_bam(bamFile) # a pair includes [readgroupID, sampleID]
+                for readgroupID, sampleID in readgroupPairs:
+                    if not (sampleID in metadataDict["group1"] or sampleID in metadataDict["group2"]):
+                        print(f"# WARNING: '{bamFile}' contains the readgroup '{readgroupID}' which " +
+                              f"pertains to sample '{sampleID}'. " + warningTail)
+                    readgroupFile.write(f"{readgroupID} {bamFile} {sampleID}\n")
+            else:
+                sampleID = bamFile.rsplit(args.bamSuffix, maxsplit=1)[0]
+                if not (sampleID in metadataDict["group1"] or sampleID in metadataDict["group2"]):
+                    print(f"# WARNING: The file name of '{bamFile}' leads to us specifying its readgroup " +
+                          f"sample ID as '{sampleID}'. " + warningTail)
+                readgroupFile.write(f"* {bamFile} {sampleID}\n") # translates to 'any read group in bamFile is from sampleID'
+    
     # Run bcftools mpileup->call on each contig
-    run_bcftools_call(locations.bamListFile, args.genomeFasta, locations.callDir,
-                      args.threads, useReadGroups=args.useReadGroups) # handles skipping internally
+    run_bcftools_call(locations.bamListFile, locations.readgroupFile,
+                      args.genomeFasta, locations.callDir, args.threads,) # handles skipping internally
     
     # Index each VCF file
     for vcfFile in [ os.path.join(locations.callDir, f) for f in os.listdir(locations.callDir) ]:

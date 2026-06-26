@@ -40,6 +40,10 @@ class Locations:
         return os.path.join(self.callDir, "bamlist.txt")
     
     @property
+    def readgroupFile(self):
+        return os.path.join(self.callDir, "readgroups.txt")
+    
+    @property
     def vcfFile(self):
         return os.path.join(self.callDir, "psQTL_call.vcf.gz")
     
