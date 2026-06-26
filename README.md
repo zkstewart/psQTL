@@ -1,3 +1,5 @@
+Warning: the current version 1.3.9 has a bug in how VCF creation occurs, which prevents full program operability. The older version 1.3.8 is otherwise functional and should be used until a fixed 1.3.10 is released.
+
 # Table of Contents
 - [Getting started](#getting-started)
 - [Installation](#installation)
