@@ -56,7 +56,7 @@ def run_samtools_header(inputFile):
     
     # Return the header string or raise error
     if run_header.returncode == 0:
-        return headout
+        return headout.decode("utf-8").rstrip("\r\n ")
     else:
         errorMsg = headerr.decode("utf-8").rstrip("\r\n ")
         raise Exception(("run_samtools_header encountered an unhandled situation when processing " + 
