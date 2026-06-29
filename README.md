@@ -54,6 +54,19 @@ conda create -n psqtl bioconda::psqtl
 
 See the [Installing psQTL wiki page](https://github.com/zkstewart/psQTL/wiki/Installing-psQTL) for more details.
 
+# Updating
+If you already have psQTL installed, you can check your version with:
+
+```
+psQTL_prep --version
+```
+
+If the version number indicated by this is older than the most recent [Release](https://github.com/zkstewart/psQTL/releases) you can update a conda installation of psQTL with:
+
+```
+conda update psqtl
+```
+
 # How to use psQTL
 The psQTL pipeline is intended to proceed from **prep**aration, to **proc**essing, to **post**-processing as accomplished by the correspondingly named script files.
 
