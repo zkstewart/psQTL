@@ -87,4 +87,6 @@ Some double-dashed parameters which indicate file locations e.g., `--meta metada
 See the [Using psQTL wiki page](https://github.com/zkstewart/psQTL/wiki/Using-psQTL) for further details.
 
 # How to cite
-A publication is hopefully forthcoming which can be referred to when using this program. Until then, you can link to this repository.
+Stewart, Z. K., Datta, J., Kerr, S. C., Yoon, S., Coyne, V. L., Smith, M. W., & Prentis, P. J. (2026). psQTL: A new non-model QTL prediction pipeline identifies FT3 copy number variation associated with complex structural rearrangements that promote precocious flowering in citrus. Horticulture Research, uhag292. https://doi.org/10.1093/hr/uhag292
+
+You can access the article through its [doi](https://doi.org/10.1093/hr/uhag292).
