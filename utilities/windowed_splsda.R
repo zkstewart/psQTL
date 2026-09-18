@@ -221,8 +221,19 @@ if (mixomicsVersion[2] < 30) {
     print("Older version of mixOmics detected, which means that the plotLoadings function will emit an 'Rplots.pdf' file you can ignore")
 }
 
+# Derive the column delimiter
+metadata.lines <- readLines(args$m)
+metadata.sep <- ifelse(grepl("\t", metadata.lines[1]), "\t", 
+                       ifelse(grepl(",", metadata.lines[1]), ",",
+                              NULL))
+
+if (metadata.sep == NULL)
+{
+  stop(paste0("Metadata file '", args$m, "' does not appear to use tab or comma delimiters, which means it cannot be parsed"))
+}
+
 # Parse metadata file
-metadata.table <- read.table(file=args$m, header=FALSE, stringsAsFactors=FALSE) # don't set 'sep=', try to parse it flexibly
+metadata.table <- read.table(file=args$m, header=FALSE, stringsAsFactors=FALSE, sep=metadata.sep)
 metadata.table$V1 <- unlist(lapply(metadata.table$V1, fix_numeric_first_char))
 metadata.table$V1 <- unlist(lapply(metadata.table$V1, fix_illegal_chars))
 
