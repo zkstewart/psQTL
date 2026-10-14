@@ -103,15 +103,21 @@ def parse_gwas_as_dict(gwasFiles, chromHead, posHead, statHead, relabelDict=None
                         chrom = relabelDict[chrom]
                     except:
                         raise ValueError(f"Chromosome '{chrom}' has no match within the --chromRelabel file")
+                
                 try:
                     posi = int(posi)
                 except:
                     raise ValueError(f"Position '{posi}' is not an integer; offending line is '{line}'")
-                try:
-                    statValue = float(stat)
-                    statValue = -math.log10(statValue)
-                except:
-                    raise ValueError(f"Statistic '{stat}' is not a float; offending line is '{line}'")
+                
+                if stat == "NA": # specifically handle PLINK2 which can emit 'NA' rather than float values
+                    continue
+                else:
+                    try:
+                        statValue = float(stat)
+                        statValue = -math.log10(statValue)
+                    except:
+                        raise ValueError(f"Statistic '{stat}' is not a float; offending line is '{line}'")
+                
                 if not statValue >= 0:
                     raise ValueError(f"Statistic '{stat}' is a negative value (we expect something like a P-value which has a minimum of 0); offending line is '{line}'")
                 
