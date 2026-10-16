@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # psQTL_prep.py
 # Represents step 1 in the psQTL pipeline, where the user can initialise a working directory,
-# view the metadata of an analysis directory, call variants, and calculate depth files for samples.
+# view the inputs and analysis runs of a working directory, call variants, and calculate depth files for samples.
 # Called variants and depth files can be used as input to the psQTL_proc.py script.
 
 import os, argparse, sys
@@ -10,7 +10,8 @@ from Bio import SeqIO
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from modules.validation import validate_prep_args, validate_uncached
 from modules.parsing import read_gz_file, parse_metadata
-from modules.parameters import ParameterCache, VcfCache, DepthCache, MetadataCache
+from modules.parameters import ParameterCache
+from modules.viewing import view_inputs, view_runs
 from modules.samtools_handling import validate_samtools_exists, run_samtools_depth, run_samtools_faidx, \
                                       bin_samtools_depth, get_readgroup_from_bam
 from modules.bcftools_handling import validate_bcftools_exists, validate_vt_exists, \
@@ -70,14 +71,16 @@ def main():
     vparser = subparsers.add_parser("view",
                                     parents=[p],
                                     add_help=False,
-                                    help="View the metadata of an analysis directory")
+                                    help="View the inputs and analysis runs of a working directory (equivalent to psQTL_view.py)")
     vparser.set_defaults(func=vmain)
     
     # Init-subparser arguments
     iparser.add_argument("--meta", dest="metadataFile",
                          required=False,
                          help="""Optionally, specify the location of a metadata TSV file containing two
-                         columns indicating 1) sample ID and 2) the group it belongs to""")
+                         columns indicating 1) sample ID and 2) the group it belongs to; this will be
+                         the default metadata for psQTL_proc.py and psQTL_post.py, which can
+                         alternatively be given metadata with their own --meta argument""")
     iparser.add_argument("--vcf", dest="vcfFile",
                          required=False,
                          help="""Optionally, specify a VCF file containg per-sample variant
@@ -335,11 +338,9 @@ def cmain(args, locations):
         raise ValueError("--bam files not yet provided for variant calling!")
     if args.qualFilter == None:
         raise ValueError("--qual not yet provided for variant calling!")
-    if args.metadataFile == None:
-        raise ValueError("--meta not yet provided for variant calling!")
     
-    # Parse metadata file
-    metadataDict = parse_metadata(args.metadataFile)
+    # Parse metadata file (if available) to warn about unrecognised samples
+    metadataDict = parse_metadata(args.metadataFile) if args.metadataFile != None else None
     
     # Index the reference genome (if necessary)
     if not os.path.isfile(args.genomeFasta + ".fai"):
@@ -359,13 +360,13 @@ def cmain(args, locations):
             if args.useReadGroups:
                 readgroupPairs = get_readgroup_from_bam(bamFile) # a pair includes [readgroupID, sampleID]
                 for readgroupID, sampleID in readgroupPairs:
-                    if not (sampleID in metadataDict["group1"] or sampleID in metadataDict["group2"]):
+                    if metadataDict != None and not (sampleID in metadataDict["group1"] or sampleID in metadataDict["group2"]):
                         print(f"# WARNING: '{bamFile}' contains the readgroup '{readgroupID}' which " +
                               f"pertains to sample '{sampleID}'. " + warningTail)
                     readgroupFile.write(f"{readgroupID} {bamFile} {sampleID}\n")
             else:
                 sampleID = os.path.basename(bamFile).rsplit(args.bamSuffix, maxsplit=1)[0]
-                if not (sampleID in metadataDict["group1"] or sampleID in metadataDict["group2"]):
+                if metadataDict != None and not (sampleID in metadataDict["group1"] or sampleID in metadataDict["group2"]):
                     print(f"# WARNING: The file name of '{bamFile}' leads to us specifying its readgroup " +
                           f"sample ID as '{sampleID}'. " + warningTail)
                 readgroupFile.write(f"* {bamFile} {sampleID}\n") # translates to 'any read group in bamFile is from sampleID'
@@ -424,139 +425,8 @@ def vmain(args, locations):
     paramsCache = ParameterCache(locations.workingDirectory)
     paramsCache.merge(args) # raises FileNotFoundError if cache does not exist
     
-    # Present standard parameters
-    print("# Parameters:")
-    print(f"Working directory: {locations.workingDirectory}")
-    
-    if args.bamFiles != []:
-        print(f"BAM files: {args.bamFiles}")
-    else:
-        print("BAM files: None")
-    
-    # Present metadata cache
-    print() # blank line for spacing
-    print("# Metadata details:")
-    if args.metadataFile is not None:
-        metadataCache = MetadataCache(locations.workingDirectory)
-        metadataCache.establish()
-        if metadataCache.metadataFile == None:
-            print("## Metadata cache not found; re-initialising...")
-            metadataCache.metadataFile = args.metadataFile
-        
-        print(f"Metadata file: {args.metadataFile}")
-        print(f"Group 1 samples (n={len(metadataCache.group1)}): {metadataCache.group1}")
-        print(f"Group 2 samples (n={len(metadataCache.group2)}): {metadataCache.group2}")
-    else:
-        print("Metadata file: None")
-    
-    # Present VCF cache
-    print() # blank line for spacing
-    print("# 'Call' VCF details:")
-    if args.vcfFile is not None:
-        vcfCache = VcfCache(locations.workingDirectory)
-        vcfCache.establish()
-        if vcfCache.vcfFile == None:
-            print("## VCF cache not found; re-initialising...")
-            vcfCache.vcfFile = args.vcfFile
-        
-        print(f"VCF file: {args.vcfFile}")
-        print(f"Num. variants: {vcfCache.variants}")
-        print(f"Samples (n={len(vcfCache.samples)}): {vcfCache.samples}")
-        print(f"Contigs (n={len(vcfCache.contigs)}): {vcfCache.contigs}")
-    else:
-        print("VCF file: None")
-    
-    print() # blank line for spacing
-    print("# Filtered 'call' VCF details:")
-    if args.filteredVcfFile is not None:
-        vcfCache = VcfCache(locations.workingDirectory)
-        vcfCache.establish()
-        if vcfCache.filteredVcfFile == None:
-            print("## VCF cache not found; re-initialising...")
-            vcfCache.filteredVcfFile = args.filteredVcfFile
-        
-        print(f"Filtered VCF file: {args.filteredVcfFile}")
-        if paramsCache.qualFilter == None:
-            print(f"Quality filter: unknown")
-        else:
-            print(f"Quality filter: {paramsCache.qualFilter}")
-        print(f"Num. filtered variants: {vcfCache.filteredVariants}")
-        print(f"Filtered samples (n={len(vcfCache.filteredSamples)}): {vcfCache.filteredSamples}")
-        print(f"Filtered contigs (n={len(vcfCache.filteredContigs)}): {vcfCache.filteredContigs}")
-    else:
-        print("Filtered VCF file: None")
-    print() # blank line for spacing
-    
-    # Present depth cache
-    print("# Depth VCF-like details:")
-    if args.depthFile is not None:
-        depthCache = DepthCache(locations.workingDirectory)
-        depthCache.establish()
-        if depthCache.depthFile == None:
-            print("## Depth cache not found; re-initialising...")
-            depthCache.depthFile = args.depthFile
-        
-        print(f"Depth file: {args.depthFile}")
-        if paramsCache.windowSize == None:
-            print(f"Window size: unknown")
-        else:
-            print(f"Window size: {paramsCache.windowSize} bp")
-        print(f"Total num. bins: {depthCache.bins}")
-        print(f"Num. bins with CNV: {depthCache.cnvBins}")
-        print(f"Samples (n={len(depthCache.samples)}): {depthCache.samples}")
-        print(f"Contigs (n={len(depthCache.contigs)}): {depthCache.contigs}")
-    
-    else:
-        print("Depth file: None")
-    print() # blank line for spacing
-    
-    # Identify potential conflicts or issues
-    issues = []
-    
-    ## Sample issues
-    keepFindingIssues = True
-    try:
-        metaSamples = set(metadataCache.group1 + metadataCache.group2)
-        if len(metaSamples) == 2:
-            issues.append("Metadata only indicates two samples; analysis interpretation may be limited")
-    except:
-        issues.append("Metadata file needs to be set before further analysis can proceed")
-        keepFindingIssues = False
-    
-    if keepFindingIssues:
-        try:
-            vcfSamples = set(vcfCache.filteredSamples) if vcfCache.filteredSamples != None else set(vcfCache.samples)
-            if metaSamples != vcfSamples:
-                issues.append(f"Metadata samples (n={len(metaSamples)}) do not match VCF samples (n={len(vcfCache.samples)})")
-        except:
-            issues.append("VCF file may need to be set or generated before further analysis can proceed")
-            keepFindingIssues = False
-    
-    if keepFindingIssues:
-        try:
-            depthSamples = set(depthCache.samples)
-            if metaSamples != depthSamples:
-                issues.append(f"Metadata samples (n={len(metaSamples)}) do not match depth samples (n={len(depthCache.samples)})")
-            if vcfSamples != depthSamples:
-                issues.append(f"VCF samples (n={len(vcfSamples)}) do not match depth samples (n={len(depthSamples)})")
-        except:
-            issues.append("Depth file may need to be set or generated before further analysis can proceed")
-            keepFindingIssues = False
-    
-    ## Contig issues
-    if keepFindingIssues:
-        vcfContigs = set(vcfCache.filteredContigs) if vcfCache.filteredContigs != None else set(vcfCache.contigs)
-        depthContigs = set(depthCache.contigs)
-        if vcfContigs != depthContigs:
-            issues.append(f"VCF contigs (n={len(vcfContigs)}) do not match depth contigs (n={len(depthContigs)})")
-    
-    # Present potential issues
-    print("# Potential issues:")
-    if issues == []:
-        print("No issues found!")
-    else:
-        print("\n".join(issues))
-    print() # blank line for spacing
+    view_inputs(locations, args)
+    view_runs(locations.workingDirectory, args.metadataFile, "psQTL_view.py")
     
     print("Analysis viewing complete!")
 

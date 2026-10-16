@@ -3,7 +3,7 @@ import os, sys, re
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from locations import Locations
 from parameters import ParameterCache
-from parsing import parse_metadata
+from runs import resolve_run
 from gff3 import GFF3Graph
 from plot import NUM_SAMPLE_LINES
 
@@ -56,14 +56,12 @@ def validate_proc_args(args):
     paramsCache = ParameterCache(args.workingDirectory)
     paramsCache.merge(args) # raises FileNotFoundError if cache does not exist
     
-    # Validate metadata file
-    if args.metadataFile == None:
-        raise FileNotFoundError("Working directory has not been initialised with a metadata file!")
-    elif not os.path.isfile(args.metadataFile):
-            raise FileNotFoundError(f"Metadata file '{args.metadataFile}' was identified in " +
-                                    "the parameters cache, but it doesn't exist or is not a file!")
+    # Locate or create the analysis run for this metadata
+    "args.metadataFile is the cached psQTL_prep.py value; --meta is stored separately so it doesn't overwrite that"
+    run = resolve_run(locations, runID=args.runID, metadataFile=args.runMetadataFile,
+                      defaultMetadataFile=args.metadataFile, create=True)
     
-    return locations
+    return locations, run
 
 def validate_c(args):
     '''
@@ -117,14 +115,10 @@ def validate_post_args(args):
     paramsCache = ParameterCache(args.workingDirectory)
     paramsCache.merge(args) # raises FileNotFoundError if cache does not exist
     
-    # Validate metadata file
-    if args.metadataFile == None:
-        raise FileNotFoundError(f"Metadata file has not been initialised with psQTL_prep.py!")
-    elif not os.path.isfile(args.metadataFile):
-        raise FileNotFoundError(f"Metadata file '{args.metadataFile}' was initialised previously " + 
-                                "but no longer exists!")
-    else:
-        args.metadataDict = parse_metadata(args.metadataFile)
+    # Locate the analysis run whose results are being post-processed
+    run = resolve_run(locations, runID=args.runID, metadataFile=args.runMetadataFile,
+                      defaultMetadataFile=args.metadataFile, create=False)
+    args.metadataDict = run.metadataDict
     
     # Format inputType and measurementType for compatibility between plot and report modes
     "Report mode only accepts a modified measurementType value, so we need to reformat it accordingly."
@@ -235,6 +229,10 @@ def validate_post_args(args):
             args.gff3Obj.qc(typesToCheck=["gene", "mRNA"]) # prints out warnings if any issues found
     
     # Validate output file
+    "A bare file name is written into the run's post directory so outputs stay with the results they came from"
+    if os.path.dirname(args.outputFileName) == "":
+        os.makedirs(locations.postDir, exist_ok=True)
+        args.outputFileName = os.path.join(locations.postDir, args.outputFileName)
     if os.path.exists(args.outputFileName):
         raise FileExistsError(f"-o output file '{args.outputFileName}' already exists!")
     args.outputFileName = os.path.abspath(args.outputFileName)

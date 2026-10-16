@@ -48,7 +48,9 @@ def main():
     can be plotted as a combination of line plots, scatter plots, alignment coverage plots,
     and/or gene locations. The gene proximity report will identify genes that are proximal to or
     contained within potential QTL regions. The input directory is expected to have been
-    'initialise'd by psQTL_prep.py and 'process'ed by psQTL_proc.py.
+    'initialise'd by psQTL_prep.py and 'process'ed by psQTL_proc.py. If psQTL_proc.py was
+    run with more than one metadata grouping, choose which analysis run to post-process
+    with --run or --meta.
     """
     # Establish main parser
     p = argparse.ArgumentParser()
@@ -64,7 +66,19 @@ def main():
                    required=True,
                    help="""Specify the location to write the output file; for 'plot', this must
                    end with '.pdf', '.png', or '.svg'; for 'report', this must end with
-                   '.tsv' or '.csv'""")
+                   '.tsv' or '.csv'. A file name without a directory (e.g., 'plot.pdf') is
+                   written into the analysis run's 'post' folder.""")
+    p.add_argument("--meta", dest="runMetadataFile", metavar="METADATAFILE",
+                   required=False,
+                   help="""Optionally, specify a metadata TSV file to post-process the analysis
+                   run whose groups match it (default: the metadata given to psQTL_prep.py
+                   initialise, or the only analysis run if just one exists)""",
+                   default=None)
+    p.add_argument("--run", dest="runID", metavar="RUN",
+                   required=False,
+                   help="""Optionally, specify the analysis run to post-process by its number
+                   (e.g., '2' or 'run2'), as an alternative to --meta""",
+                   default=None)
     p.add_argument("--ed", dest="edType",
                    required=False,
                    choices=["alleles", "inheritance", "genotypes"],
@@ -236,16 +250,16 @@ def main():
                          default=50000)
     
     args = subParentParser.parse_args()
-    locations = validate_post_args(args) # always sets args.metadataDict; sets args.edFile &| args.pickleFile &| args.gff3Obj if relevant
+    print("## psQTL_post.py - Plot QTL Statistics ##" if args.mode == "plot" else "## psQTL_post.py - Report Gene Proximity ##")
+    locations = validate_post_args(args) # sets locations.runDir & args.metadataDict; sets args.edFile &| args.pickleFile &| args.gff3Obj if relevant
     
     # Perform mode-specific validation
     "Validate upfront before we get into time-consuming parsing to frontload the error checking"
     if args.mode == "plot":
-        print("## psQTL_post.py - Plot QTL Statistics ##")
         validate_p(args) # sets args.depthFileDict if relevant
     elif args.mode == "report":
-        print("## psQTL_post.py - Report Gene Proximity ##")
         validate_r(args)
+    print(f"# Output will be written to '{args.outputFileName}'")
     
     # Get contig lengths from genome FASTA
     with read_gz_file(args.genomeFasta) as fileIn:

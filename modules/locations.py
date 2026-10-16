@@ -3,8 +3,9 @@ import os
 class Locations:
     depthSuffix = ".depth.tsv.gz"
     
-    def __init__(self, workingDirectory):
+    def __init__(self, workingDirectory, runDirectory=None):
         self.workingDirectory = workingDirectory
+        self.runDir = runDirectory
     
     @property
     def workingDirectory(self):
@@ -27,8 +28,31 @@ class Locations:
         return os.path.join(self.workingDirectory, "call")
     
     @property
+    def runsDir(self):
+        return os.path.join(self.workingDirectory, "runs")
+    
+    @property
+    def runDir(self):
+        return self._runDir
+    
+    @runDir.setter
+    def runDir(self, value):
+        self._runDir = os.path.abspath(value) if value != None else None
+    
+    @property
+    def resultsDir(self):
+        "Segregation statistics and post-processing outputs are specific to an analysis run"
+        if self.runDir == None:
+            raise ValueError("Locations object has no analysis run directory set; this is a psQTL bug!")
+        return self.runDir
+    
+    @property
     def splsdaDir(self):
-        return os.path.join(self.workingDirectory, "splsda")
+        return os.path.join(self.resultsDir, "splsda")
+    
+    @property
+    def postDir(self):
+        return os.path.join(self.resultsDir, "post")
     
     # Naive file properties
     @property
@@ -53,15 +77,15 @@ class Locations:
     
     @property
     def allelesEdFile(self):
-        return os.path.join(self.workingDirectory, "psQTL_call.alleles_ed.tsv.gz")
+        return os.path.join(self.resultsDir, "psQTL_call.alleles_ed.tsv.gz")
     
     @property
     def inheritanceEdFile(self):
-        return os.path.join(self.workingDirectory, "psQTL_call.inheritance_ed.tsv.gz")
+        return os.path.join(self.resultsDir, "psQTL_call.inheritance_ed.tsv.gz")
     
     @property
     def genotypesEdFile(self):
-        return os.path.join(self.workingDirectory, "psQTL_call.genotypes_ed.tsv.gz")
+        return os.path.join(self.resultsDir, "psQTL_call.genotypes_ed.tsv.gz")
     
     @property
     def variantRecodedFile(self):
@@ -81,7 +105,7 @@ class Locations:
     
     @property
     def depthEdFile(self):
-        return os.path.join(self.workingDirectory, "psQTL_depth.ed.tsv.gz")
+        return os.path.join(self.resultsDir, "psQTL_depth.ed.tsv.gz")
     
     @property
     def depthRecodedFile(self):
@@ -117,13 +141,13 @@ class Locations:
     
     # Attributes with value input
     def allelesEdPickleFile(self, value):
-        return os.path.join(self.workingDirectory, f"psQTL_call.alleles_ed.{value}.pkl")
+        return os.path.join(self.resultsDir, f"psQTL_call.alleles_ed.{value}.pkl")
     
     def inheritanceEdPickleFile(self, value):
-        return os.path.join(self.workingDirectory, f"psQTL_call.inheritance_ed.{value}.pkl")
+        return os.path.join(self.resultsDir, f"psQTL_call.inheritance_ed.{value}.pkl")
     
     def genotypesEdPickleFile(self, value):
-        return os.path.join(self.workingDirectory, f"psQTL_call.genotypes_ed.{value}.pkl")
+        return os.path.join(self.resultsDir, f"psQTL_call.genotypes_ed.{value}.pkl")
     
     def depthEdPickleFile(self, value):
-        return os.path.join(self.workingDirectory, f"psQTL_depth.ed.{value}.pkl")
+        return os.path.join(self.resultsDir, f"psQTL_depth.ed.{value}.pkl")

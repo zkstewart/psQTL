@@ -1119,7 +1119,7 @@ class TestMain(unittest.TestCase):
         returncode, stdout, stderr = run_subprocess(cmd)
         self.assertTrue(stderr == "", f"Expected no stderr output but got: {stderr}")
         
-        edFile = os.path.join(workDir, "psQTL_call.alleles_ed.tsv.gz")
+        edFile = os.path.join(workDir, "runs", "run1", "psQTL_call.alleles_ed.tsv.gz")
         edContents = []
         with read_gz_file(edFile) as fileIn:
             for line in fileIn:
@@ -1136,17 +1136,17 @@ class TestMain(unittest.TestCase):
         self.assertTrue(stderr == "", f"Expected no stderr output but got: {stderr}")
         
         # Assert: check that the output files are correctly generated
-        berFile = os.path.join(workDir, "splsda", "psQTL_call.BER.tsv")
+        berFile = os.path.join(workDir, "runs", "run1", "splsda", "psQTL_call.BER.tsv")
         with open(berFile) as fileIn:
             berContents = fileIn.readlines()
         self.assertTrue(berContents[1] == berTruth, f"Expected BER file to contain '{berTruth}' but got: {berContents[1]}")
         
-        selectedFile = os.path.join(workDir, "splsda", "psQTL_call.selected.tsv")
+        selectedFile = os.path.join(workDir, "runs", "run1", "splsda", "psQTL_call.selected.tsv")
         with open(selectedFile) as fileIn:
             selectedContents = fileIn.readlines()
         self.assertTrue(selectedContents[1] == selectedTruth, f"Expected selected file to contain '{selectedTruth}' but got: {selectedContents[1]}")
         
-        recodeFile = os.path.join(workDir, "splsda", "psQTL_call.recode.tsv.gz")
+        recodeFile = os.path.join(workDir, "runs", "run1", "splsda", "psQTL_call.recode.tsv.gz")
         recodeContents = []
         with read_gz_file(recodeFile) as fileIn:
             for line in fileIn:
@@ -1194,7 +1194,7 @@ class TestMain(unittest.TestCase):
         #self.assertTrue(returncode == 0, f"Expected returncode 0 but got: {returncode}")
         self.assertTrue(stderr == "", f"Expected no stderr output but got: {stderr}")
         
-        edFile = os.path.join(workDir, "psQTL_call.inheritance_ed.tsv.gz")
+        edFile = os.path.join(workDir, "runs", "run1", "psQTL_call.inheritance_ed.tsv.gz")
         edContents = []
         with read_gz_file(edFile) as fileIn:
             for line in fileIn:
@@ -1212,17 +1212,17 @@ class TestMain(unittest.TestCase):
         self.assertTrue(stderr == "", f"Expected no stderr output but got: {stderr}")
         
         # Assert: check that the output files are correctly generated
-        berFile = os.path.join(workDir, "splsda", "psQTL_call.BER.tsv")
+        berFile = os.path.join(workDir, "runs", "run1", "splsda", "psQTL_call.BER.tsv")
         with open(berFile) as fileIn:
             berContents = fileIn.readlines()
         self.assertTrue(berContents[1] == berTruth, f"Expected BER file to contain '{berTruth}' but got: {berContents[1]}")
         
-        selectedFile = os.path.join(workDir, "splsda", "psQTL_call.selected.tsv")
+        selectedFile = os.path.join(workDir, "runs", "run1", "splsda", "psQTL_call.selected.tsv")
         with open(selectedFile) as fileIn:
             selectedContents = fileIn.readlines()
         self.assertTrue(selectedContents[1] == selectedTruth, f"Expected selected file to contain '{selectedTruth}' but got: {selectedContents[1]}")
         
-        recodeFile = os.path.join(workDir, "splsda", "psQTL_call.recode.tsv.gz")
+        recodeFile = os.path.join(workDir, "runs", "run1", "splsda", "psQTL_call.recode.tsv.gz")
         recodeContents = []
         with read_gz_file(recodeFile) as fileIn:
             for line in fileIn:
@@ -1270,7 +1270,7 @@ class TestMain(unittest.TestCase):
         #self.assertTrue(returncode == 0, f"Expected returncode 0 but got: {returncode}")
         self.assertTrue(stderr == "", f"Expected no stderr output but got: {stderr}")
         
-        edFile = os.path.join(workDir, "psQTL_call.alleles_ed.tsv.gz")
+        edFile = os.path.join(workDir, "runs", "run1", "psQTL_call.alleles_ed.tsv.gz")
         edContents = []
         with read_gz_file(edFile) as fileIn:
             for line in fileIn:
@@ -1288,17 +1288,17 @@ class TestMain(unittest.TestCase):
         self.assertTrue(stderr == "", f"Expected no stderr output but got: {stderr}")
         
         # Assert: check that the output files are correctly generated
-        berFile = os.path.join(workDir, "splsda", "psQTL_call.BER.tsv")
+        berFile = os.path.join(workDir, "runs", "run1", "splsda", "psQTL_call.BER.tsv")
         with open(berFile) as fileIn:
             berContents = fileIn.readlines()
         self.assertTrue(berContents[1] == berTruth, f"Expected BER file to contain '{berTruth}' but got: {berContents[1]}")
         
-        selectedFile = os.path.join(workDir, "splsda", "psQTL_call.selected.tsv")
+        selectedFile = os.path.join(workDir, "runs", "run1", "splsda", "psQTL_call.selected.tsv")
         with open(selectedFile) as fileIn:
             selectedContents = fileIn.readlines()
         self.assertTrue(selectedContents[1] == selectedTruth, f"Expected selected file to contain '{selectedTruth}' but got: {selectedContents[1]}")
         
-        recodeFile = os.path.join(workDir, "splsda", "psQTL_call.recode.tsv.gz")
+        recodeFile = os.path.join(workDir, "runs", "run1", "splsda", "psQTL_call.recode.tsv.gz")
         recodeContents = []
         with read_gz_file(recodeFile) as fileIn:
             for line in fileIn:
@@ -1346,7 +1346,7 @@ class TestMain(unittest.TestCase):
         #self.assertTrue(returncode == 0, f"Expected returncode 0 but got: {returncode}")
         self.assertTrue(stderr == "", f"Expected no stderr output but got: {stderr}")
         
-        edFile = os.path.join(workDir, "psQTL_call.inheritance_ed.tsv.gz")
+        edFile = os.path.join(workDir, "runs", "run1", "psQTL_call.inheritance_ed.tsv.gz")
         edContents = []
         with read_gz_file(edFile) as fileIn:
             for line in fileIn:
@@ -1364,17 +1364,17 @@ class TestMain(unittest.TestCase):
         self.assertTrue(stderr == "", f"Expected no stderr output but got: {stderr}")
         
         # Assert: check that the output files are correctly generated
-        berFile = os.path.join(workDir, "splsda", "psQTL_call.BER.tsv")
+        berFile = os.path.join(workDir, "runs", "run1", "splsda", "psQTL_call.BER.tsv")
         with open(berFile) as fileIn:
             berContents = fileIn.readlines()
         self.assertTrue(berContents[1] == berTruth, f"Expected BER file to contain '{berTruth}' but got: {berContents[1]}")
         
-        selectedFile = os.path.join(workDir, "splsda", "psQTL_call.selected.tsv")
+        selectedFile = os.path.join(workDir, "runs", "run1", "splsda", "psQTL_call.selected.tsv")
         with open(selectedFile) as fileIn:
             selectedContents = fileIn.readlines()
         self.assertTrue(selectedContents[1] == selectedTruth, f"Expected selected file to contain '{selectedTruth}' but got: {selectedContents[1]}")
         
-        recodeFile = os.path.join(workDir, "splsda", "psQTL_call.recode.tsv.gz")
+        recodeFile = os.path.join(workDir, "runs", "run1", "splsda", "psQTL_call.recode.tsv.gz")
         recodeContents = []
         with read_gz_file(recodeFile) as fileIn:
             for line in fileIn:
@@ -1422,7 +1422,7 @@ class TestMain(unittest.TestCase):
         self.assertTrue(returncode == 0, f"Expected returncode 0 but got: {returncode}")
         self.assertTrue(stderr == "", f"Expected no stderr output but got: {stderr}")
         
-        edFile = os.path.join(workDir, "psQTL_call.alleles_ed.tsv.gz")
+        edFile = os.path.join(workDir, "runs", "run1", "psQTL_call.alleles_ed.tsv.gz")
         edContents = []
         with read_gz_file(edFile) as fileIn:
             for line in fileIn:
@@ -1440,17 +1440,17 @@ class TestMain(unittest.TestCase):
         self.assertTrue(stderr == "", f"Expected no stderr output but got: {stderr}")
         
         # Assert: check that the output files are correctly generated
-        berFile = os.path.join(workDir, "splsda", "psQTL_call.BER.tsv")
+        berFile = os.path.join(workDir, "runs", "run1", "splsda", "psQTL_call.BER.tsv")
         with open(berFile) as fileIn:
             berContents = fileIn.readlines()
         self.assertTrue(berContents[1] == berTruth, f"Expected BER file to contain '{berTruth}' but got: {berContents[1]}")
         
-        selectedFile = os.path.join(workDir, "splsda", "psQTL_call.selected.tsv")
+        selectedFile = os.path.join(workDir, "runs", "run1", "splsda", "psQTL_call.selected.tsv")
         with open(selectedFile) as fileIn:
             selectedContents = fileIn.readlines()
         self.assertTrue(selectedContents[1] == selectedTruth, f"Expected selected file to contain '{selectedTruth}' but got: {selectedContents[1]}")
         
-        recodeFile = os.path.join(workDir, "splsda", "psQTL_call.recode.tsv.gz")
+        recodeFile = os.path.join(workDir, "runs", "run1", "splsda", "psQTL_call.recode.tsv.gz")
         recodeContents = []
         with read_gz_file(recodeFile) as fileIn:
             for line in fileIn:
@@ -1498,7 +1498,7 @@ class TestMain(unittest.TestCase):
         #self.assertTrue(returncode == 0, f"Expected returncode 0 but got: {returncode}")
         self.assertTrue(stderr == "", f"Expected no stderr output but got: {stderr}")
         
-        edFile = os.path.join(workDir, "psQTL_call.inheritance_ed.tsv.gz")
+        edFile = os.path.join(workDir, "runs", "run1", "psQTL_call.inheritance_ed.tsv.gz")
         edContents = []
         with read_gz_file(edFile) as fileIn:
             for line in fileIn:
@@ -1516,17 +1516,17 @@ class TestMain(unittest.TestCase):
         self.assertTrue(stderr == "", f"Expected no stderr output but got: {stderr}")
         
         # Assert: check that the output files are correctly generated
-        berFile = os.path.join(workDir, "splsda", "psQTL_call.BER.tsv")
+        berFile = os.path.join(workDir, "runs", "run1", "splsda", "psQTL_call.BER.tsv")
         with open(berFile) as fileIn:
             berContents = fileIn.readlines()
         self.assertTrue(berContents[1] == berTruth, f"Expected BER file to contain '{berTruth}' but got: {berContents[1]}")
         
-        selectedFile = os.path.join(workDir, "splsda", "psQTL_call.selected.tsv")
+        selectedFile = os.path.join(workDir, "runs", "run1", "splsda", "psQTL_call.selected.tsv")
         with open(selectedFile) as fileIn:
             selectedContents = fileIn.readlines()
         self.assertTrue(selectedContents[1] == selectedTruth, f"Expected selected file to contain '{selectedTruth}' but got: {selectedContents[1]}")
         
-        recodeFile = os.path.join(workDir, "splsda", "psQTL_call.recode.tsv.gz")
+        recodeFile = os.path.join(workDir, "runs", "run1", "splsda", "psQTL_call.recode.tsv.gz")
         recodeContents = []
         with read_gz_file(recodeFile) as fileIn:
             for line in fileIn:
@@ -2523,6 +2523,148 @@ class TestExclusions(unittest.TestCase):
         
         # Assert
         self.assertEqual(allValues, trueValues)
+
+class TestRuns(unittest.TestCase):
+    def setUp(self):
+        self.workDir = os.path.join(dataDir, "tmp")
+        self.fullMetadata = os.path.join(dataDir, "fulltest.metadata.1.tsv")
+        self.subsetMetadata = os.path.join(dataDir, "subset.metadata.1.tsv")
+        self.vcfFile = os.path.join(dataDir, "fulltest.variants.1.vcf")
+        self.depthFile = os.path.join(dataDir, "fulltest.depth.1.vcf")
+        self.genomeFile = os.path.join(dataDir, "genome.fasta")
+        self.gff3File = os.path.join(dataDir, "fulltest.1.gff3")
+
+        if os.path.exists(self.workDir):
+            shutil.rmtree(self.workDir)
+        os.makedirs(self.workDir)
+
+    def run_script(self, script, args):
+        return run_subprocess(["python", os.path.join(baseDir, script)] + args)
+
+    def initialise(self, withMetadata):
+        cmd = ["initialise", "-d", self.workDir, "--fvcf", self.vcfFile, "--dvcf", self.depthFile]
+        if withMetadata:
+            cmd += ["--meta", self.fullMetadata]
+        returncode, stdout, stderr = self.run_script("psQTL_prep.py", cmd)
+        self.assertTrue(stderr == "", f"Expected no stderr output but got: {stderr}")
+
+    def report(self, outputFileName, extraArgs=[]):
+        return self.run_script("psQTL_post.py", [
+            "report", "-d", self.workDir, "-f", self.genomeFile, "-a", self.gff3File,
+            "-m", "ed-call", "-t", "genes", "-o", outputFileName] + extraArgs)
+
+    def test_parse_run_id(self):
+        "Test that run identifiers are accepted as numbers or run names"
+        from modules.runs import parse_run_id
+        self.assertEqual(parse_run_id("2"), 2)
+        self.assertEqual(parse_run_id("run12"), 12)
+        self.assertEqual(parse_run_id("Run3"), 3)
+        for badValue in ["0", "runX", "two", "-1"]:
+            with self.assertRaises(ValueError):
+                parse_run_id(badValue)
+
+    def test_runs_are_matched_by_groups(self):
+        "Test that reformatted metadata reuses a run while different groups create a new run"
+        # Arrange: metadata with identical groups but different ordering and group labels
+        reformattedMetadata = os.path.join(self.workDir, "reformatted.metadata.tsv")
+        with open(self.fullMetadata) as fileIn, open(reformattedMetadata, "w") as fileOut:
+            lines = [ line.rstrip("\r\n").split("\t") for line in fileIn if line.strip() != "" ]
+            for sample, group in reversed(lines):
+                fileOut.write(f"{sample}\t{group.replace('group', '')}\n")
+        self.initialise(withMetadata=True)
+
+        # Act&Assert: default metadata creates run1
+        returncode, stdout, stderr = self.run_script("psQTL_proc.py", ["ed", "-d", self.workDir, "-i", "call"])
+        self.assertTrue(stderr == "", f"Expected no stderr output but got: {stderr}")
+        self.assertIn("Created analysis run run1", stdout)
+
+        # Act&Assert: reformatted metadata with the same groups reuses run1
+        returncode, stdout, stderr = self.run_script("psQTL_proc.py", ["ed", "-d", self.workDir, "-i", "depth",
+                                                                       "--meta", reformattedMetadata])
+        self.assertTrue(stderr == "", f"Expected no stderr output but got: {stderr}")
+        self.assertIn("Using analysis run run1", stdout)
+        self.assertTrue(os.path.isfile(os.path.join(self.workDir, "runs", "run1", "psQTL_depth.ed.tsv.gz.ok")))
+
+        # Act&Assert: different groups create run2 without touching run1
+        returncode, stdout, stderr = self.run_script("psQTL_proc.py", ["ed", "-d", self.workDir, "-i", "call",
+                                                                       "--meta", self.subsetMetadata])
+        self.assertTrue(stderr == "", f"Expected no stderr output but got: {stderr}")
+        self.assertIn("Created analysis run run2", stdout)
+
+        run1Ed, run2Ed = [], []
+        for runName, edContents in [["run1", run1Ed], ["run2", run2Ed]]:
+            with read_gz_file(os.path.join(self.workDir, "runs", runName, "psQTL_call.alleles_ed.tsv.gz")) as fileIn:
+                edContents.extend([ line.strip() for line in fileIn ])
+        self.assertNotEqual(run1Ed, run2Ed, "Runs with different metadata should have different ED results")
+        self.assertEqual(sorted(os.listdir(os.path.join(self.workDir, "runs"))), [".lock", "run1", "run2"])
+
+    def test_post_run_selection(self):
+        "Test choosing a run for psQTL_post.py and that bare output names are written into the run"
+        # Arrange: two runs without default metadata
+        self.initialise(withMetadata=False)
+        for metadataFile in [self.fullMetadata, self.subsetMetadata]:
+            returncode, stdout, stderr = self.run_script("psQTL_proc.py", ["ed", "-d", self.workDir, "-i", "call",
+                                                                           "--meta", metadataFile])
+            self.assertTrue(stderr == "", f"Expected no stderr output but got: {stderr}")
+
+        # Act&Assert: an ambiguous choice of run is an error
+        returncode, stdout, stderr = self.report("report.tsv")
+        self.assertIn("Multiple analysis runs exist", stderr)
+
+        # Act&Assert: a non-existent run is an error
+        returncode, stdout, stderr = self.report("report.tsv", ["--run", "9"])
+        self.assertIn("'run9' does not exist", stderr)
+
+        # Act&Assert: --run writes a bare output name into that run's post directory
+        returncode, stdout, stderr = self.report("report.tsv", ["--run", "2"])
+        self.assertTrue(stderr == "", f"Expected no stderr output but got: {stderr}")
+        self.assertTrue(os.path.isfile(os.path.join(self.workDir, "runs", "run2", "post", "report.tsv")))
+
+        # Act&Assert: --meta locates the matching run
+        returncode, stdout, stderr = self.report("report.tsv", ["--meta", self.fullMetadata])
+        self.assertTrue(stderr == "", f"Expected no stderr output but got: {stderr}")
+        self.assertTrue(os.path.isfile(os.path.join(self.workDir, "runs", "run1", "post", "report.tsv")))
+
+        # Act&Assert: an output path with a directory is respected
+        explicitOutput = os.path.join(self.workDir, "explicit.tsv")
+        returncode, stdout, stderr = self.report(explicitOutput, ["--run", "run1"])
+        self.assertTrue(stderr == "", f"Expected no stderr output but got: {stderr}")
+        self.assertTrue(os.path.isfile(explicitOutput))
+
+        # Act&Assert: psQTL_view.py summarises both runs
+        returncode, stdout, stderr = self.run_script("psQTL_view.py", ["-d", self.workDir])
+        self.assertTrue(stderr == "", f"Expected no stderr output but got: {stderr}")
+        self.assertIn("run1: group1 n=21, group2 n=49", stdout)
+        self.assertIn("run2: group1 n=21, group2 n=29", stdout)
+
+        returncode, stdout, stderr = self.run_script("psQTL_view.py", ["-d", self.workDir, "--run", "2"])
+        self.assertTrue(stderr == "", f"Expected no stderr output but got: {stderr}")
+        self.assertIn("Input samples not in this run (n=20)", stdout)
+
+    def test_legacy_migration(self):
+        "Test that results in the pre-run directory layout are moved into an analysis run"
+        # Arrange: generate results then move them into the legacy layout
+        self.initialise(withMetadata=True)
+        returncode, stdout, stderr = self.run_script("psQTL_proc.py", ["ed", "-d", self.workDir, "-i", "call"])
+        self.assertTrue(stderr == "", f"Expected no stderr output but got: {stderr}")
+
+        runDir = os.path.join(self.workDir, "runs", "run1")
+        for fileName in os.listdir(runDir):
+            if fileName.startswith("psQTL_"):
+                shutil.move(os.path.join(runDir, fileName), os.path.join(self.workDir, fileName))
+        os.makedirs(os.path.join(self.workDir, "splsda"))
+        shutil.rmtree(os.path.join(self.workDir, "runs"))
+
+        # Act
+        returncode, stdout, stderr = self.report("report.tsv")
+
+        # Assert
+        self.assertTrue(stderr == "", f"Expected no stderr output but got: {stderr}")
+        self.assertIn("Moved results from an earlier version of psQTL", stdout)
+        self.assertTrue(os.path.isfile(os.path.join(runDir, "psQTL_call.alleles_ed.tsv.gz.ok")))
+        self.assertTrue(os.path.isdir(os.path.join(runDir, "splsda")))
+        self.assertTrue(os.path.isfile(os.path.join(runDir, "post", "report.tsv")))
+        self.assertEqual([ f for f in os.listdir(self.workDir) if f.startswith("psQTL_") or f == "splsda" ], [])
 
 if __name__ == '__main__':
     unittest.main()
