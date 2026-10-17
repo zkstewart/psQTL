@@ -5,7 +5,7 @@ import numpy as np
 from collections import Counter
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from modules.parsing import parse_metadata, vcf_header_to_metadata_validation, parse_vcf_genotypes, \
+from modules.parsing import parse_metadata, vcf_header_to_metadata_validation, parse_vcf_genotypes, fast_parse_vcf_genotypes, \
     parse_vcf_stats, parse_samtools_depth_tsv, parse_binned_tsv, read_gz_file, parse_exclusions_tsv
 from modules.nclswrappers import WindowedNCLS
 from modules.ed import parse_vcf_for_ed, gt_median_adjustment, filter_impossible_genotypes, \
@@ -933,6 +933,68 @@ class TestFastED(unittest.TestCase):
             self.assertTrue(len(fastResults) > 0, f"Expected results from '{vcfFile}'")
             self.assertEqual(repr(origResults), repr(fastResults),
                              f"Fast and original parse_vcf_for_ed results differ for '{vcfFile}' (isCNV={isCNV}, parents={parents})")
+
+class TestFastGenotypeParsing(unittest.TestCase):
+    "Tests the optimised VCF genotype parser against the well-tested original version"
+    NUM_REPS = 5000
+    GENOTYPES = ["0/0", "0/1", "1/1", "0|1", "1|0", "1/2", "2|2", "0/0/1/1", "0|0|0|1", "1", "0",
+                 "./.", ".|.", "./1", "0/.", ".", "10/3"]
+    ODD_GENOTYPES = ["", "0/x", " 1/0", "0//1", "0/1 ", "a"]
+    
+    def outcome(self, parser, formatField, sampleFields, samples):
+        "Captures the result or the raised exception so that behaviour can be compared in full"
+        try:
+            return ("result", repr(parser(formatField, sampleFields, samples)))
+        except Exception as e:
+            return ("error", type(e).__name__, str(e))
+    
+    def assert_equivalent(self, formatField, sampleFields, samples):
+        self.assertEqual(self.outcome(parse_vcf_genotypes, formatField, sampleFields, samples),
+                         self.outcome(fast_parse_vcf_genotypes, formatField, sampleFields, samples),
+                         f"Parsers differ for format '{formatField}', fields {sampleFields}, samples {samples}")
+    
+    def test_fast_parse_vcf_genotypes_validity(self):
+        "Fast genotype parsing must exactly match the original for typical and unusual inputs, including errors"
+        rng = np.random.default_rng(1415)
+        formats = ["GT", "GT:AD:DP", "AD:GT:DP", "DP:AD", "GT:"]
+        for _ in range(self.NUM_REPS):
+            formatField = str(rng.choice(formats))
+            numFields = int(rng.integers(0, 12))
+            sampleFields = []
+            for _ in range(numFields):
+                pool = self.ODD_GENOTYPES if rng.random() < 0.05 else self.GENOTYPES
+                gt = str(rng.choice(pool))
+                style = rng.random()
+                if style < 0.6 and ":" in formatField: # complete subfields
+                    subfields = formatField.split(":")
+                    field = ":".join([ gt if key == "GT" else "5" for key in subfields ])
+                elif style < 0.8: # truncated trailing subfields, as the VCF spec allows
+                    field = gt
+                else: # extra subfields regardless of the FORMAT column
+                    field = f"{gt}:3,4:7"
+                sampleFields.append(field)
+            samples = [ f"sample{i}" for i in range(numFields) ]
+            self.assert_equivalent(formatField, sampleFields, samples)
+    
+    def test_fast_parse_vcf_genotypes_edge_cases(self):
+        "Specific edge cases where an optimisation could diverge from the original"
+        self.assert_equivalent("GT", ["0/1:5", "1/1"], ["s1", "s2"]) # ':' in fields but not FORMAT
+        self.assert_equivalent("AD:GT", ["3,4:0/1", "5"], ["s1", "s2"]) # GT not first, missing subfield
+        self.assert_equivalent("AD:DP", ["3,4:7"], ["s1"]) # no GT key
+        self.assert_equivalent("GT", [], []) # no samples
+    
+    def test_fast_parse_vcf_genotypes_column_mismatch(self):
+        "Lines with more or fewer sample columns than the header lists must raise an error"
+        for sampleFields in [["0/1", "1/1", "0/0"], ["0/1", "1/1", "./."], ["0/1"], []]:
+            with self.assertRaises(ValueError, msg=f"Expected an error for sample fields {sampleFields}"):
+                fast_parse_vcf_genotypes("GT", sampleFields, ["s1", "s2"])
+    
+    def test_fast_parse_vcf_genotypes_returns_independent_lists(self):
+        "Cached parsing must not cause samples to share the same genotype list object"
+        snpDict = fast_parse_vcf_genotypes("GT", ["0/1", "0/1"], ["s1", "s2"])
+        self.assertIsNot(snpDict["s1"], snpDict["s2"])
+        snpDict["s1"].append(5)
+        self.assertEqual(fast_parse_vcf_genotypes("GT", ["0/1"], ["s1"]), {"s1": [0, 1]})
 
 class TestSPLSDA(unittest.TestCase):
     def test_recode_variant_with_pipes(self):

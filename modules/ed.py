@@ -6,7 +6,7 @@ from collections import Counter
 from itertools import combinations, chain
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-from parsing import read_gz_file, vcf_header_to_metadata_validation, parse_vcf_genotypes
+from parsing import read_gz_file, vcf_header_to_metadata_validation, fast_parse_vcf_genotypes
 from nclswrappers import WindowedNCLS
 
 def gt_median_adjustment(genotypeLists):
@@ -549,7 +549,7 @@ def parse_vcf_for_ed(vcfFile, metadataDict, isCNV, parents=[],
             sampleFields = sl[9:]
             
             # Parse the genotypes out of the sample fields
-            snpDict = parse_vcf_genotypes(formatField, sampleFields, samples) # extracts ALL sample genotypes, not just those in metadataDict
+            snpDict = fast_parse_vcf_genotypes(formatField, sampleFields, samples) # extracts ALL sample genotypes, not just those in metadataDict
             
             # Figure out what type of variant this is
             if any([ x == "." for x in ref_alt ]):
