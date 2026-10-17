@@ -3,10 +3,10 @@ import numpy as np
 from math import sqrt
 from statistics import mean
 from collections import Counter
-from itertools import combinations
+from itertools import combinations, chain
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-from parsing import read_gz_file, vcf_header_to_metadata_validation, parse_vcf_genotypes
+from parsing import read_gz_file, vcf_header_to_metadata_validation, fast_parse_vcf_genotypes
 from nclswrappers import WindowedNCLS
 
 def gt_median_adjustment(genotypeLists):
@@ -141,6 +141,47 @@ def calculate_allele_frequency_ed(g1Gt, g2Gt):
         # Return the values
         return numAllelesG1, numAllelesG2, edist
 
+def fast_calculate_allele_frequency_ed(g1Gt, g2Gt):
+    '''
+    A reimplementation of calculate_allele_frequency_ed() which tallies alleles with
+    collections.Counter for a speed benefit. Arithmetic is performed identically and
+    in the same order as the original, so results are exactly equal; the original is
+    retained as a point of comparison for automated testing.
+    
+    Parameters:
+        g1Gt / g2Gt -- a list of lists containing the genotype value as integers
+                       with format like:
+                       [
+                           [0, 1],
+                           [0, 0],
+                           [1, 1],
+                           ...
+                       ]
+    Returns:
+        numAllelesG1 -- the number of genotyped alleles in group 1
+        numAllelesG2 -- the number of genotyped alleles in group 2
+        edist -- a float of the the Euclidean distance between the two groups
+    '''
+    g1Alleles = list(chain.from_iterable(g1Gt))
+    g2Alleles = list(chain.from_iterable(g2Gt))
+    
+    # Get all the unique alleles; built like the original so set iteration (and hence summation) order matches
+    uniqueAlleles = list(set(g1Alleles + g2Alleles))
+    
+    # Tally each group and sum the number of genotyped alleles
+    b1Count, b2Count = Counter(g1Alleles), Counter(g2Alleles) # missing keys tally as 0
+    numAllelesG1, numAllelesG2 = len(g1Alleles), len(g2Alleles)
+    
+    # Calculate the Euclidean distance between the two groups if possible
+    if numAllelesG1 == 0 or numAllelesG2 == 0:
+        return numAllelesG1, numAllelesG2, 0 # euclidean distance cannot be calculated
+    else:
+        edist = sqrt(sum([
+            ((b1Count[allele] / numAllelesG1) - (b2Count[allele] / numAllelesG2))**2
+            for allele in uniqueAlleles
+        ]))
+        return numAllelesG1, numAllelesG2, edist
+
 def calculate_genotype_frequency_ed(g1Gt, g2Gt):
     '''
     Calculates the Euclidean distance between two groups based on the
@@ -201,6 +242,47 @@ def calculate_genotype_frequency_ed(g1Gt, g2Gt):
         ]))
         
         # Return the values
+        return numSamplesG1, numSamplesG2, edist
+
+def fast_calculate_genotype_frequency_ed(g1Gt, g2Gt):
+    '''
+    A reimplementation of calculate_genotype_frequency_ed() which sorts each genotype
+    once and tallies them with collections.Counter for a speed benefit. Arithmetic is
+    performed identically and in the same order as the original, so results are exactly
+    equal; the original is retained as a point of comparison for automated testing.
+    
+    Parameters:
+        g1Gt / g2Gt -- a list of lists containing the genotype value as integers
+                       with format like:
+                       [
+                           [0, 1],
+                           [0, 0],
+                           [1, 1],
+                           ...
+                       ]
+    Returns:
+        numSamplesG1 -- the number of genotyped samples in group 1
+        numSamplesG2 -- the number of genotyped samples in group 2
+        edist -- a float of the the Euclidean distance between the two groups
+    '''
+    g1Sorted = [ tuple(sorted(gt)) for gt in g1Gt ]
+    g2Sorted = [ tuple(sorted(gt)) for gt in g2Gt ]
+    
+    # Get all the unique genotypes; built like the original so set iteration (and hence summation) order matches
+    uniqueGts = set(g1Sorted + g2Sorted)
+    
+    # Tally each group and sum the number of genotyped samples
+    g1GtCount, g2GtCount = Counter(g1Sorted), Counter(g2Sorted) # missing keys tally as 0
+    numSamplesG1, numSamplesG2 = len(g1Gt), len(g2Gt)
+    
+    # Calculate the Euclidean distance between the two groups if possible
+    if numSamplesG1 == 0 or numSamplesG2 == 0:
+        return numSamplesG1, numSamplesG2, 0 # euclidean distance cannot be calculated
+    else:
+        edist = sqrt(sum([
+            ((g1GtCount[gt] / numSamplesG1) - (g2GtCount[gt] / numSamplesG2))**2
+            for gt in uniqueGts
+        ]))
         return numSamplesG1, numSamplesG2, edist
 
 def calculate_inheritance_ed(g1Gt, g2Gt, parentsGT):
@@ -467,7 +549,7 @@ def parse_vcf_for_ed(vcfFile, metadataDict, isCNV, parents=[],
             sampleFields = sl[9:]
             
             # Parse the genotypes out of the sample fields
-            snpDict = parse_vcf_genotypes(formatField, sampleFields, samples) # extracts ALL sample genotypes, not just those in metadataDict
+            snpDict = fast_parse_vcf_genotypes(formatField, sampleFields, samples) # extracts ALL sample genotypes, not just those in metadataDict
             
             # Figure out what type of variant this is
             if any([ x == "." for x in ref_alt ]):
@@ -493,8 +575,8 @@ def parse_vcf_for_ed(vcfFile, metadataDict, isCNV, parents=[],
             
             # Calculate naive Euclidean distances
             "These two ED measures do not utilise parent genotypes and are hence considered to be naive"
-            numAllelesG1, numAllelesG2, alleleED = calculate_allele_frequency_ed(g1Gt, g2Gt)
-            _, _, genotypeED = calculate_genotype_frequency_ed(g1Gt, g2Gt) # don't need the allele count again
+            numAllelesG1, numAllelesG2, alleleED = fast_calculate_allele_frequency_ed(g1Gt, g2Gt)
+            _, _, genotypeED = fast_calculate_genotype_frequency_ed(g1Gt, g2Gt) # don't need the allele count again
             
             # Skip if both groups are identical
             if ignoreIdentical and alleleED == 0:
@@ -525,7 +607,7 @@ def parse_vcf_for_ed(vcfFile, metadataDict, isCNV, parents=[],
                     numFilteredG1, numFilteredG2, inheritanceED = calculate_inheritance_ed(g1Gt, g2Gt, parentsGT)
             
             # Infer the ploidy of the samples
-            ploidy = infer_ploidy(snpDict) # this may average across samples with different ploidies, but that's okay for this purpose
+            ploidy = fast_infer_ploidy(snpDict) # this may average across samples with different ploidies, but that's okay for this purpose
             possibleAllelesG1 = int(len(metadataDict["group1"]) * ploidy)
             possibleAllelesG2 = int(len(metadataDict["group2"]) * ploidy)
             
@@ -581,6 +663,30 @@ def infer_ploidy(snpDict):
         return mean([ len(gt) for gt in snpDict.values() ])
     except:
         return None
+
+def fast_infer_ploidy(snpDict):
+    '''
+    A reimplementation of infer_ploidy() which avoids the exact-fraction arithmetic of
+    statistics.mean() for a speed benefit. The returned value (and type) is identical to
+    the original, which is retained as a point of comparison for automated testing.
+    
+    Parameters:
+        snpDict -- a dictionary with structure like:
+                   {
+                       "sample1": [0, 1],
+                       "sample2": [0, 0],
+                       ...
+                   }
+    Returns:
+        inferredPloidy -- a number indicating the inferred ploidy of the samples, or None
+                          if snpDict is empty
+    '''
+    numSamples = len(snpDict)
+    if numSamples == 0:
+        return None
+    numAlleles = sum(map(len, snpDict.values()))
+    "statistics.mean() returns an int for integer input that divides evenly"
+    return numAlleles // numSamples if numAlleles % numSamples == 0 else numAlleles / numSamples
 
 def parse_ed_as_dict(edFile, missingFilter=0.5):
     '''

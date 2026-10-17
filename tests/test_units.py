@@ -5,12 +5,13 @@ import numpy as np
 from collections import Counter
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from modules.parsing import parse_metadata, vcf_header_to_metadata_validation, parse_vcf_genotypes, \
+from modules.parsing import parse_metadata, vcf_header_to_metadata_validation, parse_vcf_genotypes, fast_parse_vcf_genotypes, \
     parse_vcf_stats, parse_samtools_depth_tsv, parse_binned_tsv, read_gz_file, parse_exclusions_tsv
 from modules.nclswrappers import WindowedNCLS
 from modules.ed import parse_vcf_for_ed, gt_median_adjustment, filter_impossible_genotypes, \
     calculate_allele_frequency_ed, calculate_genotype_frequency_ed, calculate_inheritance_ed, \
-    parse_ed_as_dict, convert_dict_to_windowed_ncls
+    parse_ed_as_dict, convert_dict_to_windowed_ncls, infer_ploidy, \
+    fast_calculate_allele_frequency_ed, fast_calculate_genotype_frequency_ed, fast_infer_ploidy
 from modules.depth import get_median_value, convert_depth_to_alleles, call_cnvs_from_depth
 from modules.samtools_handling import depth_to_histoDict
 from modules.splsda import recode_variant, recode_cnv, recode_vcf, \
@@ -850,6 +851,151 @@ class TestED(unittest.TestCase):
         # Assert
         self.assertEqual(g1AdjGt, g1Truth, f"Expected adjusted group 1 to be {g1Truth}")
 
+class TestFastED(unittest.TestCase):
+    "Tests optimised ED implementations against the well-tested original versions"
+    NUM_REPS = 5000
+    
+    def random_group(self, rng, maxSamples, maxAllele, ploidies):
+        return [ [ int(rng.integers(0, maxAllele + 1)) for _ in range(int(rng.choice(ploidies))) ]
+                 for _ in range(int(rng.integers(0, maxSamples + 1))) ]
+    
+    def assert_identical(self, orig, fast, context):
+        "== alone would accept 2 == 2.0 or tiny float differences hidden by rounding; repr() checks value and type exactly"
+        self.assertEqual(repr(orig), repr(fast), f"Fast result differs from original for input {context}")
+    
+    def test_fast_allele_frequency_ed_validity(self):
+        "Fast allele frequency ED must exactly match the original, including empty groups, many alleles, and mixed ploidy"
+        rng = np.random.default_rng(1234)
+        for maxAllele, ploidies in [[1, [2]], [3, [2]], [12, [2, 4]], [2, [1, 2, 3, 4, 6]]]:
+            for _ in range(self.NUM_REPS):
+                g1Gt = self.random_group(rng, 30, maxAllele, ploidies)
+                g2Gt = self.random_group(rng, 30, maxAllele, ploidies)
+                self.assert_identical(calculate_allele_frequency_ed(g1Gt, g2Gt),
+                                      fast_calculate_allele_frequency_ed(g1Gt, g2Gt), (g1Gt, g2Gt))
+    
+    def test_fast_genotype_frequency_ed_validity(self):
+        "Fast genotype frequency ED must exactly match the original, including empty groups, many genotypes, and mixed ploidy"
+        rng = np.random.default_rng(5678)
+        for maxAllele, ploidies in [[1, [2]], [3, [2]], [12, [2, 4]], [2, [1, 2, 3, 4, 6]]]:
+            for _ in range(self.NUM_REPS):
+                g1Gt = self.random_group(rng, 30, maxAllele, ploidies)
+                g2Gt = self.random_group(rng, 30, maxAllele, ploidies)
+                self.assert_identical(calculate_genotype_frequency_ed(g1Gt, g2Gt),
+                                      fast_calculate_genotype_frequency_ed(g1Gt, g2Gt), (g1Gt, g2Gt))
+    
+    def test_fast_ed_with_cnv_adjustment(self):
+        "Fast ED functions must exactly match the originals on median-adjusted CNV genotypes"
+        rng = np.random.default_rng(91011)
+        for _ in range(self.NUM_REPS):
+            g1Gt, g2Gt = gt_median_adjustment([self.random_group(rng, 20, 8, [2, 4]),
+                                               self.random_group(rng, 20, 8, [2, 4])])
+            self.assert_identical(calculate_allele_frequency_ed(g1Gt, g2Gt),
+                                  fast_calculate_allele_frequency_ed(g1Gt, g2Gt), (g1Gt, g2Gt))
+            self.assert_identical(calculate_genotype_frequency_ed(g1Gt, g2Gt),
+                                  fast_calculate_genotype_frequency_ed(g1Gt, g2Gt), (g1Gt, g2Gt))
+    
+    def test_fast_infer_ploidy_validity(self):
+        "Fast ploidy inference must exactly match the original in value and type"
+        rng = np.random.default_rng(1213)
+        self.assertEqual(infer_ploidy({}), fast_infer_ploidy({}))
+        for _ in range(self.NUM_REPS):
+            snpDict = { f"s{i}": gt for i, gt in enumerate(self.random_group(rng, 30, 3, [1, 2, 3, 4, 6])) }
+            self.assert_identical(infer_ploidy(snpDict), fast_infer_ploidy(snpDict), snpDict)
+    
+    def test_parse_vcf_for_ed_fast_matches_original(self):
+        "parse_vcf_for_ed must yield identical results whether it uses the fast or original functions"
+        import modules.ed as edModule
+        metadataDict = parse_metadata(os.path.join(dataDir, "fulltest.metadata.1.tsv"))
+        inputs = [
+            [os.path.join(dataDir, "fulltest.variants.1.vcf"), False, []],
+            [os.path.join(dataDir, "fulltest.variants.1.vcf"), False, ["bulk1_1", "bulk2_1"]],
+            [os.path.join(dataDir, "fulltest.variants.2.vcf"), False, []],
+            [os.path.join(dataDir, "fulltest.depth.1.vcf"), True, []],
+            [os.path.join(dataDir, "deletions.1.vcf"), True, []],
+            [os.path.join(dataDir, "deletions.1.vcf"), False, []],
+        ]
+        for vcfFile, isCNV, parents in inputs:
+            metadata = metadataDict if not "deletions" in vcfFile else parse_metadata(metadataFile)
+            fastResults = list(parse_vcf_for_ed(vcfFile, metadata, isCNV, parents=parents, quiet=True))
+            
+            # Swap the original implementations in and re-run
+            fastFunctions = [edModule.fast_calculate_allele_frequency_ed, edModule.fast_calculate_genotype_frequency_ed,
+                             edModule.fast_infer_ploidy]
+            try:
+                edModule.fast_calculate_allele_frequency_ed = edModule.calculate_allele_frequency_ed
+                edModule.fast_calculate_genotype_frequency_ed = edModule.calculate_genotype_frequency_ed
+                edModule.fast_infer_ploidy = edModule.infer_ploidy
+                origResults = list(edModule.parse_vcf_for_ed(vcfFile, metadata, isCNV, parents=parents, quiet=True))
+            finally:
+                edModule.fast_calculate_allele_frequency_ed, edModule.fast_calculate_genotype_frequency_ed, \
+                    edModule.fast_infer_ploidy = fastFunctions
+            
+            self.assertTrue(len(fastResults) > 0, f"Expected results from '{vcfFile}'")
+            self.assertEqual(repr(origResults), repr(fastResults),
+                             f"Fast and original parse_vcf_for_ed results differ for '{vcfFile}' (isCNV={isCNV}, parents={parents})")
+
+class TestFastGenotypeParsing(unittest.TestCase):
+    "Tests the optimised VCF genotype parser against the well-tested original version"
+    NUM_REPS = 5000
+    GENOTYPES = ["0/0", "0/1", "1/1", "0|1", "1|0", "1/2", "2|2", "0/0/1/1", "0|0|0|1", "1", "0",
+                 "./.", ".|.", "./1", "0/.", ".", "10/3"]
+    ODD_GENOTYPES = ["", "0/x", " 1/0", "0//1", "0/1 ", "a"]
+    
+    def outcome(self, parser, formatField, sampleFields, samples):
+        "Captures the result or the raised exception so that behaviour can be compared in full"
+        try:
+            return ("result", repr(parser(formatField, sampleFields, samples)))
+        except Exception as e:
+            return ("error", type(e).__name__, str(e))
+    
+    def assert_equivalent(self, formatField, sampleFields, samples):
+        self.assertEqual(self.outcome(parse_vcf_genotypes, formatField, sampleFields, samples),
+                         self.outcome(fast_parse_vcf_genotypes, formatField, sampleFields, samples),
+                         f"Parsers differ for format '{formatField}', fields {sampleFields}, samples {samples}")
+    
+    def test_fast_parse_vcf_genotypes_validity(self):
+        "Fast genotype parsing must exactly match the original for typical and unusual inputs, including errors"
+        rng = np.random.default_rng(1415)
+        formats = ["GT", "GT:AD:DP", "AD:GT:DP", "DP:AD", "GT:"]
+        for _ in range(self.NUM_REPS):
+            formatField = str(rng.choice(formats))
+            numFields = int(rng.integers(0, 12))
+            sampleFields = []
+            for _ in range(numFields):
+                pool = self.ODD_GENOTYPES if rng.random() < 0.05 else self.GENOTYPES
+                gt = str(rng.choice(pool))
+                style = rng.random()
+                if style < 0.6 and ":" in formatField: # complete subfields
+                    subfields = formatField.split(":")
+                    field = ":".join([ gt if key == "GT" else "5" for key in subfields ])
+                elif style < 0.8: # truncated trailing subfields, as the VCF spec allows
+                    field = gt
+                else: # extra subfields regardless of the FORMAT column
+                    field = f"{gt}:3,4:7"
+                sampleFields.append(field)
+            samples = [ f"sample{i}" for i in range(numFields) ]
+            self.assert_equivalent(formatField, sampleFields, samples)
+    
+    def test_fast_parse_vcf_genotypes_edge_cases(self):
+        "Specific edge cases where an optimisation could diverge from the original"
+        self.assert_equivalent("GT", ["0/1:5", "1/1"], ["s1", "s2"]) # ':' in fields but not FORMAT
+        self.assert_equivalent("AD:GT", ["3,4:0/1", "5"], ["s1", "s2"]) # GT not first, missing subfield
+        self.assert_equivalent("AD:DP", ["3,4:7"], ["s1"]) # no GT key
+        self.assert_equivalent("GT", [], []) # no samples
+    
+    def test_fast_parse_vcf_genotypes_column_mismatch(self):
+        "Lines with more or fewer sample columns than the header lists must raise an error"
+        for sampleFields in [["0/1", "1/1", "0/0"], ["0/1", "1/1", "./."], ["0/1"], []]:
+            with self.assertRaises(ValueError, msg=f"Expected an error for sample fields {sampleFields}"):
+                fast_parse_vcf_genotypes("GT", sampleFields, ["s1", "s2"])
+    
+    def test_fast_parse_vcf_genotypes_returns_independent_lists(self):
+        "Cached parsing must not cause samples to share the same genotype list object"
+        snpDict = fast_parse_vcf_genotypes("GT", ["0/1", "0/1"], ["s1", "s2"])
+        self.assertIsNot(snpDict["s1"], snpDict["s2"])
+        snpDict["s1"].append(5)
+        self.assertEqual(fast_parse_vcf_genotypes("GT", ["0/1"], ["s1"]), {"s1": [0, 1]})
+
 class TestSPLSDA(unittest.TestCase):
     def test_recode_variant_with_pipes(self):
         "Test that recoding a variant works correctly when pipes separate alleles"
@@ -1119,7 +1265,7 @@ class TestMain(unittest.TestCase):
         returncode, stdout, stderr = run_subprocess(cmd)
         self.assertTrue(stderr == "", f"Expected no stderr output but got: {stderr}")
         
-        edFile = os.path.join(workDir, "psQTL_call.alleles_ed.tsv.gz")
+        edFile = os.path.join(workDir, "runs", "run1", "psQTL_call.alleles_ed.tsv.gz")
         edContents = []
         with read_gz_file(edFile) as fileIn:
             for line in fileIn:
@@ -1136,17 +1282,17 @@ class TestMain(unittest.TestCase):
         self.assertTrue(stderr == "", f"Expected no stderr output but got: {stderr}")
         
         # Assert: check that the output files are correctly generated
-        berFile = os.path.join(workDir, "splsda", "psQTL_call.BER.tsv")
+        berFile = os.path.join(workDir, "runs", "run1", "splsda", "psQTL_call.BER.tsv")
         with open(berFile) as fileIn:
             berContents = fileIn.readlines()
         self.assertTrue(berContents[1] == berTruth, f"Expected BER file to contain '{berTruth}' but got: {berContents[1]}")
         
-        selectedFile = os.path.join(workDir, "splsda", "psQTL_call.selected.tsv")
+        selectedFile = os.path.join(workDir, "runs", "run1", "splsda", "psQTL_call.selected.tsv")
         with open(selectedFile) as fileIn:
             selectedContents = fileIn.readlines()
         self.assertTrue(selectedContents[1] == selectedTruth, f"Expected selected file to contain '{selectedTruth}' but got: {selectedContents[1]}")
         
-        recodeFile = os.path.join(workDir, "splsda", "psQTL_call.recode.tsv.gz")
+        recodeFile = os.path.join(workDir, "runs", "run1", "splsda", "psQTL_call.recode.tsv.gz")
         recodeContents = []
         with read_gz_file(recodeFile) as fileIn:
             for line in fileIn:
@@ -1194,7 +1340,7 @@ class TestMain(unittest.TestCase):
         #self.assertTrue(returncode == 0, f"Expected returncode 0 but got: {returncode}")
         self.assertTrue(stderr == "", f"Expected no stderr output but got: {stderr}")
         
-        edFile = os.path.join(workDir, "psQTL_call.inheritance_ed.tsv.gz")
+        edFile = os.path.join(workDir, "runs", "run1", "psQTL_call.inheritance_ed.tsv.gz")
         edContents = []
         with read_gz_file(edFile) as fileIn:
             for line in fileIn:
@@ -1212,17 +1358,17 @@ class TestMain(unittest.TestCase):
         self.assertTrue(stderr == "", f"Expected no stderr output but got: {stderr}")
         
         # Assert: check that the output files are correctly generated
-        berFile = os.path.join(workDir, "splsda", "psQTL_call.BER.tsv")
+        berFile = os.path.join(workDir, "runs", "run1", "splsda", "psQTL_call.BER.tsv")
         with open(berFile) as fileIn:
             berContents = fileIn.readlines()
         self.assertTrue(berContents[1] == berTruth, f"Expected BER file to contain '{berTruth}' but got: {berContents[1]}")
         
-        selectedFile = os.path.join(workDir, "splsda", "psQTL_call.selected.tsv")
+        selectedFile = os.path.join(workDir, "runs", "run1", "splsda", "psQTL_call.selected.tsv")
         with open(selectedFile) as fileIn:
             selectedContents = fileIn.readlines()
         self.assertTrue(selectedContents[1] == selectedTruth, f"Expected selected file to contain '{selectedTruth}' but got: {selectedContents[1]}")
         
-        recodeFile = os.path.join(workDir, "splsda", "psQTL_call.recode.tsv.gz")
+        recodeFile = os.path.join(workDir, "runs", "run1", "splsda", "psQTL_call.recode.tsv.gz")
         recodeContents = []
         with read_gz_file(recodeFile) as fileIn:
             for line in fileIn:
@@ -1270,7 +1416,7 @@ class TestMain(unittest.TestCase):
         #self.assertTrue(returncode == 0, f"Expected returncode 0 but got: {returncode}")
         self.assertTrue(stderr == "", f"Expected no stderr output but got: {stderr}")
         
-        edFile = os.path.join(workDir, "psQTL_call.alleles_ed.tsv.gz")
+        edFile = os.path.join(workDir, "runs", "run1", "psQTL_call.alleles_ed.tsv.gz")
         edContents = []
         with read_gz_file(edFile) as fileIn:
             for line in fileIn:
@@ -1288,17 +1434,17 @@ class TestMain(unittest.TestCase):
         self.assertTrue(stderr == "", f"Expected no stderr output but got: {stderr}")
         
         # Assert: check that the output files are correctly generated
-        berFile = os.path.join(workDir, "splsda", "psQTL_call.BER.tsv")
+        berFile = os.path.join(workDir, "runs", "run1", "splsda", "psQTL_call.BER.tsv")
         with open(berFile) as fileIn:
             berContents = fileIn.readlines()
         self.assertTrue(berContents[1] == berTruth, f"Expected BER file to contain '{berTruth}' but got: {berContents[1]}")
         
-        selectedFile = os.path.join(workDir, "splsda", "psQTL_call.selected.tsv")
+        selectedFile = os.path.join(workDir, "runs", "run1", "splsda", "psQTL_call.selected.tsv")
         with open(selectedFile) as fileIn:
             selectedContents = fileIn.readlines()
         self.assertTrue(selectedContents[1] == selectedTruth, f"Expected selected file to contain '{selectedTruth}' but got: {selectedContents[1]}")
         
-        recodeFile = os.path.join(workDir, "splsda", "psQTL_call.recode.tsv.gz")
+        recodeFile = os.path.join(workDir, "runs", "run1", "splsda", "psQTL_call.recode.tsv.gz")
         recodeContents = []
         with read_gz_file(recodeFile) as fileIn:
             for line in fileIn:
@@ -1346,7 +1492,7 @@ class TestMain(unittest.TestCase):
         #self.assertTrue(returncode == 0, f"Expected returncode 0 but got: {returncode}")
         self.assertTrue(stderr == "", f"Expected no stderr output but got: {stderr}")
         
-        edFile = os.path.join(workDir, "psQTL_call.inheritance_ed.tsv.gz")
+        edFile = os.path.join(workDir, "runs", "run1", "psQTL_call.inheritance_ed.tsv.gz")
         edContents = []
         with read_gz_file(edFile) as fileIn:
             for line in fileIn:
@@ -1364,17 +1510,17 @@ class TestMain(unittest.TestCase):
         self.assertTrue(stderr == "", f"Expected no stderr output but got: {stderr}")
         
         # Assert: check that the output files are correctly generated
-        berFile = os.path.join(workDir, "splsda", "psQTL_call.BER.tsv")
+        berFile = os.path.join(workDir, "runs", "run1", "splsda", "psQTL_call.BER.tsv")
         with open(berFile) as fileIn:
             berContents = fileIn.readlines()
         self.assertTrue(berContents[1] == berTruth, f"Expected BER file to contain '{berTruth}' but got: {berContents[1]}")
         
-        selectedFile = os.path.join(workDir, "splsda", "psQTL_call.selected.tsv")
+        selectedFile = os.path.join(workDir, "runs", "run1", "splsda", "psQTL_call.selected.tsv")
         with open(selectedFile) as fileIn:
             selectedContents = fileIn.readlines()
         self.assertTrue(selectedContents[1] == selectedTruth, f"Expected selected file to contain '{selectedTruth}' but got: {selectedContents[1]}")
         
-        recodeFile = os.path.join(workDir, "splsda", "psQTL_call.recode.tsv.gz")
+        recodeFile = os.path.join(workDir, "runs", "run1", "splsda", "psQTL_call.recode.tsv.gz")
         recodeContents = []
         with read_gz_file(recodeFile) as fileIn:
             for line in fileIn:
@@ -1422,7 +1568,7 @@ class TestMain(unittest.TestCase):
         self.assertTrue(returncode == 0, f"Expected returncode 0 but got: {returncode}")
         self.assertTrue(stderr == "", f"Expected no stderr output but got: {stderr}")
         
-        edFile = os.path.join(workDir, "psQTL_call.alleles_ed.tsv.gz")
+        edFile = os.path.join(workDir, "runs", "run1", "psQTL_call.alleles_ed.tsv.gz")
         edContents = []
         with read_gz_file(edFile) as fileIn:
             for line in fileIn:
@@ -1440,17 +1586,17 @@ class TestMain(unittest.TestCase):
         self.assertTrue(stderr == "", f"Expected no stderr output but got: {stderr}")
         
         # Assert: check that the output files are correctly generated
-        berFile = os.path.join(workDir, "splsda", "psQTL_call.BER.tsv")
+        berFile = os.path.join(workDir, "runs", "run1", "splsda", "psQTL_call.BER.tsv")
         with open(berFile) as fileIn:
             berContents = fileIn.readlines()
         self.assertTrue(berContents[1] == berTruth, f"Expected BER file to contain '{berTruth}' but got: {berContents[1]}")
         
-        selectedFile = os.path.join(workDir, "splsda", "psQTL_call.selected.tsv")
+        selectedFile = os.path.join(workDir, "runs", "run1", "splsda", "psQTL_call.selected.tsv")
         with open(selectedFile) as fileIn:
             selectedContents = fileIn.readlines()
         self.assertTrue(selectedContents[1] == selectedTruth, f"Expected selected file to contain '{selectedTruth}' but got: {selectedContents[1]}")
         
-        recodeFile = os.path.join(workDir, "splsda", "psQTL_call.recode.tsv.gz")
+        recodeFile = os.path.join(workDir, "runs", "run1", "splsda", "psQTL_call.recode.tsv.gz")
         recodeContents = []
         with read_gz_file(recodeFile) as fileIn:
             for line in fileIn:
@@ -1498,7 +1644,7 @@ class TestMain(unittest.TestCase):
         #self.assertTrue(returncode == 0, f"Expected returncode 0 but got: {returncode}")
         self.assertTrue(stderr == "", f"Expected no stderr output but got: {stderr}")
         
-        edFile = os.path.join(workDir, "psQTL_call.inheritance_ed.tsv.gz")
+        edFile = os.path.join(workDir, "runs", "run1", "psQTL_call.inheritance_ed.tsv.gz")
         edContents = []
         with read_gz_file(edFile) as fileIn:
             for line in fileIn:
@@ -1516,17 +1662,17 @@ class TestMain(unittest.TestCase):
         self.assertTrue(stderr == "", f"Expected no stderr output but got: {stderr}")
         
         # Assert: check that the output files are correctly generated
-        berFile = os.path.join(workDir, "splsda", "psQTL_call.BER.tsv")
+        berFile = os.path.join(workDir, "runs", "run1", "splsda", "psQTL_call.BER.tsv")
         with open(berFile) as fileIn:
             berContents = fileIn.readlines()
         self.assertTrue(berContents[1] == berTruth, f"Expected BER file to contain '{berTruth}' but got: {berContents[1]}")
         
-        selectedFile = os.path.join(workDir, "splsda", "psQTL_call.selected.tsv")
+        selectedFile = os.path.join(workDir, "runs", "run1", "splsda", "psQTL_call.selected.tsv")
         with open(selectedFile) as fileIn:
             selectedContents = fileIn.readlines()
         self.assertTrue(selectedContents[1] == selectedTruth, f"Expected selected file to contain '{selectedTruth}' but got: {selectedContents[1]}")
         
-        recodeFile = os.path.join(workDir, "splsda", "psQTL_call.recode.tsv.gz")
+        recodeFile = os.path.join(workDir, "runs", "run1", "splsda", "psQTL_call.recode.tsv.gz")
         recodeContents = []
         with read_gz_file(recodeFile) as fileIn:
             for line in fileIn:
@@ -2523,6 +2669,148 @@ class TestExclusions(unittest.TestCase):
         
         # Assert
         self.assertEqual(allValues, trueValues)
+
+class TestRuns(unittest.TestCase):
+    def setUp(self):
+        self.workDir = os.path.join(dataDir, "tmp")
+        self.fullMetadata = os.path.join(dataDir, "fulltest.metadata.1.tsv")
+        self.subsetMetadata = os.path.join(dataDir, "subset.metadata.1.tsv")
+        self.vcfFile = os.path.join(dataDir, "fulltest.variants.1.vcf")
+        self.depthFile = os.path.join(dataDir, "fulltest.depth.1.vcf")
+        self.genomeFile = os.path.join(dataDir, "genome.fasta")
+        self.gff3File = os.path.join(dataDir, "fulltest.1.gff3")
+
+        if os.path.exists(self.workDir):
+            shutil.rmtree(self.workDir)
+        os.makedirs(self.workDir)
+
+    def run_script(self, script, args):
+        return run_subprocess(["python", os.path.join(baseDir, script)] + args)
+
+    def initialise(self, withMetadata):
+        cmd = ["initialise", "-d", self.workDir, "--fvcf", self.vcfFile, "--dvcf", self.depthFile]
+        if withMetadata:
+            cmd += ["--meta", self.fullMetadata]
+        returncode, stdout, stderr = self.run_script("psQTL_prep.py", cmd)
+        self.assertTrue(stderr == "", f"Expected no stderr output but got: {stderr}")
+
+    def report(self, outputFileName, extraArgs=[]):
+        return self.run_script("psQTL_post.py", [
+            "report", "-d", self.workDir, "-f", self.genomeFile, "-a", self.gff3File,
+            "-m", "ed-call", "-t", "genes", "-o", outputFileName] + extraArgs)
+
+    def test_parse_run_id(self):
+        "Test that run identifiers are accepted as numbers or run names"
+        from modules.runs import parse_run_id
+        self.assertEqual(parse_run_id("2"), 2)
+        self.assertEqual(parse_run_id("run12"), 12)
+        self.assertEqual(parse_run_id("Run3"), 3)
+        for badValue in ["0", "runX", "two", "-1"]:
+            with self.assertRaises(ValueError):
+                parse_run_id(badValue)
+
+    def test_runs_are_matched_by_groups(self):
+        "Test that reformatted metadata reuses a run while different groups create a new run"
+        # Arrange: metadata with identical groups but different ordering and group labels
+        reformattedMetadata = os.path.join(self.workDir, "reformatted.metadata.tsv")
+        with open(self.fullMetadata) as fileIn, open(reformattedMetadata, "w") as fileOut:
+            lines = [ line.rstrip("\r\n").split("\t") for line in fileIn if line.strip() != "" ]
+            for sample, group in reversed(lines):
+                fileOut.write(f"{sample}\t{group.replace('group', '')}\n")
+        self.initialise(withMetadata=True)
+
+        # Act&Assert: default metadata creates run1
+        returncode, stdout, stderr = self.run_script("psQTL_proc.py", ["ed", "-d", self.workDir, "-i", "call"])
+        self.assertTrue(stderr == "", f"Expected no stderr output but got: {stderr}")
+        self.assertIn("Created analysis run1:", stdout)
+
+        # Act&Assert: reformatted metadata with the same groups reuses run1
+        returncode, stdout, stderr = self.run_script("psQTL_proc.py", ["ed", "-d", self.workDir, "-i", "depth",
+                                                                       "--meta", reformattedMetadata])
+        self.assertTrue(stderr == "", f"Expected no stderr output but got: {stderr}")
+        self.assertIn("Using analysis run1:", stdout)
+        self.assertTrue(os.path.isfile(os.path.join(self.workDir, "runs", "run1", "psQTL_depth.ed.tsv.gz.ok")))
+
+        # Act&Assert: different groups create run2 without touching run1
+        returncode, stdout, stderr = self.run_script("psQTL_proc.py", ["ed", "-d", self.workDir, "-i", "call",
+                                                                       "--meta", self.subsetMetadata])
+        self.assertTrue(stderr == "", f"Expected no stderr output but got: {stderr}")
+        self.assertIn("Created analysis run2:", stdout)
+
+        run1Ed, run2Ed = [], []
+        for runName, edContents in [["run1", run1Ed], ["run2", run2Ed]]:
+            with read_gz_file(os.path.join(self.workDir, "runs", runName, "psQTL_call.alleles_ed.tsv.gz")) as fileIn:
+                edContents.extend([ line.strip() for line in fileIn ])
+        self.assertNotEqual(run1Ed, run2Ed, "Runs with different metadata should have different ED results")
+        self.assertEqual(sorted(os.listdir(os.path.join(self.workDir, "runs"))), [".lock", "run1", "run2"])
+
+    def test_post_run_selection(self):
+        "Test choosing a run for psQTL_post.py and that bare output names are written into the run"
+        # Arrange: two runs without default metadata
+        self.initialise(withMetadata=False)
+        for metadataFile in [self.fullMetadata, self.subsetMetadata]:
+            returncode, stdout, stderr = self.run_script("psQTL_proc.py", ["ed", "-d", self.workDir, "-i", "call",
+                                                                           "--meta", metadataFile])
+            self.assertTrue(stderr == "", f"Expected no stderr output but got: {stderr}")
+
+        # Act&Assert: an ambiguous choice of run is an error
+        returncode, stdout, stderr = self.report("report.tsv")
+        self.assertIn("Multiple analysis runs exist", stderr)
+
+        # Act&Assert: a non-existent run is an error
+        returncode, stdout, stderr = self.report("report.tsv", ["--run", "9"])
+        self.assertIn("'run9' does not exist", stderr)
+
+        # Act&Assert: --run writes a bare output name into that run's post directory
+        returncode, stdout, stderr = self.report("report.tsv", ["--run", "2"])
+        self.assertTrue(stderr == "", f"Expected no stderr output but got: {stderr}")
+        self.assertTrue(os.path.isfile(os.path.join(self.workDir, "runs", "run2", "post", "report.tsv")))
+
+        # Act&Assert: --meta locates the matching run
+        returncode, stdout, stderr = self.report("report.tsv", ["--meta", self.fullMetadata])
+        self.assertTrue(stderr == "", f"Expected no stderr output but got: {stderr}")
+        self.assertTrue(os.path.isfile(os.path.join(self.workDir, "runs", "run1", "post", "report.tsv")))
+
+        # Act&Assert: an output path with a directory is respected
+        explicitOutput = os.path.join(self.workDir, "explicit.tsv")
+        returncode, stdout, stderr = self.report(explicitOutput, ["--run", "run1"])
+        self.assertTrue(stderr == "", f"Expected no stderr output but got: {stderr}")
+        self.assertTrue(os.path.isfile(explicitOutput))
+
+        # Act&Assert: psQTL_view.py summarises both runs
+        returncode, stdout, stderr = self.run_script("psQTL_view.py", ["-d", self.workDir])
+        self.assertTrue(stderr == "", f"Expected no stderr output but got: {stderr}")
+        self.assertIn("run1: group1 n=21, group2 n=49", stdout)
+        self.assertIn("run2: group1 n=21, group2 n=29", stdout)
+
+        returncode, stdout, stderr = self.run_script("psQTL_view.py", ["-d", self.workDir, "--run", "2"])
+        self.assertTrue(stderr == "", f"Expected no stderr output but got: {stderr}")
+        self.assertIn("Input samples not in this run (n=20)", stdout)
+
+    def test_legacy_migration(self):
+        "Test that results in the pre-run directory layout are moved into an analysis run"
+        # Arrange: generate results then move them into the legacy layout
+        self.initialise(withMetadata=True)
+        returncode, stdout, stderr = self.run_script("psQTL_proc.py", ["ed", "-d", self.workDir, "-i", "call"])
+        self.assertTrue(stderr == "", f"Expected no stderr output but got: {stderr}")
+
+        runDir = os.path.join(self.workDir, "runs", "run1")
+        for fileName in os.listdir(runDir):
+            if fileName.startswith("psQTL_"):
+                shutil.move(os.path.join(runDir, fileName), os.path.join(self.workDir, fileName))
+        os.makedirs(os.path.join(self.workDir, "splsda"))
+        shutil.rmtree(os.path.join(self.workDir, "runs"))
+
+        # Act
+        returncode, stdout, stderr = self.report("report.tsv")
+
+        # Assert
+        self.assertTrue(stderr == "", f"Expected no stderr output but got: {stderr}")
+        self.assertIn("Moved results from an earlier version of psQTL", stdout)
+        self.assertTrue(os.path.isfile(os.path.join(runDir, "psQTL_call.alleles_ed.tsv.gz.ok")))
+        self.assertTrue(os.path.isdir(os.path.join(runDir, "splsda")))
+        self.assertTrue(os.path.isfile(os.path.join(runDir, "post", "report.tsv")))
+        self.assertEqual([ f for f in os.listdir(self.workDir) if f.startswith("psQTL_") or f == "splsda" ], [])
 
 if __name__ == '__main__':
     unittest.main()

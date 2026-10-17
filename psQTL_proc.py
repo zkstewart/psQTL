@@ -8,7 +8,7 @@ import os, argparse, sys
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from modules.validation import validate_proc_args, validate_c, validate_d, validate_s
-from modules.parsing import parse_metadata, WriteGzFile
+from modules.parsing import WriteGzFile
 from modules.ed import parse_vcf_for_ed
 from modules.splsda import validate_r_exists, validate_r_packages_installation, \
     recode_vcf, run_windowed_splsda, run_integrative_splsda
@@ -76,7 +76,9 @@ def main():
     usage = """%(prog)s processes VCF or VCF-like files containing variant or CNV
     predictions for samples belonging to two groups. The working directory is expected
     to have been 'initialise'd by psQTL_prep.py such that all necessary files have been
-    validated and prepared for analysis.
+    validated and prepared for analysis. Results are stored in an analysis run folder
+    (e.g., 'runs/run1') specific to the metadata grouping, so you can re-run with
+    different metadata without losing previous results.
     """
     # Establish parser
     p = argparse.ArgumentParser()
@@ -91,6 +93,18 @@ def main():
                    choices=["call", "depth"],
                    help="""Specify one or both of 'call' and 'depth' to indicate which
                    types of variants to process.""")
+    p.add_argument("--meta", dest="runMetadataFile", metavar="METADATAFILE",
+                   required=False,
+                   help="""Optionally, specify a metadata TSV file indicating the sample groups
+                   to analyse; results are stored in the analysis run matching these groups,
+                   with a new run being created if none match (default: the metadata given to
+                   psQTL_prep.py initialise)""",
+                   default=None)
+    p.add_argument("--run", dest="runID", metavar="RUN",
+                   required=False,
+                   help="""Optionally, specify an existing analysis run to continue working in
+                   by its number (e.g., '2' or 'run2'), as an alternative to --meta""",
+                   default=None)
     p.add_argument("-v", "--version",
                    action="version",
                    version="psQTL_proc.py {version}".format(version=__version__))
@@ -186,7 +200,8 @@ def main():
                          default=20)
     
     args = subParentParser.parse_args()
-    locations = validate_proc_args(args)
+    print("## psQTL_proc.py - Euclidean Distances ##" if args.mode == "ed" else "## psQTL_proc.py - sPLS-DA ##")
+    locations, run = validate_proc_args(args) # sets locations.runDir
     
     # Validate based on input types
     if "call" in args.inputType:
@@ -194,15 +209,14 @@ def main():
     if "depth" in args.inputType:
         validate_d(args)
     
-    # Parse metadata file
-    metadataDict = parse_metadata(args.metadataFile)
+    # Use the run's copy of the metadata so results always reflect the run's groups
+    args.metadataFile = run.metadataFile
+    metadataDict = run.metadataDict
     
     # Split into mode-specific functions
     if args.mode == "ed":
-        print("## psQTL_proc.py - Euclidean Distances ##")
         emain(args, metadataDict, locations)
     elif args.mode == "splsda":
-        print("## psQTL_proc.py - sPLS-DA ##")
         smain(args, metadataDict, locations)
     
     # Print completion flag if we reach this point
@@ -234,7 +248,9 @@ def call_ed(args, metadataDict, locations):
         formattedFiles = " and ".join([f"'{edFile}'" for edFile in edOutputFiles if edFile is not None])
         
         raise FileExistsError(f"Euclidean distance files {formattedFiles} already have .ok files; " +
-                              "move, rename, or delete these before re-running psQTL_proc.py!")
+                              "move, rename, or delete these before re-running psQTL_proc.py! If you " +
+                              "want to analyse a different grouping of samples, provide that metadata " +
+                              "with --meta and the results will be stored in a new analysis run.")
     print("Variant call ED file generation complete!")
 
 def depth_ed(args, metadataDict, locations):
@@ -253,7 +269,9 @@ def depth_ed(args, metadataDict, locations):
                 open(edFile + ".ok", "w").close() # touch a .ok file to indicate success
     else:
         raise FileExistsError(f"Euclidean distance file '{locations.depthEdFile}' already has a .ok file; " +
-                              "move, rename, or delete it before re-running psQTL_proc.py!")
+                              "move, rename, or delete it before re-running psQTL_proc.py! If you " +
+                              "want to analyse a different grouping of samples, provide that metadata " +
+                              "with --meta and the results will be stored in a new analysis run.")
     print("CNV variant ED file generation complete!")
 
 def smain(args, metadataDict, locations):

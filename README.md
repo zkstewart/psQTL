@@ -43,6 +43,15 @@ psQTL_post report -d /location/of/your/working/directory \
     -m ed splsda \
     -o /location/to/write/output.tsv \ # or .csv
     -a location/of/genome.gff3
+
+# Re-run with a different grouping of samples (stored as a new analysis run)
+psQTL_proc ed -d /location/of/your/working/directory \
+    -i call depth --meta other_metadata.tsv
+psQTL_post plot -d /location/of/your/working/directory \
+    --meta other_metadata.tsv ... # or --run 2
+
+# Overview of a working directory and its analysis runs
+psQTL_view -d /location/of/your/working/directory
 ```
 
 # Installation
@@ -83,6 +92,8 @@ psQTL_post plot -h
 All parameters with a single dash e.g., `-d /location/to/run/the/analysis` need to be provided each time you call the program. Other parameters specified with double dashes are optional, with many having default values that should work in the majority of analyses.
 
 Some double-dashed parameters which indicate file locations e.g., `--meta metadata.tsv` are remembered or *cached* by psQTL within the analysis directory and only need to be provided once since the cached value is retrieved on subsequent use of psQTL ***in the analysis folder***. In other words, each analysis directory has its own cached values, and parameters won't carry over between separate analyses.
+
+Segregation statistics and plots are stored in an *analysis run* folder (e.g., `runs/run1`) specific to the metadata used, so you can re-run `psQTL_proc` and `psQTL_post` with different metadata without overwriting earlier results.
 
 See the [Using psQTL wiki page](https://github.com/zkstewart/psQTL/wiki/Using-psQTL) for further details.
 

@@ -359,6 +359,62 @@ def parse_vcf_genotypes(formatField, sampleFields, samples):
         ongoingCount += 1
     return posGenotypeDict
 
+class GenotypeCache(dict):
+    '''
+    Maps a VCF GT string (e.g., '0|1') to its parsed genotype as a tuple of integers, or
+    None if the genotype is uncalled. Genotype strings are highly repetitive across
+    samples and variants, so each distinct string only needs parsing once.
+    '''
+    MAX_SIZE = 100000 # guards memory against unusually diverse genotype strings
+    
+    def __missing__(self, genotype):
+        # Parse exactly as parse_vcf_genotypes() does
+        standardised = genotype.replace("|", "/")
+        parsed = None if "." in standardised else tuple(map(int, standardised.split("/")))
+        if len(self) < GenotypeCache.MAX_SIZE:
+            self[genotype] = parsed
+        return parsed
+
+GENOTYPE_CACHE = GenotypeCache()
+
+def fast_parse_vcf_genotypes(formatField, sampleFields, samples):
+    '''
+    A reimplementation of parse_vcf_genotypes() which pairs samples with their fields
+    using zip() and looks up previously parsed genotype strings in a GenotypeCache to
+    skip repeated parsing for a speed benefit. The original is retained as a point of
+    comparison for automated testing.
+    
+    Parameters:
+        formatField -- a string from a split VCF line; if the split line is 'sl',
+                       this should be 'sl[8]'
+        sampleFields -- a list of string from a VCF line; if the split line is 'sl',
+                        this should be 'sl[9:]'
+        samples -- a list of strings indicating the sample IDs as obtained from the 
+                   header line of the VCF file
+    Returns:
+        posGenotypeDict -- a dictionary with sample IDs as keys and genotype calls as
+                           lists of integers; for example, '0/0' in the VCF file would
+                           be stored as [0, 0] in the dictionary.
+    '''
+    # Determine which field position we're extracting to get our GT value
+    if not ":" in formatField:
+        gtIndex = 0
+    else:
+        gtIndex = formatField.split(":").index("GT")
+    
+    # Validate that every sample has a field, as zip() would otherwise silently truncate
+    if len(sampleFields) != len(samples):
+        raise ValueError(f"VCF line has {len(sampleFields)} sample columns but the header lists " +
+                         f"{len(samples)} samples; the file may be truncated or malformed")
+    
+    # Format a dictionary to store sample genotypes for this position
+    posGenotypeDict = {}
+    for sampleID, sampleResult in zip(samples, sampleFields):
+        genotype = GENOTYPE_CACHE[sampleResult.split(":")[gtIndex]] # None if uncalled
+        if genotype != None:
+            posGenotypeDict[sampleID] = list(genotype) # fresh list so samples never share a mutable object
+    return posGenotypeDict
+
 def parse_exclusions_tsv(exclusionsTsv):
     '''
     Receives a 3-column headerless TSV file with format:

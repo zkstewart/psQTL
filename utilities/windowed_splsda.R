@@ -223,11 +223,15 @@ if (mixomicsVersion[2] < 30) {
 
 # Derive the column delimiter
 metadata.lines <- readLines(args$m)
-metadata.sep <- ifelse(grepl("\t", metadata.lines[1]), "\t", 
-                       ifelse(grepl(",", metadata.lines[1]), ",",
-                              NULL))
+metadata.lines <- metadata.lines[metadata.lines != "" & !startsWith(metadata.lines, "#")] # skip blank and comment lines like parse_metadata()
+metadata.sep <- NULL
+if (length(metadata.lines) > 0 && grepl("\t", metadata.lines[1])) {
+  metadata.sep <- "\t"
+} else if (length(metadata.lines) > 0 && grepl(",", metadata.lines[1])) {
+  metadata.sep <- ","
+}
 
-if (metadata.sep == NULL)
+if (is.null(metadata.sep))
 {
   stop(paste0("Metadata file '", args$m, "' does not appear to use tab or comma delimiters, which means it cannot be parsed"))
 }
