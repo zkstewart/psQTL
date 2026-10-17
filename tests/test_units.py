@@ -10,7 +10,8 @@ from modules.parsing import parse_metadata, vcf_header_to_metadata_validation, p
 from modules.nclswrappers import WindowedNCLS
 from modules.ed import parse_vcf_for_ed, gt_median_adjustment, filter_impossible_genotypes, \
     calculate_allele_frequency_ed, calculate_genotype_frequency_ed, calculate_inheritance_ed, \
-    parse_ed_as_dict, convert_dict_to_windowed_ncls
+    parse_ed_as_dict, convert_dict_to_windowed_ncls, infer_ploidy, \
+    fast_calculate_allele_frequency_ed, fast_calculate_genotype_frequency_ed, fast_infer_ploidy
 from modules.depth import get_median_value, convert_depth_to_alleles, call_cnvs_from_depth
 from modules.samtools_handling import depth_to_histoDict
 from modules.splsda import recode_variant, recode_cnv, recode_vcf, \
@@ -849,6 +850,89 @@ class TestED(unittest.TestCase):
         
         # Assert
         self.assertEqual(g1AdjGt, g1Truth, f"Expected adjusted group 1 to be {g1Truth}")
+
+class TestFastED(unittest.TestCase):
+    "Tests optimised ED implementations against the well-tested original versions"
+    NUM_REPS = 5000
+    
+    def random_group(self, rng, maxSamples, maxAllele, ploidies):
+        return [ [ int(rng.integers(0, maxAllele + 1)) for _ in range(int(rng.choice(ploidies))) ]
+                 for _ in range(int(rng.integers(0, maxSamples + 1))) ]
+    
+    def assert_identical(self, orig, fast, context):
+        "== alone would accept 2 == 2.0 or tiny float differences hidden by rounding; repr() checks value and type exactly"
+        self.assertEqual(repr(orig), repr(fast), f"Fast result differs from original for input {context}")
+    
+    def test_fast_allele_frequency_ed_validity(self):
+        "Fast allele frequency ED must exactly match the original, including empty groups, many alleles, and mixed ploidy"
+        rng = np.random.default_rng(1234)
+        for maxAllele, ploidies in [[1, [2]], [3, [2]], [12, [2, 4]], [2, [1, 2, 3, 4, 6]]]:
+            for _ in range(self.NUM_REPS):
+                g1Gt = self.random_group(rng, 30, maxAllele, ploidies)
+                g2Gt = self.random_group(rng, 30, maxAllele, ploidies)
+                self.assert_identical(calculate_allele_frequency_ed(g1Gt, g2Gt),
+                                      fast_calculate_allele_frequency_ed(g1Gt, g2Gt), (g1Gt, g2Gt))
+    
+    def test_fast_genotype_frequency_ed_validity(self):
+        "Fast genotype frequency ED must exactly match the original, including empty groups, many genotypes, and mixed ploidy"
+        rng = np.random.default_rng(5678)
+        for maxAllele, ploidies in [[1, [2]], [3, [2]], [12, [2, 4]], [2, [1, 2, 3, 4, 6]]]:
+            for _ in range(self.NUM_REPS):
+                g1Gt = self.random_group(rng, 30, maxAllele, ploidies)
+                g2Gt = self.random_group(rng, 30, maxAllele, ploidies)
+                self.assert_identical(calculate_genotype_frequency_ed(g1Gt, g2Gt),
+                                      fast_calculate_genotype_frequency_ed(g1Gt, g2Gt), (g1Gt, g2Gt))
+    
+    def test_fast_ed_with_cnv_adjustment(self):
+        "Fast ED functions must exactly match the originals on median-adjusted CNV genotypes"
+        rng = np.random.default_rng(91011)
+        for _ in range(self.NUM_REPS):
+            g1Gt, g2Gt = gt_median_adjustment([self.random_group(rng, 20, 8, [2, 4]),
+                                               self.random_group(rng, 20, 8, [2, 4])])
+            self.assert_identical(calculate_allele_frequency_ed(g1Gt, g2Gt),
+                                  fast_calculate_allele_frequency_ed(g1Gt, g2Gt), (g1Gt, g2Gt))
+            self.assert_identical(calculate_genotype_frequency_ed(g1Gt, g2Gt),
+                                  fast_calculate_genotype_frequency_ed(g1Gt, g2Gt), (g1Gt, g2Gt))
+    
+    def test_fast_infer_ploidy_validity(self):
+        "Fast ploidy inference must exactly match the original in value and type"
+        rng = np.random.default_rng(1213)
+        self.assertEqual(infer_ploidy({}), fast_infer_ploidy({}))
+        for _ in range(self.NUM_REPS):
+            snpDict = { f"s{i}": gt for i, gt in enumerate(self.random_group(rng, 30, 3, [1, 2, 3, 4, 6])) }
+            self.assert_identical(infer_ploidy(snpDict), fast_infer_ploidy(snpDict), snpDict)
+    
+    def test_parse_vcf_for_ed_fast_matches_original(self):
+        "parse_vcf_for_ed must yield identical results whether it uses the fast or original functions"
+        import modules.ed as edModule
+        metadataDict = parse_metadata(os.path.join(dataDir, "fulltest.metadata.1.tsv"))
+        inputs = [
+            [os.path.join(dataDir, "fulltest.variants.1.vcf"), False, []],
+            [os.path.join(dataDir, "fulltest.variants.1.vcf"), False, ["bulk1_1", "bulk2_1"]],
+            [os.path.join(dataDir, "fulltest.variants.2.vcf"), False, []],
+            [os.path.join(dataDir, "fulltest.depth.1.vcf"), True, []],
+            [os.path.join(dataDir, "deletions.1.vcf"), True, []],
+            [os.path.join(dataDir, "deletions.1.vcf"), False, []],
+        ]
+        for vcfFile, isCNV, parents in inputs:
+            metadata = metadataDict if not "deletions" in vcfFile else parse_metadata(metadataFile)
+            fastResults = list(parse_vcf_for_ed(vcfFile, metadata, isCNV, parents=parents, quiet=True))
+            
+            # Swap the original implementations in and re-run
+            fastFunctions = [edModule.fast_calculate_allele_frequency_ed, edModule.fast_calculate_genotype_frequency_ed,
+                             edModule.fast_infer_ploidy]
+            try:
+                edModule.fast_calculate_allele_frequency_ed = edModule.calculate_allele_frequency_ed
+                edModule.fast_calculate_genotype_frequency_ed = edModule.calculate_genotype_frequency_ed
+                edModule.fast_infer_ploidy = edModule.infer_ploidy
+                origResults = list(edModule.parse_vcf_for_ed(vcfFile, metadata, isCNV, parents=parents, quiet=True))
+            finally:
+                edModule.fast_calculate_allele_frequency_ed, edModule.fast_calculate_genotype_frequency_ed, \
+                    edModule.fast_infer_ploidy = fastFunctions
+            
+            self.assertTrue(len(fastResults) > 0, f"Expected results from '{vcfFile}'")
+            self.assertEqual(repr(origResults), repr(fastResults),
+                             f"Fast and original parse_vcf_for_ed results differ for '{vcfFile}' (isCNV={isCNV}, parents={parents})")
 
 class TestSPLSDA(unittest.TestCase):
     def test_recode_variant_with_pipes(self):
@@ -2576,20 +2660,20 @@ class TestRuns(unittest.TestCase):
         # Act&Assert: default metadata creates run1
         returncode, stdout, stderr = self.run_script("psQTL_proc.py", ["ed", "-d", self.workDir, "-i", "call"])
         self.assertTrue(stderr == "", f"Expected no stderr output but got: {stderr}")
-        self.assertIn("Created analysis run run1", stdout)
+        self.assertIn("Created analysis run1:", stdout)
 
         # Act&Assert: reformatted metadata with the same groups reuses run1
         returncode, stdout, stderr = self.run_script("psQTL_proc.py", ["ed", "-d", self.workDir, "-i", "depth",
                                                                        "--meta", reformattedMetadata])
         self.assertTrue(stderr == "", f"Expected no stderr output but got: {stderr}")
-        self.assertIn("Using analysis run run1", stdout)
+        self.assertIn("Using analysis run1:", stdout)
         self.assertTrue(os.path.isfile(os.path.join(self.workDir, "runs", "run1", "psQTL_depth.ed.tsv.gz.ok")))
 
         # Act&Assert: different groups create run2 without touching run1
         returncode, stdout, stderr = self.run_script("psQTL_proc.py", ["ed", "-d", self.workDir, "-i", "call",
                                                                        "--meta", self.subsetMetadata])
         self.assertTrue(stderr == "", f"Expected no stderr output but got: {stderr}")
-        self.assertIn("Created analysis run run2", stdout)
+        self.assertIn("Created analysis run2:", stdout)
 
         run1Ed, run2Ed = [], []
         for runName, edContents in [["run1", run1Ed], ["run2", run2Ed]]:

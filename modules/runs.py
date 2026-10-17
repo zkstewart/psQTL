@@ -358,6 +358,6 @@ def resolve_run(locations, runID=None, metadataFile=None, defaultMetadataFile=No
             raise ValueError("Multiple analysis runs exist; specify which one to use with --run or --meta.\n" +
                              describe_runs(runs))
 
-    print(f"# {'Created' if created else 'Using'} analysis run {run.describe()}")
+    print(f"# {'Created' if created else 'Using'} analysis {run.describe()}")
     locations.runDir = run.runDir
     return run
